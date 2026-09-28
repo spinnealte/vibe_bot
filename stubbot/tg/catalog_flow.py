@@ -61,17 +61,6 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
     await _screen(message, caption, markup, photo or DEFAULT_COVER, in_place)
 
 
-async def show_details(message: Message, session: AsyncSession, today: date, session_id: int, index: int,
-                       timezone: str) -> bool:
-    """Полная карточка потока вместо карусели. False — поток недоступен."""
-    card = await ScheduleService(session).card(session_id, today)
-    if card is None:
-        return False
-    await show_screen(message, render.session_details(card, _deadline_text(card, timezone)),
-                      keyboards.back_to_course(index))
-    return True
-
-
 async def show_program_page(message: Message, session: AsyncSession, program_id: int, index: int,
                             page: int) -> bool:
     program = await ScheduleService(session).program(program_id)

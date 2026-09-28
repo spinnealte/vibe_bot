@@ -62,7 +62,9 @@ def _card(description: str | None, lecturers: int = 3, program_html: str | None 
     )
     session = SimpleNamespace(
         title_override=None, program=program, start_date=date(2026, 10, 13), end_date=date(2026, 10, 14),
-        venue=SimpleNamespace(name="Учебный класс <на Невском>"), format=SimpleNamespace(value="offline"),
+        venue=SimpleNamespace(name="Учебный класс <на Невском>", address="Невский пр., 1"),
+        format=SimpleNamespace(value="offline"),
+        days=[SimpleNamespace(start_time=time(10), end_time=time(18)) for _ in range(2)],
         status=SimpleNamespace(value="registration_open"),
         lecturers=[SimpleNamespace(last_name=f"Лектор{i}", first_name="Иван", middle_name="Иванович")
                    for i in range(lecturers)],
@@ -95,6 +97,15 @@ def test_caption_shows_program_excerpt_about_400_chars() -> None:
     assert excerpt.endswith("…") and "\n" in excerpt  # по границе слова, строки программы сохранены
     assert "Полная программа" in caption
     assert visible_length(caption) <= 1024
+
+
+def test_caption_dates_with_common_time_and_address() -> None:
+    caption = session_caption(_card(None), None)
+    assert "13–14 октября 2026, 10:00–18:00" in caption  # одинаковое время во все дни — показываем
+    assert "Невский пр., 1" in caption
+    card = _card(None)
+    card.session.days[1].end_time = time(17)  # дни с разным временем — время не пишем
+    assert "<b>Даты:</b> 13–14 октября 2026\n" in session_caption(card, None)
 
 
 def test_caption_short_program_shown_whole_without_hint() -> None:

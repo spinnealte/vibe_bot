@@ -13,7 +13,7 @@ from stubbot.services.consents import ConsentService
 from stubbot.services.enrollments import EnrollmentService
 from stubbot.services.registration import RegistrationService, RegistrationStep
 from stubbot.services.schedule import ScheduleService
-from stubbot.tg import catalog_flow, flows, texts
+from stubbot.tg import catalog_flow, flows, keyboards, texts
 from stubbot.tg.callbacks import ConsentKind, ScheduleAction, ScheduleCb
 from stubbot.tg.screen import delete_quietly
 from stubbot.tg.states import PENDING_APPLY_KEY
@@ -36,18 +36,13 @@ async def on_slide(callback: CallbackQuery, callback_data: ScheduleCb, state: FS
                                    settings.timezone)
 
 
-@router.callback_query(ScheduleCb.filter(F.action == ScheduleAction.DETAILS))
-async def on_details(callback: CallbackQuery, callback_data: ScheduleCb, session: AsyncSession, client: Client,
-                     settings: Settings) -> None:
-    today = local_today(settings.timezone)
-    if not await catalog_flow.show_details(callback.message, session, today, callback_data.item_id,
-                                           callback_data.index, settings.timezone):
-        await callback.answer(texts.SESSION_GONE)
-        await catalog_flow.show_course(callback.message, session, today, callback_data.index, settings.timezone)
-        return
+@router.callback_query(ScheduleCb.filter(F.action == ScheduleAction.CLOSE))
+async def on_close(callback: CallbackQuery, state: FSMContext) -> None:
+    """«⬅️ Назад» под карточкой: убираем карусель, возвращаем главное меню."""
     await callback.answer()
-    AnalyticsRepository(session).add_event(client.id, ClientEventType.SESSION_VIEWED,
-                                           {"session_id": callback_data.item_id})
+    await state.clear()
+    await delete_quietly(callback.message)
+    await callback.message.answer(texts.SCHEDULE_CLOSED, reply_markup=keyboards.main_menu())
 
 
 @router.callback_query(ScheduleCb.filter(F.action == ScheduleAction.PROGRAM))

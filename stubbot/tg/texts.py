@@ -37,7 +37,8 @@ BTN_PREV_PAGE = "◀️"
 BTN_NEXT_PAGE = "▶️"
 BTN_TO_SCHEDULE = "📅 К расписанию"
 BTN_BACK_TO_COURSE = "⬅️ Назад к курсу"
-BTN_DETAILS = "🗓 Подробнее"
+BTN_CLOSE_SCHEDULE = "⬅️ Назад"
+SCHEDULE_CLOSED = "👌 Выберите раздел в меню ниже ⬇️"
 BTN_PROGRAM_TEXT = "📖 Программа"
 BTN_APPLY = "📝 Оставить заявку"
 BTN_APPLY_WAITLIST = "🕒 Встать в лист ожидания"
@@ -74,29 +75,12 @@ SESSION_STATUS_LABELS = {
     "full": "🔴 Мест нет — можно встать в лист ожидания",
     "registration_closed": "⛔️ Запись закрыта",
 }
-FORMAT_LABELS = {"online": "онлайн", "offline": "очно", "hybrid": "очно + онлайн"}
-LEVEL_LABELS = {"basic": "базовый", "advanced": "продвинутый"}
 PRICE_UNIT_SUFFIX = {"per_person": "", "per_group": " за группу"}
-
-SESSION_CARD_TITLE = "🦷 <b>{title}</b>"
-SESSION_CARD_DATES = "🗓 <b>Даты:</b>"
-SESSION_CARD_DAY = "• {day}"
-SESSION_CARD_VENUE = "📍 <b>Где:</b> {venue}"
-SESSION_CARD_ONLINE = "💻 <b>Где:</b> онлайн"
-SESSION_CARD_LECTURERS = "🎓 <b>Лекторы:</b>"
-SESSION_CARD_FORMAT = "🏷 <b>Формат:</b> {format}"
-SESSION_CARD_LEVEL = "📈 <b>Уровень:</b> {level}"
-SESSION_CARD_HOURS = "⏱ <b>Объём:</b> {hours} ак. ч."
-SESSION_CARD_NMO = "🏅 <b>Баллы НМО:</b> {points}"
-SESSION_CARD_PRICES = "💳 <b>Стоимость:</b>"
-SESSION_CARD_SEATS = "👥 <b>Свободных мест:</b> {seats}"
-SESSION_CARD_DEADLINE = "⏳ Запись до {deadline}"
 
 PROGRAM_TEXT_EMPTY = "Подробная программа скоро появится"
 # Всплывающие ответы на кнопку (без HTML): карусель остаётся на месте.
 INTEREST_CREATED = "🔔 Готово! Сообщим, как только откроется набор на этот курс."
 INTEREST_EXISTS = "🔔 Вы уже подписаны — сообщим, как только откроется набор."
-SESSION_GONE = "Этот поток больше недоступен — показываю актуальное расписание"
 
 # --- Заявка ---------------------------------------------------------------------------------------------------
 

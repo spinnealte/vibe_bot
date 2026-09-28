@@ -147,6 +147,7 @@ def _pager(index: int, total: int, prev_data: str, next_data: str) -> list[Inlin
 
 def course_carousel(index: int, total: int, program_id: int, session_id: int | None, apply_text: str | None,
                     notify: bool, has_program_text: bool) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Программа · Назад."""
     rows = [_pager(index, total, _sch(ScheduleAction.SLIDE, index=index - 1), _sch(ScheduleAction.SLIDE, index=index + 1))]
     if apply_text and session_id:
         rows.append([InlineKeyboardButton(text=apply_text,
@@ -154,15 +155,12 @@ def course_carousel(index: int, total: int, program_id: int, session_id: int | N
     if notify:
         rows.append([InlineKeyboardButton(text=texts.BTN_NOTIFY_ME,
                                           callback_data=_sch(ScheduleAction.NOTIFY, program_id, index))])
-    extra = []
-    if session_id:
-        extra.append(InlineKeyboardButton(text=texts.BTN_DETAILS,
-                                          callback_data=_sch(ScheduleAction.DETAILS, session_id, index)))
+    bottom = []
     if has_program_text:
-        extra.append(InlineKeyboardButton(text=texts.BTN_PROGRAM_TEXT,
-                                          callback_data=_sch(ScheduleAction.PROGRAM, program_id, index)))
-    if extra:
-        rows.append(extra)
+        bottom.append(InlineKeyboardButton(text=texts.BTN_PROGRAM_TEXT,
+                                           callback_data=_sch(ScheduleAction.PROGRAM, program_id, index)))
+    bottom.append(InlineKeyboardButton(text=texts.BTN_CLOSE_SCHEDULE, callback_data=_sch(ScheduleAction.CLOSE)))
+    rows.append(bottom)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

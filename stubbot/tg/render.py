@@ -3,14 +3,13 @@
 import re
 from html import escape, unescape
 
-from stubbot.db.models import CourseSession, Enrollment, Lecturer, PriceOption, Program, Venue
+from stubbot.db.models import CourseSession, Enrollment, Lecturer, PriceOption, Program
 from stubbot.services.enrollments import CLIENT_CANCELLABLE
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.formatting import safe
-from stubbot.utils.dates import format_day, format_range, format_range_with_year, format_short, format_time_range
+from stubbot.utils.dates import format_range, format_range_with_year, format_short, format_time_range
 from stubbot.utils.money import format_rub
-from stubbot.utils.names import full_name
 
 MAX_BUTTON_TITLE = 40
 CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (считается видимый текст, без HTML-тегов)
@@ -91,8 +90,17 @@ def _meta_lines(program: Program, format_value: str) -> list[str]:
     return lines
 
 
+def _dates_text(course_session: CourseSession) -> str:
+    """13–14 октября 2026, 10:00–18:00 — время добавляем, если во все дни одинаковое."""
+    text = format_range_with_year(course_session.start_date, course_session.end_date)
+    times = {format_time_range(day.start_time, day.end_time) for day in course_session.days}
+    if len(times) == 1 and (time_text := times.pop()):
+        text += f", {time_text}"
+    return text
+
+
 def session_caption(card: SessionCard, deadline_text: str | None) -> str:
-    """Подпись под фото потока в карусели: главное сразу, детали — по кнопке «Подробнее»."""
+    """Подпись под фото потока в карусели: всё главное сразу, полная программа — по кнопке «Программа»."""
     s, program = card.session, card.program
     lines = [texts.CAPTION_TITLE.format(title=safe(session_title(s)))]
     if program.short_description:
@@ -100,9 +108,9 @@ def session_caption(card: SessionCard, deadline_text: str | None) -> str:
     lines.append("")
     if s.lecturers:
         lines.append(texts.CAPTION_LECTURERS.format(value=safe(", ".join(_short_person(lec) for lec in s.lecturers))))
-    lines.append(texts.CAPTION_DATES.format(value=format_range_with_year(s.start_date, s.end_date)))
+    lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)))
     if s.venue:
-        lines.append(texts.CAPTION_VENUE.format(value=safe(s.venue.name)))
+        lines.append(texts.CAPTION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
     lines += _meta_lines(program, s.format.value)
 
     lines += ["", texts.CAPTION_PRICES]
@@ -145,68 +153,6 @@ def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str
 
 def price_label(price: PriceOption) -> str:
     return f"{price.label} — {format_rub(price.amount)}{texts.PRICE_UNIT_SUFFIX[price.unit.value]}"
-
-
-def _lecturer_line(lecturer: Lecturer) -> str:
-    name = safe(full_name(lecturer.last_name, lecturer.first_name, lecturer.middle_name))
-    return f"• {name}" + (f" — <i>{safe(lecturer.regalia)}</i>" if lecturer.regalia else "")
-
-
-def _venue_text(venue: Venue) -> str:
-    text = f"{safe(venue.name)}, {safe(venue.address)}"
-    if venue.map_url:
-        text += f' (<a href="{escape(venue.map_url, quote=True)}">карта</a>)'
-    return text
-
-
-def session_details(card: SessionCard, deadline_text: str | None) -> str:
-    """Полная карточка потока (кнопка «Подробнее»): расписание по дням, адрес с картой, регалии лекторов."""
-    s, program = card.session, card.program
-    lines = [texts.SESSION_CARD_TITLE.format(title=safe(session_title(s)))]
-    if program.short_description:
-        lines.append(f"<i>{safe(program.short_description)}</i>")
-    lines += ["", texts.SESSION_STATUS_LABELS[s.status.value], "", texts.SESSION_CARD_DATES]
-
-    for day in s.days:
-        parts = [f"<b>{format_day(day.date)}</b>"]
-        if time_text := format_time_range(day.start_time, day.end_time):
-            parts.append(time_text)
-        line = texts.SESSION_CARD_DAY.format(day=", ".join(parts))
-        if day.topic:
-            line += f" — {safe(day.topic)}"
-        if day.venue and day.venue.id != s.venue_id:
-            line += f"\n   📍 {_venue_text(day.venue)}"
-        lines.append(line)
-    if not s.days:
-        lines.append(texts.SESSION_CARD_DAY.format(day=format_range(s.start_date, s.end_date)))
-
-    lines.append("")
-    if s.venue:
-        lines.append(texts.SESSION_CARD_VENUE.format(venue=_venue_text(s.venue)))
-    elif s.online_url or s.format.value == "online":
-        lines.append(texts.SESSION_CARD_ONLINE)
-    lines.append(texts.SESSION_CARD_FORMAT.format(format=texts.FORMAT_LABELS[s.format.value]))
-    if program.level:
-        lines.append(texts.SESSION_CARD_LEVEL.format(level=texts.LEVEL_LABELS[program.level.value]))
-    if program.duration_hours:
-        lines.append(texts.SESSION_CARD_HOURS.format(hours=program.duration_hours))
-    if program.nmo_points:
-        lines.append(texts.SESSION_CARD_NMO.format(points=program.nmo_points))
-
-    if s.lecturers:
-        lines += ["", texts.SESSION_CARD_LECTURERS, *(_lecturer_line(lec) for lec in s.lecturers)]
-
-    if card.active_prices:
-        lines += ["", texts.SESSION_CARD_PRICES, *(f"• {safe(price_label(p))}" for p in card.active_prices)]
-
-    footer = []
-    if card.seats_left is not None and card.accepts_applications:
-        footer.append(texts.SESSION_CARD_SEATS.format(seats=max(card.seats_left, 0)))
-    if deadline_text:
-        footer.append(texts.SESSION_CARD_DEADLINE.format(deadline=deadline_text))
-    if footer:
-        lines += ["", *footer]
-    return "\n".join(lines)
 
 
 def my_applications(rows: list[tuple[Enrollment, CourseSession, Program]]) -> tuple[str, list[tuple[int, str]]]:
