@@ -52,7 +52,7 @@ class RegistrationService:
     async def next_step(self, client: Client) -> RegistrationStep:
         if not client.phone:
             return RegistrationStep.PHONE
-        if not (client.last_name and client.first_name and client.name_confirmed_at):
+        if not (client.full_name and client.name_confirmed_at):
             return RegistrationStep.NAME
         if not await self.clients.has_specialties(client.id):
             return RegistrationStep.SPECIALTIES
@@ -74,10 +74,8 @@ class RegistrationService:
         logger.info("Клиент #%s: сохранён телефон", client.id)
         return PhoneResult.OK
 
-    def save_name(self, client: Client, last_name: str, first_name: str, middle_name: str | None) -> None:
-        client.last_name = last_name
-        client.first_name = first_name
-        client.middle_name = middle_name
+    def save_name(self, client: Client, full_name: str) -> None:
+        client.full_name = full_name
         client.name_confirmed_at = datetime.now(UTC)
         self._mark_partial(client)
         logger.info("Клиент #%s: сохранено ФИО", client.id)

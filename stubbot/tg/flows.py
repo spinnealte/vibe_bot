@@ -31,9 +31,8 @@ from stubbot.tg import catalog_flow, keyboards, texts
 from stubbot.tg.callbacks import ConsentKind, SelectGroup
 from stubbot.tg.formatting import safe, safe_join
 from stubbot.tg.screen import send_screen, show_screen, strip_keyboard
-from stubbot.tg.states import OPTIONAL_STATES, PENDING_APPLY_KEY, Consent, Registration
+from stubbot.tg.states import FULL_NAME_KEY, OPTIONAL_STATES, PENDING_APPLY_KEY, Consent, Registration
 from stubbot.utils.dates import local_today
-from stubbot.utils.names import full_name
 from stubbot.utils.profile_fields import experience_years
 
 # Лимит текста сообщения Telegram — 4096; оставляем запас под вступление.
@@ -138,11 +137,7 @@ async def ask_confirm_name(message: Message, state: FSMContext, confirm_state: S
     data = await state.get_data()
     await state.set_state(confirm_state)
     await message.answer(
-        texts.REG_CONFIRM_NAME.format(
-            last_name=safe(data.get("last_name")),
-            first_name=safe(data.get("first_name")),
-            middle_name=safe(data.get("middle_name"), placeholder="нет"),
-        ),
+        texts.REG_CONFIRM_NAME.format(full_name=safe(data.get(FULL_NAME_KEY))),
         reply_markup=keyboards.confirm_name(),
     )
 
@@ -188,7 +183,7 @@ async def cabinet_view(session: AsyncSession, client: Client, settings: Settings
     me = await bot.me()  # имя бота только из API, не хардкодом; aiogram кэширует ответ
     years = experience_years(profile.practice_since_year, local_today(settings.timezone))
     text = texts.CABINET.format(
-        name=safe(full_name(profile.last_name, profile.first_name, profile.middle_name)),
+        name=safe(profile.full_name),
         phone=safe(profile.phone, texts.NOT_SET),
         email=safe(profile.email, texts.NOT_SET),
         birth_date=profile.birth_date.strftime("%d.%m.%Y") if profile.birth_date else texts.NOT_SET,

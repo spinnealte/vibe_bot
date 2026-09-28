@@ -43,6 +43,7 @@ class Application(StatesGroup):
 
 # Ключ в FSM data: заявка, к которой вернуться после согласия и регистрации.
 PENDING_APPLY_KEY = "apply_session_id"
+FULL_NAME_KEY = "full_name"  # введённое ФИО до подтверждения
 
 
 # Шаги с мультивыбором (общий обработчик переключения галочек).

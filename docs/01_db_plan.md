@@ -14,6 +14,7 @@
 | 5 | Сертификаты | Выдаются после курса | certificates [FULL], ФИО для сертификата в clients уже в MVP |
 | 6 | География | Только СПб, разные адреса | venues; единый часовой пояс Europe/Moscow |
 | 7 | Каналы | Листовки (QR), сайт, VK, Instagram, TG-канал, рефералы | acquisition_sources + client_source_touches в MVP |
+| 8 | ФИО (29.09.2026) | Одним полем, как написал человек; на части не разбираем | clients.full_name и lecturers.full_name вместо last/first/middle_name (миграция 7b1e2c9a4d10) |
 
 ---
 
@@ -57,7 +58,7 @@
 | id | bigint PK | суррогатный ключ |
 | telegram_id | bigint UNIQUE NULL | NULL — клиент заведён админом/клиникой, ещё не зашёл в бот |
 | tg_username, tg_first_name, tg_last_name, tg_language_code | varchar NULL | снимок из Telegram, обновляется при визитах |
-| last_name, first_name, middle_name | varchar(100) NULL | обращение, сертификат |
+| full_name | varchar(300) NULL | ФИО одной строкой, регистр как ввёл клиент; обращение, сертификат |
 | name_confirmed_at | timestamptz NULL | пользователь подтвердил написание ФИО для сертификата |
 | birth_date | date NULL | поздравления |
 | phone | varchar(20) NULL, UNIQUE partial | E.164 (+7XXXXXXXXXX) |
@@ -126,7 +127,7 @@
 
 **session_days** [MVP] — id, session_id (CASCADE), date, start_time NULL, end_time NULL, topic NULL, venue_id NULL
 **session_lecturers** [MVP] — m2m
-**lecturers** [MVP] — id, last_name, first_name, middle_name, regalia, bio_html, photo_file_id, is_active, sort_order
+**lecturers** [MVP] — id, full_name, regalia, bio_html, photo_file_id, is_active, sort_order
 **venues** [MVP] — id, name, address, map_url, directions_text, is_active (город по умолчанию СПб)
 
 **price_options** [MVP] — тарифы потока

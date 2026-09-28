@@ -95,9 +95,9 @@ async def create(session, today: date, tz: ZoneInfo) -> None:
 
     venue = Venue(name="Учебный класс на Невском", address="Санкт-Петербург, Невский пр., 1",
                   map_url="https://yandex.ru/maps/?text=Невский%20проспект%201", directions_text=DEMO_MARK)
-    ivanov = Lecturer(last_name="Иванов", first_name="Сергей", middle_name="Петрович",
+    ivanov = Lecturer(full_name="Иванов Сергей Петрович",
                       regalia="к.м.н., челюстно-лицевой хирург, стаж 20 лет", bio_html=DEMO_MARK)
-    smirnova = Lecturer(last_name="Смирнова", first_name="Анна", middle_name="Олеговна",
+    smirnova = Lecturer(full_name="Смирнова Анна Олеговна",
                         regalia="пародонтолог, автор курсов по регенерации", bio_html=DEMO_MARK)
     session.add_all([venue, ivanov, smirnova])
 

@@ -66,8 +66,7 @@ def _card(description: str | None, lecturers: int = 3, program_html: str | None 
         format=SimpleNamespace(value="offline"),
         days=[SimpleNamespace(start_time=time(10), end_time=time(18)) for _ in range(2)],
         status=SimpleNamespace(value="registration_open"),
-        lecturers=[SimpleNamespace(last_name=f"Лектор{i}", first_name="Иван", middle_name="Иванович")
-                   for i in range(lecturers)],
+        lecturers=[SimpleNamespace(full_name=f"Лектор{i} Иван Иванович") for i in range(lecturers)],
     )
     prices = [SimpleNamespace(label="Полный курс", amount=4_500_000, unit=SimpleNamespace(value="per_person"))]
     return SimpleNamespace(session=session, program=program, active_prices=prices, seats_left=5,

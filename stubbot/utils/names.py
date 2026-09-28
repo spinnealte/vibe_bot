@@ -1,33 +1,24 @@
 import re
-from dataclasses import dataclass
 
 _LETTERS = "A-Za-zА-Яа-яЁё"
 _NAME_WORD = re.compile(rf"^[{_LETTERS}]+(?:['\-][{_LETTERS}]+)*$")
-MAX_NAME_PART_LENGTH = 100
+MAX_FULL_NAME_LENGTH = 300  # длина колонки clients.full_name / lecturers.full_name
 
 
-@dataclass(frozen=True)
-class FullName:
-    last_name: str
-    first_name: str
-    middle_name: str | None
+def parse_full_name(raw: str) -> str | None:
+    """ФИО одной строкой: «Фамилия Имя [Отчество…]». Регистр не меняем — как написал человек, так и в сертификат;
+    лишние пробелы схлопываем.
 
-
-def parse_full_name(raw: str) -> FullName | None:
-    """ФИО одной строкой: «Фамилия Имя [Отчество]». Регистр не меняем — как написал человек, так и в сертификат.
-
-    Третье и следующие слова — отчество целиком («Мамедов Али Гусейн оглы» → отчество «Гусейн оглы»).
-    None — меньше двух слов, есть цифры/эмодзи или часть длиннее лимита колонки.
+    None — меньше двух слов, есть цифры/эмодзи или строка длиннее колонки.
     """
     words = raw.split()
     if len(words) < 2 or not all(_NAME_WORD.match(word) for word in words):
         return None
-    last_name, first_name, *rest = words
-    middle_name = " ".join(rest) or None
-    if any(len(part) > MAX_NAME_PART_LENGTH for part in (last_name, first_name, middle_name or "")):
-        return None
-    return FullName(last_name, first_name, middle_name)
+    name = " ".join(words)
+    return name if len(name) <= MAX_FULL_NAME_LENGTH else None
 
 
-def full_name(last_name: str | None, first_name: str | None, middle_name: str | None) -> str:
-    return " ".join(part for part in (last_name, first_name, middle_name) if part)
+def short_name(full_name: str) -> str:
+    """«Иванов Сергей Петрович» → «Иванов С. П.»: первое слово — фамилия, остальные — инициалами."""
+    last_name, *rest = full_name.split()
+    return " ".join([last_name, *(f"{word[0]}." for word in rest)])

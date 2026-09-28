@@ -27,6 +27,7 @@ from stubbot.tg.callbacks import NameAction, NameCb, SelectDoneCb, SelectGroup, 
 from stubbot.tg.screen import delete_quietly, strip_keyboard
 from stubbot.tg.states import (
     FIELD_BY_STATE,
+    FULL_NAME_KEY,
     OPTIONAL_STATES,
     REGISTRATION_BUTTON_STATES,
     REGISTRATION_TEXT_STATES,
@@ -102,7 +103,7 @@ async def on_full_name(message: Message, state: FSMContext) -> None:
     if name is None:
         await message.answer(texts.REG_NAME_INVALID)
         return
-    await state.update_data(last_name=name.last_name, first_name=name.first_name, middle_name=name.middle_name)
+    await state.update_data({FULL_NAME_KEY: name})
     await flows.ask_confirm_name(message, state)
 
 
@@ -118,13 +119,13 @@ async def on_fix_name(callback: CallbackQuery, state: FSMContext) -> None:
 async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
     await callback.answer()
     data = await state.get_data()
-    if not (data.get("last_name") and data.get("first_name")):
+    if not data.get(FULL_NAME_KEY):
         # Данные шага потерялись (например, перезапуск Redis) — просим ФИО заново.
         await delete_quietly(callback.message)
         await flows.ask_full_name(callback.message, state)
         return
     service = RegistrationService(session)
-    service.save_name(client, data["last_name"], data["first_name"], data.get("middle_name"))
+    service.save_name(client, data[FULL_NAME_KEY])
     await _next_step_in_place(callback.message, state, session, client, await service.next_step(client))
 
 

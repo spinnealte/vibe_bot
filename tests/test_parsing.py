@@ -4,7 +4,7 @@ import pytest
 
 from stubbot.services.deeplinks import PayloadKind, StartPayload, parse_start_payload
 from stubbot.utils import profile_fields
-from stubbot.utils.names import FullName, parse_full_name
+from stubbot.utils.names import parse_full_name, short_name
 from stubbot.utils.phone import normalize_phone
 
 TODAY = date(2026, 9, 28)
@@ -52,20 +52,28 @@ def test_normalize_phone(raw: str, expected: str | None) -> None:
 @pytest.mark.parametrize(
     ("raw", "expected"),
     [
-        ("Иванова Мария Сергеевна", FullName("Иванова", "Мария", "Сергеевна")),
-        ("  иванов   пётр  ", FullName("иванов", "пётр", None)),  # регистр не трогаем — как написал
-        ("Иванов-Петров Пётр", FullName("Иванов-Петров", "Пётр", None)),
-        ("Мамедов Али Гусейн оглы", FullName("Мамедов", "Али", "Гусейн оглы")),
-        ("О'Нил Шон", FullName("О'Нил", "Шон", None)),
+        ("Иванова Мария Сергеевна", "Иванова Мария Сергеевна"),
+        ("  иванов   пётр  ", "иванов пётр"),  # регистр не трогаем — как написал; пробелы схлопываем
+        ("Иванов-Петров Пётр", "Иванов-Петров Пётр"),
+        ("Мамедов Али Гусейн оглы", "Мамедов Али Гусейн оглы"),
+        ("О'Нил Шон", "О'Нил Шон"),
         ("Иванов", None),
         ("Иванов Иван 3", None),
         ("Иванов 😀", None),
         ("", None),
-        ("а" * 101 + " Иван", None),
+        ("а" * 296 + " Иван", None),
     ],
 )
-def test_parse_full_name(raw: str, expected: FullName | None) -> None:
+def test_parse_full_name(raw: str, expected: str | None) -> None:
     assert parse_full_name(raw) == expected
+
+
+@pytest.mark.parametrize(
+    ("full_name", "expected"),
+    [("Иванов Сергей Петрович", "Иванов С. П."), ("Смирнова Анна", "Смирнова А."), ("Иванов", "Иванов")],
+)
+def test_short_name(full_name: str, expected: str) -> None:
+    assert short_name(full_name) == expected
 
 
 @pytest.mark.parametrize(

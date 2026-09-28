@@ -60,9 +60,7 @@ class Lecturer(TimestampMixin, Base):
     __tablename__ = "lecturers"
 
     id: Mapped[IntPK]
-    last_name: Mapped[str] = mapped_column(String(100))
-    first_name: Mapped[str] = mapped_column(String(100))
-    middle_name: Mapped[str | None] = mapped_column(String(100))
+    full_name: Mapped[str] = mapped_column(String(300))  # «Фамилия Имя Отчество»; в карточке — «Фамилия И. О.»
     regalia: Mapped[str | None] = mapped_column(Text)
     bio_html: Mapped[str | None] = mapped_column(Text)
     photo_file_id: Mapped[str | None] = mapped_column(String(256))

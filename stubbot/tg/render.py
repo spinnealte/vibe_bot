@@ -4,13 +4,14 @@ import re
 from html import escape, unescape
 
 from stubbot.db.enums import EnrollmentStatus
-from stubbot.db.models import CourseSession, Lecturer, PriceOption, Program
+from stubbot.db.models import CourseSession, PriceOption, Program
 from stubbot.services.enrollments import MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.formatting import safe
 from stubbot.utils.dates import format_range_with_year, format_time_range
 from stubbot.utils.money import format_rub
+from stubbot.utils.names import short_name
 
 MAX_BUTTON_TITLE = 40
 CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (считается видимый текст, без HTML-тегов)
@@ -70,12 +71,6 @@ def _with_excerpt(lines: list[str], program: Program) -> str:
     return caption + header + excerpt + more
 
 
-def _short_person(lecturer: Lecturer) -> str:
-    """Иванов С. П."""
-    initials = " ".join(f"{part[0]}." for part in (lecturer.first_name, lecturer.middle_name) if part)
-    return f"{lecturer.last_name} {initials}".strip()
-
-
 def _meta_lines(program: Program, format_value: str) -> list[str]:
     lines = []
     if program.specialties:
@@ -108,7 +103,7 @@ def session_caption(card: SessionCard, deadline_text: str | None) -> str:
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines.append("")
     if s.lecturers:
-        lines.append(texts.CAPTION_LECTURERS.format(value=safe(", ".join(_short_person(lec) for lec in s.lecturers))))
+        lines.append(texts.CAPTION_LECTURERS.format(value=safe(", ".join(short_name(lec.full_name) for lec in s.lecturers))))
     lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)))
     if s.venue:
         lines.append(texts.CAPTION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))

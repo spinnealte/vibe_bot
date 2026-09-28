@@ -77,9 +77,8 @@ class Client(TimestampMixin, Base):
     tg_last_name: Mapped[str | None] = mapped_column(String(64))
     tg_language_code: Mapped[str | None] = mapped_column(String(16))
 
-    last_name: Mapped[str | None] = mapped_column(String(100))
-    first_name: Mapped[str | None] = mapped_column(String(100))
-    middle_name: Mapped[str | None] = mapped_column(String(100))
+    # ФИО одной строкой, как написал клиент (регистр не меняем) — так же пойдёт в сертификат.
+    full_name: Mapped[str | None] = mapped_column(String(300))
     name_confirmed_at: Mapped[datetime | None]
     birth_date: Mapped[date | None]
 

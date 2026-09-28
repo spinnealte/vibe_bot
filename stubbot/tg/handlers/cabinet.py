@@ -43,9 +43,9 @@ from stubbot.tg.formatting import safe
 from stubbot.tg.handlers.consent import RETURN_TO_CABINET
 from stubbot.tg.handlers.selection import selection_options
 from stubbot.tg.screen import delete_quietly, show_screen, strip_keyboard
-from stubbot.tg.states import EditProfile
+from stubbot.tg.states import FULL_NAME_KEY, EditProfile
 from stubbot.utils.dates import local_today
-from stubbot.utils.names import full_name, parse_full_name
+from stubbot.utils.names import parse_full_name
 from stubbot.utils.profile_fields import experience_years
 
 router = Router(name="cabinet")
@@ -148,9 +148,8 @@ async def choose_field(callback: CallbackQuery, callback_data: EditFieldCb, stat
     message = callback.message
     match callback_data.field:
         case EditField.FULL_NAME:
-            current = full_name(client.last_name, client.first_name, client.middle_name)
             await state.set_state(EditProfile.full_name)
-            await _prompt(message, state, texts.EDIT_ASK_FULL_NAME + _current(current), can_clear=False)
+            await _prompt(message, state, texts.EDIT_ASK_FULL_NAME + _current(client.full_name), can_clear=False)
         case EditField.PHONE:
             await state.set_state(EditProfile.phone)
             await delete_quietly(message)
@@ -241,7 +240,7 @@ async def on_full_name(message: Message, state: FSMContext) -> None:
         await message.answer(texts.REG_NAME_INVALID + texts.EDIT_ERROR_CANCEL_HINT)
         return
     await _strip_prompt(message, state)
-    await state.update_data(last_name=name.last_name, first_name=name.first_name, middle_name=name.middle_name)
+    await state.update_data({FULL_NAME_KEY: name})
     await flows.ask_confirm_name(message, state, confirm_state=EditProfile.confirm_name)
 
 
@@ -259,8 +258,8 @@ async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: A
     data = await state.get_data()
     await state.clear()
     notice = texts.EDIT_CANCELLED
-    if data.get("last_name") and data.get("first_name"):
-        RegistrationService(session).save_name(client, data["last_name"], data["first_name"], data.get("middle_name"))
+    if data.get(FULL_NAME_KEY):
+        RegistrationService(session).save_name(client, data[FULL_NAME_KEY])
         notice = texts.EDIT_SAVED
     await flows.show_cabinet(callback.message, session, client, settings, bot, notice=notice, in_place=True)
 

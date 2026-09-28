@@ -202,9 +202,7 @@ REG_NAME_INVALID = (
 )
 REG_CONFIRM_NAME = (
     "🔍 <b>Проверьте, пожалуйста</b>\n\n"
-    "Фамилия: <b>{last_name}</b>\n"
-    "Имя: <b>{first_name}</b>\n"
-    "Отчество: <b>{middle_name}</b>\n\n"
+    "👤 <b>{full_name}</b>\n\n"
     "🎓 Именно так ФИО будет указано в профиле и <b>в сертификате</b>. Всё верно?"
 )
 REG_NAME_OK = "✅ Всё верно"
