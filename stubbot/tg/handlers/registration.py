@@ -7,8 +7,6 @@
 неподходящий ввод (фото, стикеры, голос, текст вместо кнопки).
 """
 
-from datetime import date
-
 from aiogram import F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
@@ -25,7 +23,7 @@ from stubbot.services.registration import (
     RegistrationStep,
 )
 from stubbot.tg import flows, keyboards, texts
-from stubbot.tg.callbacks import NameAction, NameCb, SelectDoneCb, SelectGroup, SkipOptionalCb, ToggleCb
+from stubbot.tg.callbacks import NameAction, NameCb, SelectDoneCb, SelectGroup, SkipOptionalCb
 from stubbot.tg.states import (
     FIELD_BY_STATE,
     OPTIONAL_STATES,
@@ -35,7 +33,6 @@ from stubbot.tg.states import (
 )
 from stubbot.utils.dates import local_today
 from stubbot.utils.names import parse_full_name
-from stubbot.utils import profile_fields
 
 router = Router(name="registration")
 
@@ -131,18 +128,7 @@ async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: A
 
 # --- Специальности и должности (общий мультивыбор) -------------------------------------------------------------
 
-@router.callback_query(StateFilter(Registration.specialties, Registration.positions), ToggleCb.filter())
-async def on_toggle(callback: CallbackQuery, callback_data: ToggleCb, state: FSMContext, session: AsyncSession) -> None:
-    selected = set((await state.get_data()).get("selected", []))
-    selected ^= {callback_data.item_id}
-    await state.update_data(selected=sorted(selected))
-    options = await _options(session, callback_data.group)
-    await callback.message.edit_reply_markup(
-        reply_markup=keyboards.multiselect(callback_data.group, options, selected)
-    )
-    await callback.answer()
-
-
+# Переключение галочек — общий хендлер в handlers/selection.py.
 @router.callback_query(StateFilter(Registration.specialties, Registration.positions), SelectDoneCb.filter())
 async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, state: FSMContext,
                          session: AsyncSession, client: Client) -> None:
@@ -160,34 +146,15 @@ async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, s
     await flows.show_registration_step(callback.message, state, session, client, await service.next_step(client))
 
 
-async def _options(session: AsyncSession, group: SelectGroup) -> list[tuple[int, str]]:
-    service = RegistrationService(session)
-    items = await (service.specialties() if group is SelectGroup.SPECIALTIES else service.positions())
-    return [(item.id, item.title) for item in items]
-
-
 # --- Необязательные поля ---------------------------------------------------------------------------------------
-
-def _parse_optional(field: OptionalField, raw: str, today: date) -> str | int | date | None:
-    match field:
-        case OptionalField.CITY:
-            return profile_fields.parse_city(raw)
-        case OptionalField.WORKPLACE:
-            return profile_fields.parse_workplace(raw)
-        case OptionalField.EXPERIENCE:
-            return profile_fields.parse_experience_years(raw, today)
-        case OptionalField.EMAIL:
-            return profile_fields.parse_email(raw)
-        case OptionalField.BIRTH_DATE:
-            return profile_fields.parse_birth_date(raw, today)
-
 
 @router.message(StateFilter(*OPTIONAL_STATES.values()), F.text)
 async def on_optional_value(message: Message, state: FSMContext, client: Client, settings: Settings) -> None:
     field = FIELD_BY_STATE[await state.get_state()]
-    value = _parse_optional(field, message.text, local_today(settings.timezone))
+    value = RegistrationService.parse_optional(field, message.text, local_today(settings.timezone))
     if value is None:
-        await message.answer(texts.OPTIONAL_ERRORS[field.value], reply_markup=keyboards.skip_optional(field.value))
+        await message.answer(texts.OPTIONAL_ERRORS[field.value] + texts.OPTIONAL_ERROR_SKIP_HINT,
+                             reply_markup=keyboards.skip_optional(field.value))
         return
     RegistrationService.save_optional(client, field, value)
     await flows.ask_next_optional(message, state, field)

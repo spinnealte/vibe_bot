@@ -42,3 +42,41 @@ class ToggleCb(CallbackData, prefix="tgl"):
 
 class SelectDoneCb(CallbackData, prefix="seldone"):
     group: SelectGroup
+
+
+class CabinetAction(StrEnum):
+    EDIT_MENU = "edit"
+    BACK = "back"
+    MARKETING = "mkt"
+    APPLICATIONS = "apps"
+
+
+class CabinetCb(CallbackData, prefix="cab"):
+    action: CabinetAction
+
+
+class EditField(StrEnum):
+    """Поля, которые можно изменить в кабинете. Необязательные совпадают со значениями OptionalField."""
+
+    FULL_NAME = "name"
+    PHONE = "phone"
+    EMAIL = "email"
+    BIRTH_DATE = "birth_date"
+    CITY = "city"
+    WORKPLACE = "workplace_raw"
+    EXPERIENCE = "practice_since_year"
+    SPECIALTIES = "spec"
+    POSITIONS = "pos"
+
+
+class EditFieldCb(CallbackData, prefix="edit"):
+    field: EditField
+
+
+class EditControl(StrEnum):
+    CANCEL = "cancel"
+    CLEAR = "clear"
+
+
+class EditControlCb(CallbackData, prefix="editctl"):
+    action: EditControl

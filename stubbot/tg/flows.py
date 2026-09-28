@@ -8,7 +8,8 @@ from html import escape
 
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
-from aiogram.types import Message
+from aiogram.fsm.state import State
+from aiogram.types import InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.config import Settings
@@ -108,9 +109,10 @@ async def ask_full_name(message: Message, state: FSMContext) -> None:
     await message.answer(texts.REG_ASK_FULL_NAME, reply_markup=keyboards.registration_nav())
 
 
-async def ask_confirm_name(message: Message, state: FSMContext) -> None:
+async def ask_confirm_name(message: Message, state: FSMContext, confirm_state: State = Registration.confirm_name) -> None:
+    """Подтверждение ФИО: общий экран для регистрации и правки в кабинете (там своё состояние)."""
     data = await state.get_data()
-    await state.set_state(Registration.confirm_name)
+    await state.set_state(confirm_state)
     await message.answer(
         texts.REG_CONFIRM_NAME.format(
             last_name=safe(data.get("last_name")),
@@ -158,8 +160,13 @@ async def show_cabinet(message: Message, session: AsyncSession, client: Client, 
             referral_link=safe(f"https://t.me/{me.username}?start=ref_{profile.referral_code}"),
             referrals=referrals,
         ),
-        reply_markup=keyboards.main_menu(),
+        reply_markup=keyboards.cabinet_actions(marketing_on=marketing),
     )
+
+
+async def cabinet_markup(session: AsyncSession, client: Client) -> InlineKeyboardMarkup:
+    marketing = await ConsentService(session).has_any_consent(client.id, ConsentType.MARKETING)
+    return keyboards.cabinet_actions(marketing_on=marketing)
 
 
 def _years_text(years: int) -> str:

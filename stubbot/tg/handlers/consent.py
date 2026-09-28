@@ -14,6 +14,8 @@ from stubbot.tg.states import Consent
 
 router = Router(name="consent")
 
+RETURN_TO_CABINET = "cabinet"
+
 
 @router.callback_query(Consent.personal_data, ConsentCb.filter(F.kind == ConsentKind.PD))
 async def on_pd_consent(callback: CallbackQuery, callback_data: ConsentCb, state: FSMContext,
@@ -45,7 +47,7 @@ async def on_pd_consent(callback: CallbackQuery, callback_data: ConsentCb, state
 
 @router.callback_query(Consent.marketing, ConsentCb.filter(F.kind == ConsentKind.MARKETING))
 async def on_marketing_consent(callback: CallbackQuery, callback_data: ConsentCb, state: FSMContext,
-                               session: AsyncSession, client: Client) -> None:
+                               session: AsyncSession, client: Client, settings: Settings, bot: Bot) -> None:
     message = callback.message
     await callback.answer()
     await message.edit_reply_markup(reply_markup=None)
@@ -57,6 +59,12 @@ async def on_marketing_consent(callback: CallbackQuery, callback_data: ConsentCb
         await message.answer(texts.CONSENT_MARKETING_ACCEPTED)
     else:
         await message.answer(texts.CONSENT_MARKETING_DECLINED)
+
+    if (await state.get_data()).get("return_to") == RETURN_TO_CABINET:
+        # Включали рассылки из кабинета — туда и возвращаемся.
+        await state.clear()
+        await flows.show_cabinet(message, session, client, settings, bot)
+        return
     await _continue_registration(message, state, session, client)
 
 

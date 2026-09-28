@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from stubbot.tg.handlers import consent, fallback, menu, registration, start
+from stubbot.tg.handlers import cabinet, consent, fallback, menu, registration, selection, start
 
 
 def build_root_router() -> Router:
@@ -9,7 +9,9 @@ def build_root_router() -> Router:
     root.include_router(start.router)
     root.include_router(menu.router)
     root.include_router(consent.router)
+    root.include_router(selection.router)
     root.include_router(registration.router)
+    root.include_router(cabinet.router)
     # Всегда последним: ловит то, что не подошло остальным.
     root.include_router(fallback.router)
     return root

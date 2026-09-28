@@ -23,6 +23,19 @@ class Registration(StatesGroup):
     birth_date = State()
 
 
+class EditProfile(StatesGroup):
+    full_name = State()
+    confirm_name = State()
+    phone = State()
+    specialties = State()
+    positions = State()
+    optional_value = State()  # город/клиника/опыт/email/дата рождения; какое поле — в data["field"]
+
+
+# Шаги с мультивыбором (общий обработчик переключения галочек).
+SELECTION_STATES = (Registration.specialties, Registration.positions, EditProfile.specialties, EditProfile.positions)
+
+
 OPTIONAL_STATES: dict[OptionalField, State] = {
     OptionalField.CITY: Registration.city,
     OptionalField.WORKPLACE: Registration.workplace,

@@ -7,6 +7,7 @@ from stubbot.db.enums import ClientEventType, ProfileStatus
 from stubbot.db.models import Client, Position, Specialty
 from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.clients import ClientRepository, DictionaryRepository
+from stubbot.utils import profile_fields
 from stubbot.utils.phone import normalize_phone
 
 
@@ -76,8 +77,23 @@ class RegistrationService:
         self._mark_partial(client)
 
     @staticmethod
-    def save_optional(client: Client, field: OptionalField, value: str | int | date) -> None:
-        """Значение уже разобрано и проверено (utils/profile_fields.py)."""
+    def parse_optional(field: OptionalField, raw: str, today: date) -> str | int | date | None:
+        """Разбор ввода пользователя для необязательного поля. None — ввод не подходит."""
+        match field:
+            case OptionalField.CITY:
+                return profile_fields.parse_city(raw)
+            case OptionalField.WORKPLACE:
+                return profile_fields.parse_workplace(raw)
+            case OptionalField.EXPERIENCE:
+                return profile_fields.parse_experience_years(raw, today)
+            case OptionalField.EMAIL:
+                return profile_fields.parse_email(raw)
+            case OptionalField.BIRTH_DATE:
+                return profile_fields.parse_birth_date(raw, today)
+
+    @staticmethod
+    def save_optional(client: Client, field: OptionalField, value: str | int | date | None) -> None:
+        """value — результат parse_optional; None очищает поле."""
         setattr(client, field.value, value)
 
     async def specialties(self) -> list[Specialty]:
