@@ -53,11 +53,12 @@ def test_seats_for_prices() -> None:
     assert seat_choices(_price(PriceUnit.PER_PERSON, 1, 50)) == list(range(1, 11))  # не больше MAX_SEATS
 
 
-def _card(description: str | None, lecturers: int = 3) -> SimpleNamespace:
+def _card(description: str | None, lecturers: int = 3, program_html: str | None = None) -> SimpleNamespace:
     program = SimpleNamespace(
         title="Имплантация: от планирования до протезирования", short_description="Двухдневный курс с практикой",
         specialties=[SimpleNamespace(title=t) for t in ("Хирургия", "Имплантация")], level=None, duration_hours=16,
-        nmo_points=14, description_html=description, default_format=SimpleNamespace(value="offline"),
+        nmo_points=14, description_html=description, program_html=program_html,
+        default_format=SimpleNamespace(value="offline"),
     )
     session = SimpleNamespace(
         title_override=None, program=program, start_date=date(2026, 10, 13), end_date=date(2026, 10, 14),
@@ -83,6 +84,22 @@ def test_session_caption_fits_telegram_limit(description: str | None) -> None:
     if description and len(description) > 1000:
         assert caption.endswith("…")  # длинное описание обрезано по слову, а не посередине тега
         assert caption.count("<b>") == caption.count("</b>")
+
+
+def test_caption_shows_program_excerpt_about_400_chars() -> None:
+    program = "\n".join(f"<b>День {i}.</b> Тема дня {i}: теория, демонстрация и практика на фантомах" for i in range(1, 30))
+    caption = session_caption(_card("Описание курса", program_html=program), None)
+    assert "Программа курса" in caption and "О курсе" not in caption  # программа важнее описания
+    excerpt = caption.split("Программа курса:</b>\n", 1)[1].split("\n<i>👇", 1)[0]
+    assert 300 < len(excerpt) <= 400
+    assert excerpt.endswith("…") and "\n" in excerpt  # по границе слова, строки программы сохранены
+    assert "Полная программа" in caption
+    assert visible_length(caption) <= 1024
+
+
+def test_caption_short_program_shown_whole_without_hint() -> None:
+    caption = session_caption(_card(None, program_html="<b>День 1.</b> Теория\n<b>День 2.</b> Практика"), None)
+    assert caption.endswith("День 1. Теория\nДень 2. Практика")
 
 
 def test_split_html_respects_limit_and_paragraphs() -> None:

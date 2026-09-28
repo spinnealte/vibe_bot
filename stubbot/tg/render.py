@@ -15,6 +15,7 @@ from stubbot.utils.names import full_name
 MAX_BUTTON_TITLE = 40
 CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (считается видимый текст, без HTML-тегов)
 MIN_DESCRIPTION = 80  # если под описание остаётся меньше — не показываем обрывок
+EXCERPT_LIMIT = 400  # сколько программы/описания показывать в карточке; полная программа — по кнопке
 _TAG = re.compile(r"<[^>]+>")
 
 
@@ -32,23 +33,40 @@ def visible_length(html_text: str) -> int:
 
 
 def _plain_excerpt(html_text: str, limit: int) -> str:
-    """Начало описания без разметки, по границе слова (обрезать HTML посередине тега нельзя — было в старом боте)."""
-    plain = " ".join(unescape(_TAG.sub(" ", html_text)).split())
+    """Начало текста без разметки, по границе слова, с сохранением строк (пунктов программы).
+
+    Разметку снимаем: обрезать HTML посередине тега нельзя — так ломалась подпись в старом боте.
+    """
+    lines = (" ".join(line.split()) for line in unescape(_TAG.sub("", html_text)).splitlines())
+    plain = "\n".join(line for line in lines if line)
     if len(plain) <= limit:
         return escape(plain, quote=False)
-    cut = plain[: limit - 1].rsplit(" ", 1)[0]
-    return escape(cut, quote=False) + "…"
+    cut = plain[: limit - 1]
+    boundary = max(cut.rfind(" "), cut.rfind("\n"))
+    if boundary > 0:
+        cut = cut[:boundary]
+    return escape(cut.rstrip(), quote=False) + "…"
 
 
-def _with_description(lines: list[str], description_html: str | None) -> str:
+def _with_excerpt(lines: list[str], program: Program) -> str:
+    """В конец подписи — начало программы курса (или описания, если программы нет), до EXCERPT_LIMIT символов
+    и в пределах лимита подписи. Полная программа — по кнопке «📖 Программа» с листанием."""
     caption = "\n".join(lines)
-    if not description_html:
+    source, header = (
+        (program.program_html, texts.CAPTION_PROGRAM) if program.program_html
+        else (program.description_html, texts.CAPTION_DESCRIPTION)
+    )
+    if not source:
         return caption
-    header = f"\n\n{texts.CAPTION_DESCRIPTION}\n"
-    budget = CAPTION_LIMIT - visible_length(caption) - visible_length(header)
+    header = f"\n\n{header}\n"
+    more = f"\n{texts.CAPTION_PROGRAM_MORE}" if program.program_html else ""
+    budget = min(EXCERPT_LIMIT, CAPTION_LIMIT - visible_length(caption + header + more))
     if budget < MIN_DESCRIPTION:
         return caption
-    return caption + header + _plain_excerpt(description_html, budget)
+    excerpt = _plain_excerpt(source, budget)
+    if not excerpt.endswith("…"):
+        more = ""  # программа короткая и показана целиком — подсказка про кнопку не нужна
+    return caption + header + excerpt + more
 
 
 def _short_person(lecturer: Lecturer) -> str:
@@ -100,7 +118,7 @@ def session_caption(card: SessionCard, deadline_text: str | None) -> str:
     lines += ["", texts.CAPTION_STATUS.format(value=status)]
     if deadline_text:
         lines.append(texts.CAPTION_DEADLINE.format(value=deadline_text))
-    return _with_description(lines, program.description_html)
+    return _with_excerpt(lines, program)
 
 
 def program_caption(program: Program) -> str:
@@ -110,7 +128,7 @@ def program_caption(program: Program) -> str:
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines += ["", texts.CAPTION_DATES_TBD, *_meta_lines(program, program.default_format.value),
               "", texts.CAPTION_STATUS_TBD]
-    return _with_description(lines, program.description_html)
+    return _with_excerpt(lines, program)
 
 
 def program_pages(program: Program, limit: int = 3800) -> list[str]:
