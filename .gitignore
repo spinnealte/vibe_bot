@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+logs/
+.pytest_cache/
+.ruff_cache/
+
+# Тексты документов живут только на сервере
+legal/*
+!legal/README.md

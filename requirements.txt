@@ -1,0 +1,9 @@
+# Прямые зависимости. После установки в venv зафиксировать транзитивные:
+#   pip freeze > requirements.lock
+# и ставить на сервере из requirements.lock.
+aiogram[proxy,redis]==3.31.0
+SQLAlchemy[asyncio]==2.1.1
+asyncpg==0.31.0
+alembic==1.20.0
+pydantic-settings==2.15.0
+tzdata==2026.4

@@ -1,0 +1,63 @@
+{
+  "log": {
+    "level": "warn",
+    "timestamp": true
+  },
+  "inbounds": [
+    {
+      "type": "mixed",
+      "tag": "local-in",
+      "listen": "127.0.0.1",
+      "listen_port": 1080
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "vless",
+      "tag": "tg-proxy",
+      "server": "<FOREIGN_SERVER_IP>",
+      "server_port": 443,
+      "uuid": "<CLIENT_UUID>",
+      "flow": "xtls-rprx-vision",
+      "tls": {
+        "enabled": true,
+        "server_name": "addons.mozilla.org",
+        "utls": {
+          "enabled": true,
+          "fingerprint": "chrome"
+        },
+        "reality": {
+          "enabled": true,
+          "public_key": "<REALITY_PUBLIC_KEY>",
+          "short_id": "<REALITY_SHORT_ID>"
+        }
+      }
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "domain_suffix": ["telegram.org", "t.me", "telegram.me"],
+        "outbound": "tg-proxy"
+      },
+      {
+        "ip_cidr": [
+          "149.154.160.0/20",
+          "91.108.4.0/22",
+          "91.108.8.0/22",
+          "91.108.12.0/22",
+          "91.108.16.0/22",
+          "91.108.20.0/22",
+          "91.108.56.0/22",
+          "95.161.64.0/20"
+        ],
+        "outbound": "tg-proxy"
+      }
+    ],
+    "final": "direct"
+  }
+}

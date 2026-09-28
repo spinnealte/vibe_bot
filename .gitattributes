@@ -1,0 +1,4 @@
+# Код едет на Linux-сервер: в репозитории и рабочей копии — LF, независимо от core.autocrlf на Windows.
+* text=auto eol=lf
+# Скрипты для сервера — обязательно LF, иначе bash на Ubuntu споткнётся о \r
+*.sh text eol=lf
