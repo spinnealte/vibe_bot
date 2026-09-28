@@ -1,0 +1,49 @@
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES
+from stubbot.db.models import CourseSession, Enrollment, Program, ProgramInterest
+
+
+class EnrollmentRepository:
+    def __init__(self, session: AsyncSession) -> None:
+        self.session = session
+
+    async def active_for(self, client_id: int, session_id: int) -> Enrollment | None:
+        return await self.session.scalar(
+            select(Enrollment).where(
+                Enrollment.client_id == client_id,
+                Enrollment.session_id == session_id,
+                Enrollment.status.not_in(CANCELLED_ENROLLMENT_STATUSES),
+            )
+        )
+
+    async def get_for_client(self, enrollment_id: int, client_id: int) -> Enrollment | None:
+        """Только своя заявка: id из callback может быть подделан."""
+        return await self.session.scalar(
+            select(Enrollment).where(Enrollment.id == enrollment_id, Enrollment.client_id == client_id)
+        )
+
+    async def list_for_client(self, client_id: int) -> list[tuple[Enrollment, CourseSession, Program]]:
+        stmt = (
+            select(Enrollment, CourseSession, Program)
+            .join(CourseSession, CourseSession.id == Enrollment.session_id)
+            .join(Program, Program.id == CourseSession.program_id)
+            .where(Enrollment.client_id == client_id)
+            .order_by(CourseSession.start_date.desc(), Enrollment.id.desc())
+        )
+        return [tuple(row) for row in (await self.session.execute(stmt)).all()]
+
+    def add(self, enrollment: Enrollment) -> None:
+        self.session.add(enrollment)
+
+    async def add_interest(self, client_id: int, program_id: int) -> bool:
+        """True — подписка создана сейчас, False — уже была."""
+        stmt = (
+            pg_insert(ProgramInterest)
+            .values(client_id=client_id, program_id=program_id)
+            .on_conflict_do_nothing(index_elements=["client_id", "program_id"])
+            .returning(ProgramInterest.id)
+        )
+        return await self.session.scalar(stmt) is not None

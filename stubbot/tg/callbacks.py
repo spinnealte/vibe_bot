@@ -73,6 +73,53 @@ class EditFieldCb(CallbackData, prefix="edit"):
     field: EditField
 
 
+class ScheduleAction(StrEnum):
+    PAGE = "page"
+    SESSION = "session"
+    PROGRAMS = "programs"
+    PROGRAM = "program"
+    PROGRAM_TEXT = "ptext"
+    APPLY = "apply"
+    NOTIFY = "notify"
+
+
+class ScheduleCb(CallbackData, prefix="sch"):
+    """item_id — id потока или курса (по action); page — страница списка."""
+
+    action: ScheduleAction
+    item_id: int = 0
+    page: int = 0
+
+
+class ApplyPriceCb(CallbackData, prefix="aprice"):
+    price_id: int
+
+
+class ApplySeatsCb(CallbackData, prefix="aseats"):
+    seats: int
+
+
+class ApplyAction(StrEnum):
+    NO_COMMENT = "nocomment"
+    SEND = "send"
+    CANCEL = "cancel"
+
+
+class ApplyCb(CallbackData, prefix="apply"):
+    action: ApplyAction
+
+
+class MyApplicationAction(StrEnum):
+    ASK_CANCEL = "ask"
+    CANCEL = "yes"
+    KEEP = "no"
+
+
+class MyApplicationCb(CallbackData, prefix="myapp"):
+    action: MyApplicationAction
+    enrollment_id: int
+
+
 class EditControl(StrEnum):
     CANCEL = "cancel"
     CLEAR = "clear"

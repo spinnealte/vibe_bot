@@ -32,6 +32,19 @@ class EditProfile(StatesGroup):
     optional_value = State()  # город/клиника/опыт/email/дата рождения; какое поле — в data["field"]
 
 
+class Application(StatesGroup):
+    """Заявка на поток. В data: apply_session_id, price_id, seats, comment."""
+
+    price = State()
+    seats = State()
+    comment = State()
+    confirm = State()
+
+
+# Ключ в FSM data: заявка, к которой вернуться после согласия и регистрации.
+PENDING_APPLY_KEY = "apply_session_id"
+
+
 # Шаги с мультивыбором (общий обработчик переключения галочек).
 SELECTION_STATES = (Registration.specialties, Registration.positions, EditProfile.specialties, EditProfile.positions)
 

@@ -12,7 +12,7 @@ from aiogram.fsm.state import State
 from aiogram.types import InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.config import Settings
+from stubbot.config import Settings, get_settings
 from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.clients import ClientService
@@ -24,10 +24,10 @@ from stubbot.services.registration import (
     RegistrationService,
     RegistrationStep,
 )
-from stubbot.tg import keyboards, texts
+from stubbot.tg import catalog_flow, keyboards, texts
 from stubbot.tg.callbacks import ConsentKind, SelectGroup
 from stubbot.tg.formatting import safe, safe_join
-from stubbot.tg.states import OPTIONAL_STATES, Consent, Registration
+from stubbot.tg.states import OPTIONAL_STATES, PENDING_APPLY_KEY, Consent, Registration
 from stubbot.utils.dates import local_today
 from stubbot.utils.names import full_name
 from stubbot.utils.profile_fields import experience_years
@@ -95,7 +95,14 @@ async def show_registration_step(message: Message, state: FSMContext, session: A
             await message.answer(texts.REG_ASK_POSITIONS, reply_markup=keyboards.multiselect(
                 SelectGroup.POSITIONS, options, selected))
         case RegistrationStep.DONE:
-            if await service.complete(client):
+            just_completed = await service.complete(client)
+            pending_session_id = (await state.get_data()).get(PENDING_APPLY_KEY)
+            if pending_session_id:
+                # Регистрацию проходили ради заявки — сразу к ней; необязательные поля заполнят в кабинете.
+                await message.answer(texts.APPLY_PROFILE_READY, reply_markup=keyboards.main_menu())
+                today = local_today(get_settings().timezone)
+                await catalog_flow.start_application(message, state, session, client, today, pending_session_id)
+            elif just_completed:
                 # Обязательная часть пройдена только что — предлагаем необязательные поля.
                 await message.answer(texts.REG_MANDATORY_DONE, reply_markup=keyboards.registration_nav())
                 await ask_optional(message, state, OPTIONAL_FIELDS_ORDER[0])

@@ -16,8 +16,9 @@ from stubbot.config import Settings
 from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.consents import ConsentService
+from stubbot.services.enrollments import CLIENT_CANCELLABLE, EnrollmentService
 from stubbot.services.registration import OptionalField, PhoneResult, RegistrationService
-from stubbot.tg import flows, keyboards, texts
+from stubbot.tg import flows, keyboards, render, texts
 from stubbot.tg.callbacks import (
     CabinetAction,
     CabinetCb,
@@ -26,6 +27,8 @@ from stubbot.tg.callbacks import (
     EditControlCb,
     EditField,
     EditFieldCb,
+    MyApplicationAction,
+    MyApplicationCb,
     NameAction,
     NameCb,
     SelectDoneCb,
@@ -35,7 +38,7 @@ from stubbot.tg.formatting import safe
 from stubbot.tg.handlers.consent import RETURN_TO_CABINET
 from stubbot.tg.handlers.selection import selection_options
 from stubbot.tg.states import EditProfile
-from stubbot.utils.dates import local_today
+from stubbot.utils.dates import format_range, local_today
 from stubbot.utils.names import full_name, parse_full_name
 from stubbot.utils.profile_fields import experience_years
 
@@ -61,9 +64,57 @@ async def back_to_cabinet(callback: CallbackQuery, state: FSMContext, session: A
 
 
 @router.callback_query(CabinetCb.filter(F.action == CabinetAction.APPLICATIONS))
-async def open_applications(callback: CallbackQuery) -> None:
+async def open_applications(callback: CallbackQuery, session: AsyncSession, client: Client) -> None:
     await callback.answer()
-    await callback.message.answer(texts.MY_APPLICATIONS_EMPTY)
+    await _send_applications(callback.message, session, client)
+
+
+@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.ASK_CANCEL))
+async def ask_cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
+                                 client: Client) -> None:
+    rows = await EnrollmentService(session).my_applications(client.id)
+    row = next((r for r in rows if r[0].id == callback_data.enrollment_id and r[0].status in CLIENT_CANCELLABLE), None)
+    if row is None:
+        await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
+        return
+    await callback.answer()
+    _, course_session, program = row
+    await callback.message.answer(
+        texts.CANCEL_APPLICATION_CONFIRM.format(
+            title=safe(course_session.title_override or program.title),
+            dates=format_range(course_session.start_date, course_session.end_date),
+        ),
+        reply_markup=keyboards.confirm_cancel_application(callback_data.enrollment_id),
+    )
+
+
+@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.CANCEL))
+async def cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
+                             client: Client) -> None:
+    cancelled = await EnrollmentService(session).cancel(client.id, callback_data.enrollment_id)
+    if cancelled is None:
+        await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
+        return
+    await callback.answer()
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(texts.APPLICATION_CANCELLED)
+    await _send_applications(callback.message, session, client)
+
+
+@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.KEEP))
+async def keep_application(callback: CallbackQuery) -> None:
+    await callback.answer()
+    await callback.message.edit_reply_markup(reply_markup=None)
+    await callback.message.answer(texts.EDIT_CANCELLED)
+
+
+async def _send_applications(message: Message, session: AsyncSession, client: Client) -> None:
+    rows = await EnrollmentService(session).my_applications(client.id)
+    if not rows:
+        await message.answer(texts.MY_APPLICATIONS_EMPTY)
+        return
+    text, cancellable = render.my_applications(rows)
+    await message.answer(text, reply_markup=keyboards.my_applications(cancellable))
 
 
 @router.callback_query(CabinetCb.filter(F.action == CabinetAction.MARKETING))

@@ -9,16 +9,18 @@ from stubbot.config import Settings
 from stubbot.db.enums import ClientEventType
 from stubbot.db.models import Client
 from stubbot.repositories.analytics import AnalyticsRepository
-from stubbot.tg import flows, keyboards, texts
+from stubbot.tg import catalog_flow, flows, keyboards, texts
+from stubbot.utils.dates import local_today
 
 router = Router(name="menu")
 
 
 @router.message(F.text == texts.BTN_SCHEDULE)
-async def open_schedule(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
+async def open_schedule(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                        settings: Settings) -> None:
     await state.clear()
     AnalyticsRepository(session).add_event(client.id, ClientEventType.SCHEDULE_OPENED)
-    await message.answer(texts.SCHEDULE_SOON, reply_markup=keyboards.main_menu())
+    await catalog_flow.show_schedule(message, session, local_today(settings.timezone))
 
 
 @router.message(F.text == texts.BTN_CABINET)
