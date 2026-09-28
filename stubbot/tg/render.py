@@ -16,6 +16,7 @@ MAX_BUTTON_TITLE = 40
 CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (считается видимый текст, без HTML-тегов)
 MIN_DESCRIPTION = 80  # если под описание остаётся меньше — не показываем обрывок
 EXCERPT_LIMIT = 400  # сколько программы/описания показывать в карточке; полная программа — по кнопке
+PROGRAM_PAGE_LIMIT = 900  # страница полной программы ≈ один экран телефона
 _TAG = re.compile(r"<[^>]+>")
 
 
@@ -131,10 +132,11 @@ def program_caption(program: Program) -> str:
     return _with_excerpt(lines, program)
 
 
-def program_pages(program: Program, limit: int = 3800) -> list[str]:
-    """Программа курса страницами для листания в одном сообщении (лимит сообщения 4096, запас под подвал)."""
+def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
+    """Программа курса страницами «на один экран телефона» для листания в одном сообщении."""
     title = f"📖 <b>{safe(short(program.title, 200))}</b>"
-    pages = split_html(program.program_html or "", limit=limit) or [texts.PROGRAM_TEXT_EMPTY]
+    # Заголовок стоит на первой странице — оставляем под него место, чтобы и она влезала в экран.
+    pages = split_html(program.program_html or "", limit=limit - visible_length(title) - 2) or [texts.PROGRAM_TEXT_EMPTY]
     pages[0] = f"{title}\n\n{pages[0]}"
     if len(pages) > 1:
         pages = [page + texts.PROGRAM_PAGE.format(page=i + 1, pages=len(pages)) for i, page in enumerate(pages)]
@@ -228,20 +230,41 @@ def my_applications(rows: list[tuple[Enrollment, CourseSession, Program]]) -> tu
     return text, cancellable
 
 
-def split_html(text: str, limit: int = 4000) -> list[str]:
-    """Длинный текст (программа курса) на части по абзацам — лимит сообщения Telegram 4096."""
-    chunks, current = [], ""
-    for paragraph in text.split("\n\n"):
-        candidate = f"{current}\n\n{paragraph}" if current else paragraph
-        if len(candidate) <= limit:
-            current = candidate
-            continue
+def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
+    """Длинный текст на страницы по `limit` видимых символов: сначала по абзацам, слишком длинный абзац — по строкам,
+    слишком длинная строка — по словам. Разметка внутри строки не разрывается, пока строка не длиннее страницы."""
+    pages: list[str] = []
+    current = ""
+
+    def fits(piece: str, separator: str) -> bool:
+        nonlocal current
+        candidate = f"{current}{separator}{piece}" if current else piece
+        if visible_length(candidate) > limit:
+            return False
+        current = candidate
+        return True
+
+    def flush() -> None:
+        nonlocal current
         if current:
-            chunks.append(current)
-        while len(paragraph) > limit:
-            chunks.append(paragraph[:limit])
-            paragraph = paragraph[limit:]
-        current = paragraph
-    if current:
-        chunks.append(current)
-    return chunks
+            pages.append(current)
+            current = ""
+
+    for paragraph in text.strip().split("\n\n"):
+        if fits(paragraph, "\n\n"):
+            continue
+        flush()
+        if fits(paragraph, ""):
+            continue
+        for line in paragraph.split("\n"):
+            if fits(line, "\n"):
+                continue
+            flush()
+            if fits(line, ""):
+                continue
+            for word in line.split(" "):
+                if not fits(word, " "):
+                    flush()
+                    current = word
+    flush()
+    return pages

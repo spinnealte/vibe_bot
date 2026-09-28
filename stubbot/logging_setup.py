@@ -12,25 +12,18 @@ _MASKS = [
     (re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+"), "<email>"),
 ]
 
-DATE_FORMAT = "%d.%m.%Y %H:%M:%S"
-# Общие логи: дата | уровень | модуль | сообщение.
-GENERAL_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
-# Строка на каждый вызов хендлера (HandlerLogMiddleware): процесс | хендлер | дата.время | результат.
-HANDLER_FORMAT = "%(process_name)s | %(handler_name)s | %(asctime)s | %(message)s"
+# Как в старом боте: 2026-01-26 15:01:53,299 | INFO | aiogram.event | Update id=… is handled. Duration 167 ms …
+LOG_FORMAT = "%(asctime)s | %(levelname)s | %(name)s | %(message)s"
 
 
 class MaskingFormatter(logging.Formatter):
-    """Выбирает формат по типу записи и маскирует секреты/ПД в готовой строке."""
+    """Маскирует секреты/ПД в готовой строке (в т.ч. в трейсбеках)."""
 
     def __init__(self) -> None:
-        super().__init__(GENERAL_FORMAT, DATE_FORMAT)
-        self._handler_formatter = logging.Formatter(HANDLER_FORMAT, DATE_FORMAT)
+        super().__init__(LOG_FORMAT)
 
     def format(self, record: logging.LogRecord) -> str:
-        if hasattr(record, "handler_name"):
-            text = self._handler_formatter.format(record)
-        else:
-            text = super().format(record)
+        text = super().format(record)
         for pattern, replacement in _MASKS:
             text = pattern.sub(replacement, text)
         return text
@@ -52,6 +45,6 @@ def setup_logging(level: str, log_dir: Path) -> None:
     root.addHandler(console)
     root.addHandler(file)
 
-    # Не шумим служебными логами библиотек на INFO.
-    logging.getLogger("aiogram.event").setLevel(logging.WARNING)
+    # aiogram.event пишет «Update id=… is handled. Duration … ms» — оставляем, как в старом боте.
+    # SQL-запросы SQLAlchemy не пишем даже на DEBUG: там параметры с ПД.
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)

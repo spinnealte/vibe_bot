@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
@@ -15,6 +16,8 @@ from stubbot.db.models import Client, CourseSession, Enrollment, PriceOption, Pr
 from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.enrollments import EnrollmentRepository
 from stubbot.services.schedule import ScheduleService, SessionCard
+
+logger = logging.getLogger(__name__)
 
 MAX_COMMENT_LENGTH = 1000
 MAX_SEATS = 10
@@ -96,6 +99,7 @@ class EnrollmentService:
             async with self.db.begin_nested():
                 self.enrollments.add(enrollment)
         except IntegrityError:
+            logger.info("Клиент #%s: повторная заявка на поток #%s отклонена базой", client.id, session_id)
             return ApplyResult(ApplyOutcome.DUPLICATE, await self.enrollments.active_for(client.id, session_id))
 
         self.analytics.add_event(
@@ -103,6 +107,8 @@ class EnrollmentService:
             ClientEventType.APPLICATION_CREATED,
             {"session_id": session_id, "status": enrollment.status.value, "seats": seats},
         )
+        logger.info("Клиент #%s: заявка #%s на поток #%s — %s, мест %s", client.id, enrollment.id, session_id,
+                    enrollment.status.value, seats)
         return ApplyResult(ApplyOutcome.WAITLIST if waitlist else ApplyOutcome.CREATED, enrollment)
 
     async def my_applications(self, client_id: int) -> list[tuple[Enrollment, CourseSession, Program]]:
@@ -116,12 +122,14 @@ class EnrollmentService:
         enrollment.status = EnrollmentStatus.CANCELLED_BY_CLIENT
         enrollment.cancelled_at = datetime.now(UTC)
         enrollment.cancel_reason = "Отменена клиентом в боте"
+        logger.info("Клиент #%s: отменил заявку #%s", client_id, enrollment_id)
         return enrollment
 
     async def subscribe_interest(self, client_id: int, program_id: int) -> bool:
         created = await self.enrollments.add_interest(client_id, program_id)
         if created:
             self.analytics.add_event(client_id, ClientEventType.INTEREST_CREATED, {"program_id": program_id})
+            logger.info("Клиент #%s: подписался на набор курса #%s", client_id, program_id)
         return created
 
     @staticmethod

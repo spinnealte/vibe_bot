@@ -1,10 +1,11 @@
-"""Строка лога на каждый апдейт: процесс | хендлер | дата.время | краткий результат.
+"""Строка лога на каждый апдейт: что пришло → какой хендлер → результат (в общем формате логов).
 
 Пример:
-    message /start | start.cmd_start | 28.09.2026 23:31:00 | OK, 12 мс
-    callback reg:phone [Registration:phone] | registration.on_phone | 28.09.2026 23:31:05 | OK, 40 мс
-    message text | — | 28.09.2026 23:31:09 | не обработано
+    2026-09-29 12:00:01,512 | INFO | stubbot.handlers | message /start → start.cmd_start: OK, 12 мс
+    2026-09-29 12:00:05,030 | INFO | stubbot.handlers | callback sch:s:0:1:0 → schedule.on_slide: OK, 40 мс
+    2026-09-29 12:00:09,774 | INFO | stubbot.handlers | message text → —: не обработано
 
+Рядом aiogram пишет свою строку: «Update id=… is handled. Duration … ms by bot id=…».
 Текст сообщений пользователя не логируется (там ПД): только команда или тип содержимого.
 """
 
@@ -51,7 +52,7 @@ def describe_handler(handler: HandlerObject | None) -> str:
 
 
 def _log(level: int, process: str, handler: str, result: str) -> None:
-    logger.log(level, result, extra={"process_name": process, "handler_name": handler})
+    logger.log(level, "%s → %s: %s", process, handler, result)
 
 
 class HandlerLogMiddleware(BaseMiddleware):

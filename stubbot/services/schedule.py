@@ -1,3 +1,4 @@
+import logging
 from dataclasses import dataclass
 from datetime import date
 
@@ -6,6 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.db.enums import SessionStatus
 from stubbot.db.models import CourseSession, PriceOption, Program
 from stubbot.repositories.catalog import CatalogRepository
+
+logger = logging.getLogger(__name__)
 
 # На поток можно подать заявку; в WAITLIST/FULL она уходит в лист ожидания.
 APPLY_STATUSES = (SessionStatus.REGISTRATION_OPEN, SessionStatus.WAITLIST, SessionStatus.FULL)
@@ -60,9 +63,12 @@ class ScheduleService:
         """Слайд номер index (с поправкой на границы — список мог измениться). None — курсов нет совсем."""
         items = await self._carousel(today)
         if not items:
+            logger.debug("[DB] Карусель: курсов нет")
             return None
         index = min(max(index, 0), len(items) - 1)
         kind, item_id = items[index]
+        logger.debug("[DB] Карусель: слайд %d из %d (%s #%s)", index + 1, len(items),
+                     "поток" if kind == "s" else "курс без дат", item_id)
         if kind == "s":
             card = await self.card(item_id, today)
             if card is not None:

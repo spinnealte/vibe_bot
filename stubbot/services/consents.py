@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +7,8 @@ from stubbot.db.enums import ClientEventType, ConsentSource, ConsentType, LegalD
 from stubbot.db.models import LegalDocument
 from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.consents import ConsentRepository
+
+logger = logging.getLogger(__name__)
 
 DOCUMENT_FOR_CONSENT = {
     ConsentType.PERSONAL_DATA: LegalDocumentType.PD_CONSENT,
@@ -45,6 +48,8 @@ class ConsentService:
             ClientEventType.CONSENT_GIVEN,
             {"type": consent_type.value, "document_version": document.version},
         )
+        logger.info("Клиент #%s: согласие %s (документ v%s)", client_id, consent_type.value, document.version)
 
     async def revoke(self, client_id: int, consent_type: ConsentType) -> None:
         await self.consents.revoke_active(client_id, consent_type, datetime.now(UTC))
+        logger.info("Клиент #%s: отозвано согласие %s", client_id, consent_type.value)

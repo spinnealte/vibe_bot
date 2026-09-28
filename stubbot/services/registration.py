@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
@@ -9,6 +10,8 @@ from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.clients import ClientRepository, DictionaryRepository
 from stubbot.utils import profile_fields
 from stubbot.utils.phone import normalize_phone
+
+logger = logging.getLogger(__name__)
 
 
 class RegistrationStep(StrEnum):
@@ -63,10 +66,12 @@ class RegistrationService:
             return PhoneResult.INVALID
         owner = await self.clients.get_by_phone(phone)
         if owner is not None and owner.id != client.id:
+            logger.warning("Клиент #%s: телефон уже привязан к клиенту #%s", client.id, owner.id)
             return PhoneResult.TAKEN
         client.phone = phone
         client.phone_confirmed = True
         self._mark_partial(client)
+        logger.info("Клиент #%s: сохранён телефон", client.id)
         return PhoneResult.OK
 
     def save_name(self, client: Client, last_name: str, first_name: str, middle_name: str | None) -> None:
@@ -75,6 +80,7 @@ class RegistrationService:
         client.middle_name = middle_name
         client.name_confirmed_at = datetime.now(UTC)
         self._mark_partial(client)
+        logger.info("Клиент #%s: сохранено ФИО", client.id)
 
     @staticmethod
     def parse_optional(field: OptionalField, raw: str, today: date) -> str | int | date | None:
@@ -95,6 +101,8 @@ class RegistrationService:
     def save_optional(client: Client, field: OptionalField, value: str | int | date | None) -> None:
         """value — результат parse_optional; None очищает поле."""
         setattr(client, field.value, value)
+        # Само значение не пишем — это ПД (в старом боте было «на 'asd'»).
+        logger.info("Клиент #%s: %s поле '%s'", client.id, "очищено" if value is None else "обновлено", field.value)
 
     async def specialties(self) -> list[Specialty]:
         return await self.dictionaries.active_specialties()
@@ -114,6 +122,7 @@ class RegistrationService:
         if not specialty_ids or not set(specialty_ids) <= allowed:
             return False
         await self.clients.replace_specialties(client.id, sorted(set(specialty_ids)))
+        logger.info("Клиент #%s: сохранены специальности (%d)", client.id, len(set(specialty_ids)))
         return True
 
     async def save_positions(self, client: Client, position_ids: list[int]) -> bool:
@@ -121,6 +130,7 @@ class RegistrationService:
         if not position_ids or not set(position_ids) <= allowed:
             return False
         await self.clients.replace_positions(client.id, sorted(set(position_ids)))
+        logger.info("Клиент #%s: сохранены должности (%d)", client.id, len(set(position_ids)))
         return True
 
     async def complete(self, client: Client) -> bool:
@@ -132,6 +142,7 @@ class RegistrationService:
             return False
         client.profile_status = ProfileStatus.COMPLETED
         self.analytics.add_event(client.id, ClientEventType.PROFILE_COMPLETED)
+        logger.info("Клиент #%s: регистрация завершена", client.id)
         return True
 
     async def load_profile(self, client_id: int) -> Client:

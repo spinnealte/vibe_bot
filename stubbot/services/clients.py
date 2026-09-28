@@ -37,6 +37,7 @@ class ClientService:
         """Клиент по telegram_id; создаётся при первом обращении. Второе значение — создан ли сейчас."""
         client = await self.clients.get_by_telegram_id(profile.telegram_id)
         if client is not None:
+            logger.debug("[DB] Найден клиент #%s", client.id)
             self._refresh_snapshot(client, profile)
             return client, False
 
@@ -81,6 +82,10 @@ class ClientService:
                 client.referred_by_client_id = referrer.id
 
         self.analytics.add_touch(client.id, source_id, payload.raw, is_first=created)
+        # Нераспознанный параметр — произвольный текст, в лог его не пишем.
+        shown = payload.raw if payload.kind is not PayloadKind.UNKNOWN else "<нераспознанный параметр>"
+        logger.info("Клиент #%s: /start по ссылке %s%s", client.id, shown,
+                    " (источник найден)" if source_id else "")
 
     async def count_referrals(self, client_id: int) -> int:
         return await self.clients.count_referrals(client_id)

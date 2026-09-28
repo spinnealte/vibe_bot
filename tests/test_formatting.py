@@ -103,8 +103,17 @@ def test_caption_short_program_shown_whole_without_hint() -> None:
 
 
 def test_split_html_respects_limit_and_paragraphs() -> None:
-    text = "\n\n".join(f"<b>Модуль {i}</b> " + "текст " * 40 for i in range(30))
-    chunks = split_html(text, limit=1000)
+    text = "\n\n".join(f"<b>Модуль {i}</b>\n• пункт первый\n• пункт второй" for i in range(30))
+    chunks = split_html(text, limit=300)
     assert len(chunks) > 1
-    assert all(len(chunk) <= 1000 for chunk in chunks)
-    assert "\n\n".join(chunks) == text  # ничего не потеряли
+    assert all(visible_length(chunk) <= 300 for chunk in chunks)
+    assert "\n\n".join(chunks) == text  # делим по абзацам и ничего не теряем
+    assert all(chunk.count("<b>") == chunk.count("</b>") for chunk in chunks)  # теги не разорваны
+
+
+def test_split_html_splits_oversized_paragraph_by_lines_and_words() -> None:
+    lines = [f"• пункт номер {i} " + "слово " * 10 for i in range(20)]
+    huge_line = "очень " * 200
+    chunks = split_html("\n".join(lines) + "\n" + huge_line, limit=300)
+    assert all(visible_length(chunk) <= 300 for chunk in chunks)
+    assert " ".join(" ".join(chunks).split()) == " ".join(("\n".join(lines) + "\n" + huge_line).split())
