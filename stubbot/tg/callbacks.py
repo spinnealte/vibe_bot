@@ -110,14 +110,16 @@ class ApplyCb(CallbackData, prefix="apply"):
 
 
 class MyApplicationAction(StrEnum):
+    VIEW = "view"  # карточка заявки номер index
     ASK_CANCEL = "ask"
     CANCEL = "yes"
-    KEEP = "no"
+    KEEP = "no"  # «Нет, оставить» — назад к той же карточке
 
 
 class MyApplicationCb(CallbackData, prefix="myapp"):
     action: MyApplicationAction
-    enrollment_id: int
+    enrollment_id: int = 0
+    index: int = 0
 
 
 class EditControl(StrEnum):

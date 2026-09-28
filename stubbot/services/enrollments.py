@@ -24,6 +24,24 @@ MAX_SEATS = 10
 DEFAULT_MAX_SEATS = 5  # если тариф не ограничивает состав: «я + до 4 коллег», больше — через комментарий
 # Клиент может сам отменить только ещё не подтверждённую заявку; подтверждённую — через менеджера.
 CLIENT_CANCELLABLE = (EnrollmentStatus.APPLICATION, EnrollmentStatus.WAITLIST)
+# Не показываем в «Моих заявках».
+HIDDEN_FROM_CLIENT = (EnrollmentStatus.CANCELLED_BY_CLIENT,)
+
+
+@dataclass(frozen=True)
+class MyApplication:
+    enrollment: Enrollment
+    session: CourseSession
+    program: Program
+    price: PriceOption | None
+
+    @property
+    def title(self) -> str:
+        return self.session.title_override or self.program.title
+
+    @property
+    def cancellable(self) -> bool:
+        return self.enrollment.status in CLIENT_CANCELLABLE
 
 
 class ApplyOutcome(StrEnum):
@@ -111,8 +129,10 @@ class EnrollmentService:
                     enrollment.status.value, seats)
         return ApplyResult(ApplyOutcome.WAITLIST if waitlist else ApplyOutcome.CREATED, enrollment)
 
-    async def my_applications(self, client_id: int) -> list[tuple[Enrollment, CourseSession, Program]]:
-        return await self.enrollments.list_for_client(client_id)
+    async def my_applications(self, client_id: int) -> list[MyApplication]:
+        """Заявки для «Мои заявки». Отменённые самим клиентом не показываем — он их уже убрал."""
+        rows = await self.enrollments.list_for_client(client_id, exclude_statuses=HIDDEN_FROM_CLIENT)
+        return [MyApplication(*row) for row in rows]
 
     async def cancel(self, client_id: int, enrollment_id: int) -> Enrollment | None:
         """None — не своя заявка или её уже нельзя отменить самому."""

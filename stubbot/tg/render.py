@@ -3,12 +3,13 @@
 import re
 from html import escape, unescape
 
-from stubbot.db.models import CourseSession, Enrollment, Lecturer, PriceOption, Program
-from stubbot.services.enrollments import CLIENT_CANCELLABLE
+from stubbot.db.enums import EnrollmentStatus
+from stubbot.db.models import CourseSession, Lecturer, PriceOption, Program
+from stubbot.services.enrollments import MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.formatting import safe
-from stubbot.utils.dates import format_range, format_range_with_year, format_short, format_time_range
+from stubbot.utils.dates import format_range_with_year, format_time_range
 from stubbot.utils.money import format_rub
 
 MAX_BUTTON_TITLE = 40
@@ -155,25 +156,26 @@ def price_label(price: PriceOption) -> str:
     return f"{price.label} — {format_rub(price.amount)}{texts.PRICE_UNIT_SUFFIX[price.unit.value]}"
 
 
-def my_applications(rows: list[tuple[Enrollment, CourseSession, Program]]) -> tuple[str, list[tuple[int, str]]]:
-    """Текст списка заявок и кнопки отмены для тех, что клиент может отменить сам."""
-    text = texts.MY_APPLICATIONS_TITLE
-    cancellable = []
-    for enrollment, course_session, program in rows:
-        title = course_session.title_override or program.title
-        text += texts.MY_APPLICATION_ITEM.format(
-            title=safe(title),
-            dates=format_range(course_session.start_date, course_session.end_date),
-            status=texts.ENROLLMENT_STATUS_LABELS[enrollment.status.value],
-        )
-        if enrollment.requested_seats > 1:
-            text += texts.MY_APPLICATION_SEATS.format(seats=enrollment.requested_seats)
-        if enrollment.status in CLIENT_CANCELLABLE:
-            cancellable.append((enrollment.id, texts.BTN_CANCEL_APPLICATION.format(
-                title=short(title, 24), date=format_short(course_session.start_date))))
-    if cancellable:
-        text += texts.MY_APPLICATIONS_CANCEL_HINT
-    return text, cancellable
+def my_application_card(app: MyApplication) -> str:
+    """Карточка одной заявки в «Моих заявках» (листаются стрелками)."""
+    enrollment, s = app.enrollment, app.session
+    lines = [texts.MY_APPLICATIONS_TITLE, "", texts.MY_APPLICATION_COURSE.format(value=safe(app.title)),
+             texts.MY_APPLICATION_DATES.format(value=_dates_text(s))]
+    if s.venue:
+        lines.append(texts.MY_APPLICATION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
+    if app.price:
+        lines.append(texts.MY_APPLICATION_PRICE.format(value=safe(price_label(app.price))))
+    lines.append(texts.MY_APPLICATION_SEATS.format(value=enrollment.requested_seats))
+    if enrollment.client_comment:
+        lines.append(texts.MY_APPLICATION_COMMENT.format(value=safe(enrollment.client_comment)))
+    lines += ["", texts.MY_APPLICATION_STATUS.format(value=texts.ENROLLMENT_STATUS_LABELS[enrollment.status.value])]
+    if enrollment.status is EnrollmentStatus.CONFIRMED:
+        lines.append(texts.MY_APPLICATION_CONFIRMED_HINT)
+    return "\n".join(lines)
+
+
+def cancel_application_question(app: MyApplication) -> str:
+    return texts.CANCEL_APPLICATION_CONFIRM.format(title=safe(app.title), dates=_dates_text(app.session))
 
 
 def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:

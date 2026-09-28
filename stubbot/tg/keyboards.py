@@ -218,21 +218,35 @@ def apply_confirm() -> InlineKeyboardMarkup:
     ]])
 
 
-def my_applications(cancellable: list[tuple[int, str]]) -> InlineKeyboardMarkup:
-    rows = [[InlineKeyboardButton(
-        text=label, callback_data=MyApplicationCb(action=MyApplicationAction.ASK_CANCEL, enrollment_id=eid).pack())]
-        for eid, label in cancellable]
-    rows.append([InlineKeyboardButton(text=texts.BTN_BACK_TO_CABINET,
-                                      callback_data=CabinetCb(action=CabinetAction.BACK).pack())])
+def _myapp(action: MyApplicationAction, enrollment_id: int = 0, index: int = 0) -> str:
+    return MyApplicationCb(action=action, enrollment_id=enrollment_id, index=index).pack()
+
+
+def back_to_cabinet() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=texts.BTN_BACK_TO_CABINET, callback_data=CabinetCb(action=CabinetAction.BACK).pack()),
+    ]])
+
+
+def my_application_card(enrollment_id: int, index: int, total: int, cancellable: bool) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / ✖️ Отменить заявку / ⬅️ В кабинет."""
+    rows = []
+    if total > 1:
+        rows.append(_pager(index, total, _myapp(MyApplicationAction.VIEW, index=index - 1),
+                           _myapp(MyApplicationAction.VIEW, index=index + 1)))
+    if cancellable:
+        rows.append([InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION,
+                                          callback_data=_myapp(MyApplicationAction.ASK_CANCEL, enrollment_id, index))])
+    rows.append(back_to_cabinet().inline_keyboard[0])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def confirm_cancel_application(enrollment_id: int) -> InlineKeyboardMarkup:
+def confirm_cancel_application(enrollment_id: int, index: int) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_YES, callback_data=MyApplicationCb(
-            action=MyApplicationAction.CANCEL, enrollment_id=enrollment_id).pack()),
-        InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_NO, callback_data=MyApplicationCb(
-            action=MyApplicationAction.KEEP, enrollment_id=enrollment_id).pack()),
+        InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_YES,
+                             callback_data=_myapp(MyApplicationAction.CANCEL, enrollment_id, index)),
+        InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_NO,
+                             callback_data=_myapp(MyApplicationAction.KEEP, enrollment_id, index)),
     ]])
 
 

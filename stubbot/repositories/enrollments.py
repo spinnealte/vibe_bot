@@ -1,9 +1,10 @@
 from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
-from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES
-from stubbot.db.models import CourseSession, Enrollment, Program, ProgramInterest
+from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES, EnrollmentStatus
+from stubbot.db.models import CourseSession, Enrollment, PriceOption, Program, ProgramInterest
 
 
 class EnrollmentRepository:
@@ -25,13 +26,18 @@ class EnrollmentRepository:
             select(Enrollment).where(Enrollment.id == enrollment_id, Enrollment.client_id == client_id)
         )
 
-    async def list_for_client(self, client_id: int) -> list[tuple[Enrollment, CourseSession, Program]]:
+    async def list_for_client(
+        self, client_id: int, exclude_statuses: tuple[EnrollmentStatus, ...] = ()
+    ) -> list[tuple[Enrollment, CourseSession, Program, PriceOption | None]]:
+        """Заявки клиента с потоком, курсом и тарифом; ближайшие потоки — первыми."""
         stmt = (
-            select(Enrollment, CourseSession, Program)
+            select(Enrollment, CourseSession, Program, PriceOption)
             .join(CourseSession, CourseSession.id == Enrollment.session_id)
             .join(Program, Program.id == CourseSession.program_id)
-            .where(Enrollment.client_id == client_id)
-            .order_by(CourseSession.start_date.desc(), Enrollment.id.desc())
+            .outerjoin(PriceOption, PriceOption.id == Enrollment.price_option_id)
+            .where(Enrollment.client_id == client_id, Enrollment.status.not_in(exclude_statuses))
+            .options(selectinload(CourseSession.venue), selectinload(CourseSession.days))
+            .order_by(CourseSession.start_date, Enrollment.id)
         )
         return [tuple(row) for row in (await self.session.execute(stmt)).all()]
 
