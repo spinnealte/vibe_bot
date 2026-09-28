@@ -25,7 +25,7 @@ def _published_program():
 
 def _full_session_options():
     return (
-        selectinload(CourseSession.program),
+        selectinload(CourseSession.program).selectinload(Program.specialties),
         selectinload(CourseSession.venue),
         selectinload(CourseSession.days).selectinload(SessionDay.venue),
         selectinload(CourseSession.lecturers),
@@ -49,19 +49,12 @@ class CatalogRepository:
             )
         )
 
-    async def upcoming_sessions(self, today: date, limit: int, offset: int) -> list[CourseSession]:
-        stmt = (
-            self._public_sessions(today)
-            .options(selectinload(CourseSession.program))
-            .order_by(CourseSession.start_date, CourseSession.id)
-            .limit(limit)
-            .offset(offset)
+    async def upcoming_session_ids(self, today: date) -> list[int]:
+        """Порядок карусели расписания: по дате начала. Потоков десятки — список id дешевле, чем offset-запросы."""
+        stmt = self._public_sessions(today).with_only_columns(CourseSession.id).order_by(
+            CourseSession.start_date, CourseSession.id
         )
         return list(await self.session.scalars(stmt))
-
-    async def count_upcoming_sessions(self, today: date) -> int:
-        stmt = select(func.count()).select_from(self._public_sessions(today).subquery())
-        return await self.session.scalar(stmt) or 0
 
     async def public_session(self, session_id: int, today: date) -> CourseSession | None:
         stmt = (
@@ -71,20 +64,22 @@ class CatalogRepository:
         )
         return await self.session.scalar(stmt)
 
-    async def published_programs(self) -> list[Program]:
-        stmt = select(Program).where(*_published_program()).order_by(Program.sort_order, Program.title)
+    async def programs_without_upcoming_ids(self, today: date) -> list[int]:
+        """Опубликованные курсы, у которых нет ни одного видимого ближайшего потока («даты уточняются»)."""
+        with_sessions = self._public_sessions(today).with_only_columns(CourseSession.program_id)
+        stmt = (
+            select(Program.id)
+            .where(*_published_program(), Program.id.not_in(with_sessions))
+            .order_by(Program.sort_order, Program.title)
+        )
         return list(await self.session.scalars(stmt))
 
     async def published_program(self, program_id: int) -> Program | None:
-        return await self.session.scalar(select(Program).where(Program.id == program_id, *_published_program()))
-
-    async def program_public_sessions(self, program_id: int, today: date) -> list[CourseSession]:
-        stmt = (
-            self._public_sessions(today)
-            .where(CourseSession.program_id == program_id)
-            .order_by(CourseSession.start_date)
+        return await self.session.scalar(
+            select(Program)
+            .where(Program.id == program_id, *_published_program())
+            .options(selectinload(Program.specialties))
         )
-        return list(await self.session.scalars(stmt))
 
     async def taken_seats(self, session_id: int) -> int:
         stmt = select(func.coalesce(func.sum(Enrollment.requested_seats), 0)).where(

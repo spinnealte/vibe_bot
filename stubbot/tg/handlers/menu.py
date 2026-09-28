@@ -20,7 +20,8 @@ async def open_schedule(message: Message, state: FSMContext, session: AsyncSessi
                         settings: Settings) -> None:
     await state.clear()
     AnalyticsRepository(session).add_event(client.id, ClientEventType.SCHEDULE_OPENED)
-    await catalog_flow.show_schedule(message, session, local_today(settings.timezone))
+    await catalog_flow.show_course(message, session, local_today(settings.timezone), 0, settings.timezone,
+                                   in_place=False)
 
 
 @router.message(F.text == texts.BTN_CABINET)

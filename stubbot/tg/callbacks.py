@@ -74,20 +74,20 @@ class EditFieldCb(CallbackData, prefix="edit"):
 
 
 class ScheduleAction(StrEnum):
-    PAGE = "page"
-    SESSION = "session"
-    PROGRAMS = "programs"
-    PROGRAM = "program"
-    PROGRAM_TEXT = "ptext"
-    APPLY = "apply"
-    NOTIFY = "notify"
+    """index — позиция курса в карусели (чтобы «Назад» вернул туда же)."""
+
+    SLIDE = "s"  # слайд карусели расписания
+    DETAILS = "det"  # полная карточка потока, item_id — поток
+    PROGRAM = "prog"  # программа курса постранично, item_id — курс, page — страница
+    APPLY = "apply"  # заявка, item_id — поток
+    NOTIFY = "notify"  # «Сообщить о наборе», item_id — курс
+    NOOP = "noop"  # счётчик «2/5» между стрелками
 
 
 class ScheduleCb(CallbackData, prefix="sch"):
-    """item_id — id потока или курса (по action); page — страница списка."""
-
     action: ScheduleAction
     item_id: int = 0
+    index: int = 0
     page: int = 0
 
 

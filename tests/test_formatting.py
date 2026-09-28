@@ -5,7 +5,7 @@ import pytest
 
 from stubbot.db.enums import PriceUnit
 from stubbot.services.enrollments import fixed_group_seats, seat_choices
-from stubbot.tg.render import split_html
+from stubbot.tg.render import session_caption, split_html, visible_length
 from stubbot.utils.dates import format_day, format_range, format_time_range
 from stubbot.utils.money import format_rub
 
@@ -51,6 +51,38 @@ def test_seats_for_prices() -> None:
     assert seat_choices(_price(PriceUnit.PER_PERSON)) == [1, 2, 3, 4, 5]
     assert seat_choices(_price(PriceUnit.PER_GROUP, 3, 6)) == [3, 4, 5, 6]
     assert seat_choices(_price(PriceUnit.PER_PERSON, 1, 50)) == list(range(1, 11))  # не больше MAX_SEATS
+
+
+def _card(description: str | None, lecturers: int = 3) -> SimpleNamespace:
+    program = SimpleNamespace(
+        title="Имплантация: от планирования до протезирования", short_description="Двухдневный курс с практикой",
+        specialties=[SimpleNamespace(title=t) for t in ("Хирургия", "Имплантация")], level=None, duration_hours=16,
+        nmo_points=14, description_html=description, default_format=SimpleNamespace(value="offline"),
+    )
+    session = SimpleNamespace(
+        title_override=None, program=program, start_date=date(2026, 10, 13), end_date=date(2026, 10, 14),
+        venue=SimpleNamespace(name="Учебный класс <на Невском>"), format=SimpleNamespace(value="offline"),
+        status=SimpleNamespace(value="registration_open"),
+        lecturers=[SimpleNamespace(last_name=f"Лектор{i}", first_name="Иван", middle_name="Иванович")
+                   for i in range(lecturers)],
+    )
+    prices = [SimpleNamespace(label="Полный курс", amount=4_500_000, unit=SimpleNamespace(value="per_person"))]
+    return SimpleNamespace(session=session, program=program, active_prices=prices, seats_left=5,
+                           accepts_applications=True, goes_to_waitlist=False)
+
+
+@pytest.mark.parametrize(
+    "description",
+    [None, "Коротко о курсе.", "<b>Очень</b> длинное описание & текст. " * 200],
+    ids=["no-description", "short", "huge"],
+)
+def test_session_caption_fits_telegram_limit(description: str | None) -> None:
+    caption = session_caption(_card(description), "11 октября, 18:00")
+    assert visible_length(caption) <= 1024
+    assert "&lt;на Невском&gt;" in caption  # админские строки экранируются
+    if description and len(description) > 1000:
+        assert caption.endswith("…")  # длинное описание обрезано по слову, а не посередине тега
+        assert caption.count("<b>") == caption.count("</b>")
 
 
 def test_split_html_respects_limit_and_paragraphs() -> None:

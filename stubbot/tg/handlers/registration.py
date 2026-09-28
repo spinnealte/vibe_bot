@@ -24,6 +24,7 @@ from stubbot.services.registration import (
 )
 from stubbot.tg import flows, keyboards, texts
 from stubbot.tg.callbacks import NameAction, NameCb, SelectDoneCb, SelectGroup, SkipOptionalCb
+from stubbot.tg.screen import delete_quietly, strip_keyboard
 from stubbot.tg.states import (
     FIELD_BY_STATE,
     OPTIONAL_STATES,
@@ -108,22 +109,23 @@ async def on_full_name(message: Message, state: FSMContext) -> None:
 @router.callback_query(Registration.confirm_name, NameCb.filter(F.action == NameAction.FIX))
 async def on_fix_name(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
+    # Вопрос про ФИО — с reply-клавиатурой «Назад/Отмена», поэтому новым сообщением, а подтверждение убираем.
+    await delete_quietly(callback.message)
     await flows.ask_full_name(callback.message, state)
 
 
 @router.callback_query(Registration.confirm_name, NameCb.filter(F.action == NameAction.CONFIRM))
 async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
     data = await state.get_data()
     if not (data.get("last_name") and data.get("first_name")):
         # Данные шага потерялись (например, перезапуск Redis) — просим ФИО заново.
+        await delete_quietly(callback.message)
         await flows.ask_full_name(callback.message, state)
         return
     service = RegistrationService(session)
     service.save_name(client, data["last_name"], data["first_name"], data.get("middle_name"))
-    await flows.show_registration_step(callback.message, state, session, client, await service.next_step(client))
+    await _next_step_in_place(callback.message, state, session, client, await service.next_step(client))
 
 
 # --- Специальности и должности (общий мультивыбор) -------------------------------------------------------------
@@ -142,8 +144,17 @@ async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, s
         await callback.answer(texts.REG_SELECT_AT_LEAST_ONE, show_alert=True)
         return
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await flows.show_registration_step(callback.message, state, session, client, await service.next_step(client))
+    await _next_step_in_place(callback.message, state, session, client, await service.next_step(client))
+
+
+async def _next_step_in_place(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                              step: RegistrationStep) -> None:
+    """Следующий шаг с inline-кнопками — в том же сообщении; финал регистрации — новыми (там reply-клавиатуры)."""
+    if step in (RegistrationStep.SPECIALTIES, RegistrationStep.POSITIONS):
+        await flows.show_registration_step(message, state, session, client, step, in_place=True)
+        return
+    await strip_keyboard(message, message.message_id)
+    await flows.show_registration_step(message, state, session, client, step)
 
 
 # --- Необязательные поля ---------------------------------------------------------------------------------------
@@ -165,10 +176,9 @@ async def on_skip_optional(callback: CallbackQuery, callback_data: SkipOptionalC
     await callback.answer()
     current = FIELD_BY_STATE[await state.get_state()]
     if callback_data.field != current.value:
-        # Кнопка «Пропустить» от предыдущего вопроса — пропускаем то, что спрашиваем сейчас, не сдвигаясь дважды.
+        # Кнопка «Пропустить» от предыдущего вопроса — не сдвигаемся дважды.
         return
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await flows.ask_next_optional(callback.message, state, current)
+    await flows.ask_next_optional(callback.message, state, current, in_place=True)
 
 
 # --- Неподходящий ввод -----------------------------------------------------------------------------------------

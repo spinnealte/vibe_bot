@@ -32,25 +32,38 @@ WELCOME_BACK = "👋 <b>С возвращением!</b>\n\nВыберите р�
 
 # --- Расписание -----------------------------------------------------------------------------------------------
 
-SCHEDULE_TITLE = (
-    "📅 <b>Ближайшие курсы</b>\n\n"
-    "Выберите курс, чтобы посмотреть даты, программу и стоимость 👇"
-)
-SCHEDULE_PAGE = "\n\n<i>Страница {page} из {pages}</i>"
-SCHEDULE_EMPTY = (
-    "📅 <b>Расписание</b>\n\n"
-    "Сейчас нет открытых потоков — новые даты скоро появятся ✨\n\n"
-    "Загляните в <b>«📚 Все курсы»</b>: там можно подписаться на уведомление о наборе 🔔"
-)
-BTN_ALL_PROGRAMS = "📚 Все курсы"
+SCHEDULE_EMPTY = "📅 <b>Расписание</b>\n\nКурсы скоро появятся здесь ✨"
 BTN_PREV_PAGE = "◀️"
 BTN_NEXT_PAGE = "▶️"
-BTN_TO_SCHEDULE = "⬅️ К расписанию"
-BTN_TO_PROGRAMS = "⬅️ Все курсы"
-BTN_PROGRAM_TEXT = "📖 Программа курса"
+BTN_TO_SCHEDULE = "📅 К расписанию"
+BTN_BACK_TO_COURSE = "⬅️ Назад к курсу"
+BTN_DETAILS = "🗓 Подробнее"
+BTN_PROGRAM_TEXT = "📖 Программа"
 BTN_APPLY = "📝 Оставить заявку"
 BTN_APPLY_WAITLIST = "🕒 Встать в лист ожидания"
 BTN_NOTIFY_ME = "🔔 Сообщить о наборе"
+
+# Подпись под фото курса (лимит Telegram — 1024 символа; описание обрезается под остаток).
+CAPTION_TITLE = "📚 <b>{title}</b>"
+CAPTION_LECTURERS = "👨‍🏫 <b>Лекторы:</b> {value}"
+CAPTION_DATES = "🗓 <b>Даты:</b> {value}"
+CAPTION_VENUE = "📍 <b>Где:</b> {value}"
+CAPTION_SPECIALTIES = "🧬 <b>Направления:</b> {value}"
+CAPTION_FORMAT = "🏷 <b>Формат:</b> {value}"
+CAPTION_LEVEL = "📊 <b>Уровень:</b> {value}"
+CAPTION_VOLUME = "⏱ <b>Объём:</b> {value}"
+CAPTION_PRICES = "💸 <b>Стоимость участия:</b>"
+CAPTION_PRICE_LINE = "• <b>{label}</b> — {amount}"
+CAPTION_NO_PRICE = "— уточняйте у менеджера —"
+CAPTION_STATUS = "📌 <b>Статус:</b> {value}"
+CAPTION_SEATS_LEFT = " · свободных мест: {seats}"
+CAPTION_DEADLINE = "⏳ Запись до {value}"
+CAPTION_DESCRIPTION = "📖 <b>О курсе:</b>"
+CAPTION_DATES_TBD = "🗓 <b>Даты:</b> уточняются"
+CAPTION_STATUS_TBD = "📌 <b>Статус:</b> 🔔 Нажмите «Сообщить о наборе» — напишем, как только откроется запись"
+PROGRAM_PAGE = "\n\n<i>Страница {page} из {pages}</i>"
+FORMAT_BADGES = {"online": "💻 Онлайн", "offline": "🏫 Очно", "hybrid": "🔀 Очно + онлайн"}
+LEVEL_BADGES = {"basic": "🔹 Базовый", "advanced": "🔸 Продвинутый"}
 
 SESSION_STATUS_LABELS = {
     "announced": "📣 Скоро откроется запись",
@@ -76,18 +89,12 @@ SESSION_CARD_NMO = "🏅 <b>Баллы НМО:</b> {points}"
 SESSION_CARD_PRICES = "💳 <b>Стоимость:</b>"
 SESSION_CARD_SEATS = "👥 <b>Свободных мест:</b> {seats}"
 SESSION_CARD_DEADLINE = "⏳ Запись до {deadline}"
-SESSION_NOT_FOUND = "😔 Этот поток больше недоступен. Откройте расписание заново 👇"
 
-PROGRAMS_TITLE = "📚 <b>Все курсы центра</b>\n\nВыберите курс 👇"
-PROGRAMS_EMPTY = "📚 Каталог курсов скоро появится ✨"
-PROGRAM_CARD_SESSIONS = "🗓 <b>Ближайшие потоки:</b>"
-PROGRAM_CARD_NO_SESSIONS = (
-    "🗓 Ближайших потоков пока нет.\n"
-    "Нажмите <b>«🔔 Сообщить о наборе»</b> — напишем, как только откроется запись."
-)
-PROGRAM_TEXT_EMPTY = "📖 Подробная программа скоро появится."
-INTEREST_CREATED = "🔔 <b>Готово!</b> Сообщим, как только откроется набор на этот курс."
+PROGRAM_TEXT_EMPTY = "Подробная программа скоро появится"
+# Всплывающие ответы на кнопку (без HTML): карусель остаётся на месте.
+INTEREST_CREATED = "🔔 Готово! Сообщим, как только откроется набор на этот курс."
 INTEREST_EXISTS = "🔔 Вы уже подписаны — сообщим, как только откроется набор."
+SESSION_GONE = "Этот поток больше недоступен — показываю актуальное расписание"
 
 # --- Заявка ---------------------------------------------------------------------------------------------------
 

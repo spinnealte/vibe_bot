@@ -130,68 +130,62 @@ def edit_controls(can_clear: bool) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[row])
 
 
-def schedule_list(buttons: list[tuple[int, str]], page: int, pages: int) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for session_id, label in buttons:
-        builder.row(InlineKeyboardButton(
-            text=label, callback_data=ScheduleCb(action=ScheduleAction.SESSION, item_id=session_id, page=page).pack()))
-    nav = []
-    if page > 0:
-        nav.append(InlineKeyboardButton(text=texts.BTN_PREV_PAGE,
-                                        callback_data=ScheduleCb(action=ScheduleAction.PAGE, page=page - 1).pack()))
-    if page + 1 < pages:
-        nav.append(InlineKeyboardButton(text=texts.BTN_NEXT_PAGE,
-                                        callback_data=ScheduleCb(action=ScheduleAction.PAGE, page=page + 1).pack()))
-    if nav:
-        builder.row(*nav)
-    builder.row(InlineKeyboardButton(text=texts.BTN_ALL_PROGRAMS,
-                                     callback_data=ScheduleCb(action=ScheduleAction.PROGRAMS).pack()))
-    return builder.as_markup()
+def _sch(action: ScheduleAction, item_id: int = 0, index: int = 0, page: int = 0) -> str:
+    return ScheduleCb(action=action, item_id=item_id, index=index, page=page).pack()
 
 
-def session_card(session_id: int, program_id: int, page: int, apply_text: str | None, notify: bool,
-                 has_program_text: bool) -> InlineKeyboardMarkup:
-    rows = []
-    if apply_text:
-        rows.append([InlineKeyboardButton(
-            text=apply_text, callback_data=ScheduleCb(action=ScheduleAction.APPLY, item_id=session_id).pack())])
+def _pager(index: int, total: int, prev_data: str, next_data: str) -> list[InlineKeyboardButton]:
+    """◀️ 2/5 ▶️ — стрелка на краю списка скрывается."""
+    row = []
+    if index > 0:
+        row.append(InlineKeyboardButton(text=texts.BTN_PREV_PAGE, callback_data=prev_data))
+    row.append(InlineKeyboardButton(text=f"{index + 1}/{total}", callback_data=_sch(ScheduleAction.NOOP)))
+    if index + 1 < total:
+        row.append(InlineKeyboardButton(text=texts.BTN_NEXT_PAGE, callback_data=next_data))
+    return row
+
+
+def course_carousel(index: int, total: int, program_id: int, session_id: int | None, apply_text: str | None,
+                    notify: bool, has_program_text: bool) -> InlineKeyboardMarkup:
+    rows = [_pager(index, total, _sch(ScheduleAction.SLIDE, index=index - 1), _sch(ScheduleAction.SLIDE, index=index + 1))]
+    if apply_text and session_id:
+        rows.append([InlineKeyboardButton(text=apply_text,
+                                          callback_data=_sch(ScheduleAction.APPLY, session_id, index))])
     if notify:
-        rows.append([InlineKeyboardButton(
-            text=texts.BTN_NOTIFY_ME, callback_data=ScheduleCb(action=ScheduleAction.NOTIFY, item_id=program_id).pack())])
+        rows.append([InlineKeyboardButton(text=texts.BTN_NOTIFY_ME,
+                                          callback_data=_sch(ScheduleAction.NOTIFY, program_id, index))])
+    extra = []
+    if session_id:
+        extra.append(InlineKeyboardButton(text=texts.BTN_DETAILS,
+                                          callback_data=_sch(ScheduleAction.DETAILS, session_id, index)))
     if has_program_text:
-        rows.append([InlineKeyboardButton(
-            text=texts.BTN_PROGRAM_TEXT,
-            callback_data=ScheduleCb(action=ScheduleAction.PROGRAM_TEXT, item_id=program_id).pack())])
-    rows.append([InlineKeyboardButton(
-        text=texts.BTN_TO_SCHEDULE, callback_data=ScheduleCb(action=ScheduleAction.PAGE, page=page).pack())])
+        extra.append(InlineKeyboardButton(text=texts.BTN_PROGRAM_TEXT,
+                                          callback_data=_sch(ScheduleAction.PROGRAM, program_id, index)))
+    if extra:
+        rows.append(extra)
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def programs_list(programs: list[tuple[int, str]]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for program_id, title in programs:
-        builder.row(InlineKeyboardButton(
-            text=f"🦷 {title}", callback_data=ScheduleCb(action=ScheduleAction.PROGRAM, item_id=program_id).pack()))
-    builder.row(InlineKeyboardButton(text=texts.BTN_TO_SCHEDULE,
-                                     callback_data=ScheduleCb(action=ScheduleAction.PAGE).pack()))
-    return builder.as_markup()
+def back_to_course(index: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=texts.BTN_BACK_TO_COURSE, callback_data=_sch(ScheduleAction.SLIDE, index=index)),
+    ]])
 
 
-def program_card(program_id: int, sessions: list[tuple[int, str]], has_program_text: bool) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for session_id, label in sessions:
-        builder.row(InlineKeyboardButton(
-            text=label, callback_data=ScheduleCb(action=ScheduleAction.SESSION, item_id=session_id).pack()))
-    if not sessions:
-        builder.row(InlineKeyboardButton(
-            text=texts.BTN_NOTIFY_ME, callback_data=ScheduleCb(action=ScheduleAction.NOTIFY, item_id=program_id).pack()))
-    if has_program_text:
-        builder.row(InlineKeyboardButton(
-            text=texts.BTN_PROGRAM_TEXT,
-            callback_data=ScheduleCb(action=ScheduleAction.PROGRAM_TEXT, item_id=program_id).pack()))
-    builder.row(InlineKeyboardButton(text=texts.BTN_TO_PROGRAMS,
-                                     callback_data=ScheduleCb(action=ScheduleAction.PROGRAMS).pack()))
-    return builder.as_markup()
+def to_schedule(index: int = 0) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=texts.BTN_TO_SCHEDULE, callback_data=_sch(ScheduleAction.SLIDE, index=index)),
+    ]])
+
+
+def program_pages(program_id: int, index: int, page: int, pages: int) -> InlineKeyboardMarkup:
+    rows = []
+    if pages > 1:
+        rows.append(_pager(page, pages, _sch(ScheduleAction.PROGRAM, program_id, index, page - 1),
+                           _sch(ScheduleAction.PROGRAM, program_id, index, page + 1)))
+    rows.append([InlineKeyboardButton(text=texts.BTN_BACK_TO_COURSE,
+                                      callback_data=_sch(ScheduleAction.SLIDE, index=index))])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def apply_prices(prices: list[tuple[int, str]]) -> InlineKeyboardMarkup:

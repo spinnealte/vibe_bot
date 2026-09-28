@@ -1,3 +1,5 @@
+"""Согласия. Ответ на кнопку меняет то же сообщение: текст согласия → «принято» / следующий вопрос."""
+
 from aiogram import Bot, F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -8,8 +10,9 @@ from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.consents import ConsentService
 from stubbot.services.registration import RegistrationService
-from stubbot.tg import flows, keyboards, texts
+from stubbot.tg import flows, texts
 from stubbot.tg.callbacks import ConsentCb, ConsentKind
+from stubbot.tg.screen import show_screen
 from stubbot.tg.states import Consent
 
 router = Router(name="consent")
@@ -22,10 +25,9 @@ async def on_pd_consent(callback: CallbackQuery, callback_data: ConsentCb, state
                         session: AsyncSession, client: Client, settings: Settings) -> None:
     message = callback.message
     await callback.answer()
-    await message.edit_reply_markup(reply_markup=None)
     if not callback_data.accept:
         await state.clear()
-        await message.answer(texts.CONSENT_PD_DECLINED, reply_markup=keyboards.main_menu())
+        await show_screen(message, texts.CONSENT_PD_DECLINED)
         return
 
     service = ConsentService(session)
@@ -33,15 +35,16 @@ async def on_pd_consent(callback: CallbackQuery, callback_data: ConsentCb, state
     document = await service.current_document(ConsentType.PERSONAL_DATA)
     if document is None:
         await state.clear()
-        await message.answer(texts.DOCUMENT_UNAVAILABLE, reply_markup=keyboards.main_menu())
+        await show_screen(message, texts.DOCUMENT_UNAVAILABLE)
         return
     await service.grant(client.id, ConsentType.PERSONAL_DATA, document)
-    await message.answer(texts.CONSENT_PD_ACCEPTED)
 
-    # Рекламное согласие спрашиваем один раз — если человек ещё не отвечал «да».
+    # Рекламное согласие спрашиваем один раз — если человек ещё не отвечал «да». Тем же сообщением.
     if not await service.has_any_consent(client.id, ConsentType.MARKETING):
-        await flows.show_consent(message, state, session, settings, ConsentKind.MARKETING)
+        await flows.show_consent(message, state, session, settings, ConsentKind.MARKETING, in_place=True,
+                                 notice=texts.CONSENT_PD_ACCEPTED)
         return
+    await show_screen(message, texts.CONSENT_PD_ACCEPTED)
     await _continue_registration(message, state, session, client)
 
 
@@ -50,21 +53,19 @@ async def on_marketing_consent(callback: CallbackQuery, callback_data: ConsentCb
                                session: AsyncSession, client: Client, settings: Settings, bot: Bot) -> None:
     message = callback.message
     await callback.answer()
-    await message.edit_reply_markup(reply_markup=None)
     if callback_data.accept:
         service = ConsentService(session)
         document = await service.current_document(ConsentType.MARKETING)
         if document is not None:
             await service.grant(client.id, ConsentType.MARKETING, document)
-        await message.answer(texts.CONSENT_MARKETING_ACCEPTED)
-    else:
-        await message.answer(texts.CONSENT_MARKETING_DECLINED)
+    answer = texts.CONSENT_MARKETING_ACCEPTED if callback_data.accept else texts.CONSENT_MARKETING_DECLINED
 
     if (await state.get_data()).get("return_to") == RETURN_TO_CABINET:
-        # Включали рассылки из кабинета — туда и возвращаемся.
+        # Включали рассылки из кабинета — возвращаем кабинет в то же сообщение.
         await state.clear()
-        await flows.show_cabinet(message, session, client, settings, bot)
+        await flows.show_cabinet(message, session, client, settings, bot, notice=answer, in_place=True)
         return
+    await show_screen(message, answer)
     await _continue_registration(message, state, session, client)
 
 
@@ -75,5 +76,6 @@ async def consent_expects_buttons(message: Message) -> None:
 
 
 async def _continue_registration(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
+    # Следующий шаг (телефон) — с reply-клавиатурой, поэтому новым сообщением.
     step = await RegistrationService(session).next_step(client)
     await flows.show_registration_step(message, state, session, client, step)

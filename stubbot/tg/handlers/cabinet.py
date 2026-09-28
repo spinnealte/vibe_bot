@@ -1,7 +1,11 @@
 """Личный кабинет: редактирование профиля, рассылки, заявки.
 
+Кнопки меняют то же сообщение: кабинет → меню полей → вопрос → снова кабинет с отметкой «Сохранено».
+Если ответ приходит текстом, кабинет присылается новым сообщением, а у вопроса убираются кнопки.
+Телефон — исключение: нужна reply-кнопка «Поделиться номером», её правкой сообщения не прикрепить.
+
 Один общий редактор на все простые поля (город, клиника, опыт, email, дата рождения): те же проверки, что при
-регистрации. ФИО, телефон и справочники — свои короткие сценарии, но с теми же экранами и сервисами.
+регистрации.
 """
 
 from datetime import date
@@ -34,9 +38,11 @@ from stubbot.tg.callbacks import (
     SelectDoneCb,
     SelectGroup,
 )
+from stubbot.tg.flows import PROMPT_MESSAGE_KEY, with_notice
 from stubbot.tg.formatting import safe
 from stubbot.tg.handlers.consent import RETURN_TO_CABINET
 from stubbot.tg.handlers.selection import selection_options
+from stubbot.tg.screen import delete_quietly, show_screen, strip_keyboard
 from stubbot.tg.states import EditProfile
 from stubbot.utils.dates import format_range, local_today
 from stubbot.utils.names import full_name, parse_full_name
@@ -51,7 +57,7 @@ router = Router(name="cabinet")
 async def open_edit_menu(callback: CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await callback.answer()
-    await callback.message.answer(texts.EDIT_MENU, reply_markup=keyboards.edit_menu())
+    await show_screen(callback.message, texts.EDIT_MENU, keyboards.edit_menu())
 
 
 @router.callback_query(CabinetCb.filter(F.action == CabinetAction.BACK))
@@ -59,14 +65,31 @@ async def back_to_cabinet(callback: CallbackQuery, state: FSMContext, session: A
                           settings: Settings, bot: Bot) -> None:
     await state.clear()
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await flows.show_cabinet(callback.message, session, client, settings, bot)
+    await flows.show_cabinet(callback.message, session, client, settings, bot, in_place=True)
 
+
+@router.callback_query(CabinetCb.filter(F.action == CabinetAction.MARKETING))
+async def toggle_marketing(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
+                           settings: Settings, bot: Bot) -> None:
+    await callback.answer()
+    service = ConsentService(session)
+    if await service.has_any_consent(client.id, ConsentType.MARKETING):
+        await service.revoke(client.id, ConsentType.MARKETING)
+        await flows.show_cabinet(callback.message, session, client, settings, bot,
+                                 notice=texts.MARKETING_TURNED_OFF, in_place=True)
+        return
+    # Включение — это новое согласие: показываем текст документа вместо кабинета, после ответа — кабинет обратно.
+    await state.clear()
+    await state.update_data(return_to=RETURN_TO_CABINET)
+    await flows.show_consent(callback.message, state, session, settings, ConsentKind.MARKETING, in_place=True)
+
+
+# --- Мои заявки ------------------------------------------------------------------------------------------------
 
 @router.callback_query(CabinetCb.filter(F.action == CabinetAction.APPLICATIONS))
 async def open_applications(callback: CallbackQuery, session: AsyncSession, client: Client) -> None:
     await callback.answer()
-    await _send_applications(callback.message, session, client)
+    await _show_applications(callback.message, session, client)
 
 
 @router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.ASK_CANCEL))
@@ -79,12 +102,13 @@ async def ask_cancel_application(callback: CallbackQuery, callback_data: MyAppli
         return
     await callback.answer()
     _, course_session, program = row
-    await callback.message.answer(
+    await show_screen(
+        callback.message,
         texts.CANCEL_APPLICATION_CONFIRM.format(
             title=safe(course_session.title_override or program.title),
             dates=format_range(course_session.start_date, course_session.end_date),
         ),
-        reply_markup=keyboards.confirm_cancel_application(callback_data.enrollment_id),
+        keyboards.confirm_cancel_application(callback_data.enrollment_id),
     )
 
 
@@ -96,41 +120,23 @@ async def cancel_application(callback: CallbackQuery, callback_data: MyApplicati
         await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
         return
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(texts.APPLICATION_CANCELLED)
-    await _send_applications(callback.message, session, client)
+    await _show_applications(callback.message, session, client, notice=texts.APPLICATION_CANCELLED)
 
 
 @router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.KEEP))
-async def keep_application(callback: CallbackQuery) -> None:
+async def keep_application(callback: CallbackQuery, session: AsyncSession, client: Client) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await callback.message.answer(texts.EDIT_CANCELLED)
+    await _show_applications(callback.message, session, client)
 
 
-async def _send_applications(message: Message, session: AsyncSession, client: Client) -> None:
+async def _show_applications(message: Message, session: AsyncSession, client: Client,
+                             notice: str | None = None) -> None:
     rows = await EnrollmentService(session).my_applications(client.id)
     if not rows:
-        await message.answer(texts.MY_APPLICATIONS_EMPTY)
+        await show_screen(message, with_notice(notice, texts.MY_APPLICATIONS_EMPTY), keyboards.my_applications([]))
         return
     text, cancellable = render.my_applications(rows)
-    await message.answer(text, reply_markup=keyboards.my_applications(cancellable))
-
-
-@router.callback_query(CabinetCb.filter(F.action == CabinetAction.MARKETING))
-async def toggle_marketing(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
-                           settings: Settings) -> None:
-    await callback.answer()
-    service = ConsentService(session)
-    if await service.has_any_consent(client.id, ConsentType.MARKETING):
-        await service.revoke(client.id, ConsentType.MARKETING)
-        await callback.message.edit_reply_markup(reply_markup=keyboards.cabinet_actions(marketing_on=False))
-        await callback.message.answer(texts.MARKETING_TURNED_OFF)
-        return
-    # Включение — это новое согласие: показываем текст документа и спрашиваем, как при регистрации.
-    await state.clear()
-    await state.update_data(return_to=RETURN_TO_CABINET)
-    await flows.show_consent(callback.message, state, session, settings, ConsentKind.MARKETING)
+    await show_screen(message, with_notice(notice, text), keyboards.my_applications(cancellable))
 
 
 # --- Выбор поля ------------------------------------------------------------------------------------------------
@@ -145,10 +151,10 @@ async def choose_field(callback: CallbackQuery, callback_data: EditFieldCb, stat
         case EditField.FULL_NAME:
             current = full_name(client.last_name, client.first_name, client.middle_name)
             await state.set_state(EditProfile.full_name)
-            await message.answer(texts.EDIT_ASK_FULL_NAME + _current(current),
-                                 reply_markup=keyboards.edit_controls(can_clear=False))
+            await _prompt(message, state, texts.EDIT_ASK_FULL_NAME + _current(current), can_clear=False)
         case EditField.PHONE:
             await state.set_state(EditProfile.phone)
+            await delete_quietly(message)
             await message.answer(texts.EDIT_ASK_PHONE + _current(client.phone), reply_markup=keyboards.share_phone())
         case EditField.SPECIALTIES | EditField.POSITIONS:
             await _ask_selection(message, state, session, client, callback_data.field)
@@ -157,8 +163,14 @@ async def choose_field(callback: CallbackQuery, callback_data: EditFieldCb, stat
             await state.set_state(EditProfile.optional_value)
             await state.update_data(field=field.value)
             current = _optional_display(client, field, local_today(settings.timezone))
-            await message.answer(texts.OPTIONAL_PROMPTS[field.value] + _current(current),
-                                 reply_markup=keyboards.edit_controls(can_clear=current is not None))
+            await _prompt(message, state, texts.OPTIONAL_PROMPTS[field.value] + _current(current),
+                          can_clear=current is not None)
+
+
+async def _prompt(message: Message, state: FSMContext, text: str, can_clear: bool) -> None:
+    """Вопрос вместо меню полей; запоминаем его, чтобы убрать кнопки, когда ответ придёт текстом."""
+    prompt = await show_screen(message, text, keyboards.edit_controls(can_clear=can_clear))
+    await state.update_data({PROMPT_MESSAGE_KEY: prompt.message_id})
 
 
 async def _ask_selection(message: Message, state: FSMContext, session: AsyncSession, client: Client,
@@ -172,8 +184,7 @@ async def _ask_selection(message: Message, state: FSMContext, session: AsyncSess
         selected = await service.selected_position_ids(client.id)
     await state.set_state(new_state)
     await state.update_data(selected=selected)
-    await message.answer(prompt, reply_markup=keyboards.multiselect(group, await selection_options(session, group),
-                                                                    selected))
+    await show_screen(message, prompt, keyboards.multiselect(group, await selection_options(session, group), selected))
 
 
 # --- Отмена / очистка ------------------------------------------------------------------------------------------
@@ -182,24 +193,29 @@ async def _ask_selection(message: Message, state: FSMContext, session: AsyncSess
 async def cancel_edit(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
                       settings: Settings, bot: Bot) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await _finish(callback.message, state, session, client, settings, bot, texts.EDIT_CANCELLED)
+    await state.clear()
+    await flows.show_cabinet(callback.message, session, client, settings, bot, notice=texts.EDIT_CANCELLED,
+                             in_place=True)
 
 
 @router.message(StateFilter(EditProfile), F.text == texts.BTN_CANCEL)
 async def cancel_edit_by_keyboard(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                                   settings: Settings, bot: Bot) -> None:
-    await _finish(message, state, session, client, settings, bot, texts.EDIT_CANCELLED)
+    # «Отмена» с reply-клавиатуры телефона: возвращаем клавиатуру меню и кабинет новым сообщением.
+    await state.clear()
+    await message.answer(texts.EDIT_CANCELLED, reply_markup=keyboards.main_menu())
+    await flows.show_cabinet(message, session, client, settings, bot)
 
 
 @router.callback_query(EditProfile.optional_value, EditControlCb.filter(F.action == EditControl.CLEAR))
 async def clear_optional(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
                          settings: Settings, bot: Bot) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
     field = OptionalField((await state.get_data())["field"])
     RegistrationService.save_optional(client, field, None)
-    await _finish(callback.message, state, session, client, settings, bot, texts.EDIT_CLEARED)
+    await state.clear()
+    await flows.show_cabinet(callback.message, session, client, settings, bot, notice=texts.EDIT_CLEARED,
+                             in_place=True)
 
 
 # --- Простые поля ----------------------------------------------------------------------------------------------
@@ -211,11 +227,10 @@ async def on_optional_value(message: Message, state: FSMContext, session: AsyncS
     field = OptionalField(data["field"])
     value = RegistrationService.parse_optional(field, message.text, local_today(settings.timezone))
     if value is None:
-        await message.answer(texts.OPTIONAL_ERRORS[field.value] + texts.EDIT_ERROR_CANCEL_HINT,
-                             reply_markup=keyboards.edit_controls(can_clear=False))
+        await message.answer(texts.OPTIONAL_ERRORS[field.value] + texts.EDIT_ERROR_CANCEL_HINT)
         return
     RegistrationService.save_optional(client, field, value)
-    await _finish(message, state, session, client, settings, bot, texts.EDIT_SAVED)
+    await _saved_after_text(message, state, session, client, settings, bot)
 
 
 # --- ФИО -------------------------------------------------------------------------------------------------------
@@ -224,9 +239,9 @@ async def on_optional_value(message: Message, state: FSMContext, session: AsyncS
 async def on_full_name(message: Message, state: FSMContext) -> None:
     name = parse_full_name(message.text)
     if name is None:
-        await message.answer(texts.REG_NAME_INVALID + texts.EDIT_ERROR_CANCEL_HINT,
-                             reply_markup=keyboards.edit_controls(can_clear=False))
+        await message.answer(texts.REG_NAME_INVALID + texts.EDIT_ERROR_CANCEL_HINT)
         return
+    await _strip_prompt(message, state)
     await state.update_data(last_name=name.last_name, first_name=name.first_name, middle_name=name.middle_name)
     await flows.ask_confirm_name(message, state, confirm_state=EditProfile.confirm_name)
 
@@ -234,22 +249,21 @@ async def on_full_name(message: Message, state: FSMContext) -> None:
 @router.callback_query(EditProfile.confirm_name, NameCb.filter(F.action == NameAction.FIX))
 async def on_fix_name(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
     await state.set_state(EditProfile.full_name)
-    await callback.message.answer(texts.EDIT_ASK_FULL_NAME, reply_markup=keyboards.edit_controls(can_clear=False))
+    await _prompt(callback.message, state, texts.EDIT_ASK_FULL_NAME, can_clear=False)
 
 
 @router.callback_query(EditProfile.confirm_name, NameCb.filter(F.action == NameAction.CONFIRM))
 async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
                           settings: Settings, bot: Bot) -> None:
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
     data = await state.get_data()
+    await state.clear()
+    notice = texts.EDIT_CANCELLED
     if data.get("last_name") and data.get("first_name"):
         RegistrationService(session).save_name(client, data["last_name"], data["first_name"], data.get("middle_name"))
-        await _finish(callback.message, state, session, client, settings, bot, texts.EDIT_SAVED)
-    else:
-        await _finish(callback.message, state, session, client, settings, bot, texts.EDIT_CANCELLED)
+        notice = texts.EDIT_SAVED
+    await flows.show_cabinet(callback.message, session, client, settings, bot, notice=notice, in_place=True)
 
 
 # --- Телефон ---------------------------------------------------------------------------------------------------
@@ -263,10 +277,15 @@ async def on_contact(message: Message, state: FSMContext, session: AsyncSession,
     match await RegistrationService(session).save_phone(client, message.contact.phone_number):
         case PhoneResult.INVALID:
             await message.answer(texts.REG_PHONE_INVALID)
+            return
         case PhoneResult.TAKEN:
-            await _finish(message, state, session, client, settings, bot, texts.REG_PHONE_TAKEN)
-        case PhoneResult.OK:
-            await _finish(message, state, session, client, settings, bot, texts.EDIT_SAVED)
+            notice = texts.REG_PHONE_TAKEN
+        case _:
+            notice = texts.EDIT_SAVED
+    await state.clear()
+    # Новым сообщением: убираем кнопку «Поделиться номером», возвращаем клавиатуру меню.
+    await message.answer(notice, reply_markup=keyboards.main_menu())
+    await flows.show_cabinet(message, session, client, settings, bot)
 
 
 @router.message(EditProfile.phone)
@@ -289,8 +308,9 @@ async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, s
         await callback.answer(texts.REG_SELECT_AT_LEAST_ONE, show_alert=True)
         return
     await callback.answer()
-    await callback.message.edit_reply_markup(reply_markup=None)
-    await _finish(callback.message, state, session, client, settings, bot, texts.EDIT_SAVED)
+    await state.clear()
+    await flows.show_cabinet(callback.message, session, client, settings, bot, notice=texts.EDIT_SAVED,
+                             in_place=True)
 
 
 # --- Неподходящий ввод -----------------------------------------------------------------------------------------
@@ -307,12 +327,18 @@ async def edit_expects_buttons(message: Message) -> None:
 
 # --- Вспомогательное -------------------------------------------------------------------------------------------
 
-async def _finish(message: Message, state: FSMContext, session: AsyncSession, client: Client, settings: Settings,
-                  bot: Bot, notice: str) -> None:
-    """Итог правки + обновлённый кабинет. Возвращает постоянную клавиатуру меню (после «Поделиться номером»)."""
+async def _strip_prompt(message: Message, state: FSMContext) -> None:
+    prompt_id = (await state.get_data()).get(PROMPT_MESSAGE_KEY)
+    if prompt_id:
+        await strip_keyboard(message, prompt_id)
+
+
+async def _saved_after_text(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                            settings: Settings, bot: Bot) -> None:
+    """Ответ пришёл текстом: у вопроса убираем кнопки, обновлённый кабинет — новым сообщением под ответом."""
+    await _strip_prompt(message, state)
     await state.clear()
-    await message.answer(notice, reply_markup=keyboards.main_menu())
-    await flows.show_cabinet(message, session, client, settings, bot)
+    await flows.show_cabinet(message, session, client, settings, bot, notice=texts.EDIT_SAVED)
 
 
 def _current(value: str | None) -> str:

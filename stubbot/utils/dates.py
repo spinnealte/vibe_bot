@@ -30,6 +30,12 @@ def format_range(start: date, end: date) -> str:
     return f"{start.day} {MONTHS_GENITIVE[start.month - 1]} – {end.day} {MONTHS_GENITIVE[end.month - 1]}"
 
 
+def format_range_with_year(start: date, end: date) -> str:
+    """13–14 октября 2026 (год один раз в конце, если не меняется)"""
+    text = format_range(start, end)
+    return text if start.year != end.year else f"{text} {end.year}"
+
+
 def format_short(day: date) -> str:
     """12.10"""
     return day.strftime("%d.%m")
