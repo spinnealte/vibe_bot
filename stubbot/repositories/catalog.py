@@ -26,9 +26,9 @@ def _published_program():
 def _full_session_options():
     return (
         selectinload(CourseSession.program).selectinload(Program.specialties),
+        selectinload(CourseSession.program).selectinload(Program.lecturers),
         selectinload(CourseSession.venue),
         selectinload(CourseSession.days).selectinload(SessionDay.venue),
-        selectinload(CourseSession.lecturers),
         selectinload(CourseSession.price_options),
     )
 
@@ -78,7 +78,7 @@ class CatalogRepository:
         return await self.session.scalar(
             select(Program)
             .where(Program.id == program_id, *_published_program())
-            .options(selectinload(Program.specialties))
+            .options(selectinload(Program.specialties), selectinload(Program.lecturers))
         )
 
     async def taken_seats(self, session_id: int) -> int:

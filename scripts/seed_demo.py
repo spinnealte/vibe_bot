@@ -27,7 +27,7 @@ from stubbot.db.models import (
     Specialty,
     Venue,
     program_specialties,
-    session_lecturers,
+    program_lecturers,
 )
 from stubbot.db.session import create_engine, create_session_factory
 from stubbot.utils.dates import local_today
@@ -157,10 +157,11 @@ async def create(session, today: date, tz: ZoneInfo) -> None:
                     unit=PriceUnit.PER_GROUP, min_seats=2, max_seats=2, sort_order=20),
         PriceOption(session_id=s3.id, kind=PriceKind.FULL, label="Участие", amount=25_000 * RUB, sort_order=10),
     ])
-    await session.execute(session_lecturers.insert(), [
-        {"session_id": s1.id, "lecturer_id": ivanov.id},
-        {"session_id": s2.id, "lecturer_id": smirnova.id},
-        {"session_id": s3.id, "lecturer_id": smirnova.id},
+    await session.execute(program_lecturers.insert(), [
+        {"program_id": implant.id, "lecturer_id": ivanov.id},
+        {"program_id": perio.id, "lecturer_id": smirnova.id},
+        {"program_id": endo.id, "lecturer_id": ivanov.id},
+        {"program_id": aligners.id, "lecturer_id": smirnova.id},
     ])
     print("Демо-данные созданы: 4 курса, 3 потока (набор / анонс / мест нет), площадка, 2 лектора.")
 
@@ -171,8 +172,8 @@ async def remove(session) -> None:
     await session.execute(delete(Enrollment).where(Enrollment.session_id.in_(session_ids)))
     await session.execute(delete(ProgramInterest).where(ProgramInterest.program_id.in_(program_ids)))
     await session.execute(delete(PriceOption).where(PriceOption.session_id.in_(session_ids)))
-    await session.execute(delete(CourseSession).where(CourseSession.id.in_(session_ids)))  # дни и лекторы — CASCADE
-    await session.execute(delete(Program).where(Program.id.in_(program_ids)))  # специальности курса — CASCADE
+    await session.execute(delete(CourseSession).where(CourseSession.id.in_(session_ids)))  # дни — CASCADE
+    await session.execute(delete(Program).where(Program.id.in_(program_ids)))  # специальности, лекторы — CASCADE
     await session.execute(delete(Lecturer).where(Lecturer.bio_html == DEMO_MARK))
     await session.execute(delete(Venue).where(Venue.directions_text == DEMO_MARK))
     print(f"Демо-данные удалены: курсов {len(program_ids)}, потоков {len(session_ids)}.")

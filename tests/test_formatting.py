@@ -59,6 +59,7 @@ def _card(description: str | None, lecturers: int = 3, program_html: str | None 
         specialties=[SimpleNamespace(title=t) for t in ("Хирургия", "Имплантация")], level=None, duration_hours=16,
         nmo_points=14, description_html=description, program_html=program_html,
         default_format=SimpleNamespace(value="offline"),
+        lecturers=[SimpleNamespace(full_name=f"Лектор{i} Иван Иванович") for i in range(lecturers)],
     )
     session = SimpleNamespace(
         title_override=None, program=program, start_date=date(2026, 10, 13), end_date=date(2026, 10, 14),
@@ -66,7 +67,6 @@ def _card(description: str | None, lecturers: int = 3, program_html: str | None 
         format=SimpleNamespace(value="offline"),
         days=[SimpleNamespace(start_time=time(10), end_time=time(18)) for _ in range(2)],
         status=SimpleNamespace(value="registration_open"),
-        lecturers=[SimpleNamespace(full_name=f"Лектор{i} Иван Иванович") for i in range(lecturers)],
     )
     prices = [SimpleNamespace(label="Полный курс", amount=4_500_000, unit=SimpleNamespace(value="per_person"))]
     return SimpleNamespace(session=session, program=program, active_prices=prices, seats_left=5,

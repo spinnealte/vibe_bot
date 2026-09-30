@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     legal_docs_dir: Path = Path("legal")
     timezone: str = "Europe/Moscow"
 
+    # MVP — афиша: заявки, «Мои заявки» и «Сообщить о наборе» выключены (код в tg/handlers/application.py).
+    applications_enabled: bool = False
+
     @property
     def database_url(self) -> URL:
         # URL.create экранирует спецсимволы в пароле; в строковом виде пароль не светится.

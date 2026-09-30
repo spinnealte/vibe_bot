@@ -13,7 +13,7 @@ from stubbot.tg.handlers import (
 )
 
 
-def build_root_router() -> Router:
+def build_root_router(applications_enabled: bool) -> Router:
     root = Router(name="root")
     # Порядок важен: /start и меню работают в любом состоянии и должны перехватывать ввод раньше сценариев.
     root.include_router(start.router)
@@ -23,7 +23,8 @@ def build_root_router() -> Router:
     root.include_router(registration.router)
     root.include_router(cabinet.router)
     root.include_router(schedule.router)
-    root.include_router(application.router)
+    if applications_enabled:
+        root.include_router(application.router)
     # Всегда последним: ловит то, что не подошло остальным.
     root.include_router(fallback.router)
     return root

@@ -1,4 +1,4 @@
-"""Личный кабинет: редактирование профиля, рассылки, заявки.
+"""Личный кабинет: редактирование профиля, рассылки. «Мои заявки» — в handlers/application.py.
 
 Кнопки меняют то же сообщение: кабинет → меню полей → вопрос → снова кабинет с отметкой «Сохранено».
 Если ответ приходит текстом, кабинет присылается новым сообщением, а у вопроса убираются кнопки.
@@ -20,9 +20,8 @@ from stubbot.config import Settings
 from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.consents import ConsentService
-from stubbot.services.enrollments import EnrollmentService
 from stubbot.services.registration import OptionalField, PhoneResult, RegistrationService
-from stubbot.tg import flows, keyboards, render, texts
+from stubbot.tg import flows, keyboards, texts
 from stubbot.tg.callbacks import (
     CabinetAction,
     CabinetCb,
@@ -31,14 +30,12 @@ from stubbot.tg.callbacks import (
     EditControlCb,
     EditField,
     EditFieldCb,
-    MyApplicationAction,
-    MyApplicationCb,
     NameAction,
     NameCb,
     SelectDoneCb,
     SelectGroup,
 )
-from stubbot.tg.flows import PROMPT_MESSAGE_KEY, with_notice
+from stubbot.tg.flows import PROMPT_MESSAGE_KEY
 from stubbot.tg.formatting import safe
 from stubbot.tg.handlers.consent import RETURN_TO_CABINET
 from stubbot.tg.handlers.selection import selection_options
@@ -82,60 +79,6 @@ async def toggle_marketing(callback: CallbackQuery, state: FSMContext, session: 
     await state.clear()
     await state.update_data(return_to=RETURN_TO_CABINET)
     await flows.show_consent(callback.message, state, session, settings, ConsentKind.MARKETING, in_place=True)
-
-
-# --- Мои заявки ------------------------------------------------------------------------------------------------
-
-@router.callback_query(CabinetCb.filter(F.action == CabinetAction.APPLICATIONS))
-async def open_applications(callback: CallbackQuery, session: AsyncSession, client: Client) -> None:
-    await callback.answer()
-    await _show_application(callback.message, session, client, index=0)
-
-
-@router.callback_query(MyApplicationCb.filter(F.action.in_({MyApplicationAction.VIEW, MyApplicationAction.KEEP})))
-async def view_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                           client: Client) -> None:
-    """Стрелки ◀️ ▶️ и «Нет, оставить» — показать карточку заявки номер index."""
-    await callback.answer()
-    await _show_application(callback.message, session, client, callback_data.index)
-
-
-@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.ASK_CANCEL))
-async def ask_cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                                 client: Client) -> None:
-    apps = await EnrollmentService(session).my_applications(client.id)
-    app = next((a for a in apps if a.enrollment.id == callback_data.enrollment_id and a.cancellable), None)
-    if app is None:
-        await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
-        return
-    await callback.answer()
-    await show_screen(callback.message, render.cancel_application_question(app),
-                      keyboards.confirm_cancel_application(app.enrollment.id, callback_data.index))
-
-
-@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.CANCEL))
-async def cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                             client: Client) -> None:
-    # Своя ли заявка и можно ли её отменить — проверяет сервис (enrollment_id из кнопки может быть подделан).
-    if await EnrollmentService(session).cancel(client.id, callback_data.enrollment_id) is None:
-        await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
-        return
-    await callback.answer()
-    # Отменённая пропадает из списка — на её месте окажется следующая (или предыдущая, если была последней).
-    await _show_application(callback.message, session, client, callback_data.index,
-                            notice=texts.APPLICATION_CANCELLED)
-
-
-async def _show_application(message: Message, session: AsyncSession, client: Client, index: int,
-                            notice: str | None = None) -> None:
-    apps = await EnrollmentService(session).my_applications(client.id)
-    if not apps:
-        await show_screen(message, with_notice(notice, texts.MY_APPLICATIONS_EMPTY), keyboards.back_to_cabinet())
-        return
-    index = min(max(index, 0), len(apps) - 1)
-    app = apps[index]
-    await show_screen(message, with_notice(notice, render.my_application_card(app)),
-                      keyboards.my_application_card(app.enrollment.id, index, len(apps), app.cancellable))
 
 
 # --- Выбор поля ------------------------------------------------------------------------------------------------

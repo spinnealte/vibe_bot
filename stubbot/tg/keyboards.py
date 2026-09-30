@@ -98,17 +98,16 @@ def confirm_name() -> InlineKeyboardMarkup:
     )
 
 
-def cabinet_actions(marketing_on: bool) -> InlineKeyboardMarkup:
+def cabinet_actions(marketing_on: bool, applications: bool) -> InlineKeyboardMarkup:
     marketing_text = texts.BTN_MARKETING_TURN_OFF if marketing_on else texts.BTN_MARKETING_TURN_ON
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text=texts.BTN_EDIT_PROFILE,
-                                  callback_data=CabinetCb(action=CabinetAction.EDIT_MENU).pack())],
-            [InlineKeyboardButton(text=texts.BTN_MY_APPLICATIONS,
-                                  callback_data=CabinetCb(action=CabinetAction.APPLICATIONS).pack())],
-            [InlineKeyboardButton(text=marketing_text, callback_data=CabinetCb(action=CabinetAction.MARKETING).pack())],
-        ]
-    )
+    rows = [[InlineKeyboardButton(text=texts.BTN_EDIT_PROFILE,
+                                  callback_data=CabinetCb(action=CabinetAction.EDIT_MENU).pack())]]
+    if applications:
+        rows.append([InlineKeyboardButton(text=texts.BTN_MY_APPLICATIONS,
+                                          callback_data=CabinetCb(action=CabinetAction.APPLICATIONS).pack())])
+    rows.append([InlineKeyboardButton(text=marketing_text,
+                                      callback_data=CabinetCb(action=CabinetAction.MARKETING).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def edit_menu() -> InlineKeyboardMarkup:

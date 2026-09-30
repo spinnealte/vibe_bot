@@ -33,13 +33,14 @@ program_specialties = Table(
     Index("ix_program_specialties_specialty_id", "specialty_id"),
 )
 
-session_lecturers = Table(
-    "session_lecturers",
+# Лекторы — у курса, а не у потока: курс авторский, другой лектор его не читает (решение 30.09.2026).
+program_lecturers = Table(
+    "program_lecturers",
     Base.metadata,
-    Column("session_id", BigInteger, ForeignKey("sessions.id", ondelete="CASCADE"), primary_key=True),
+    Column("program_id", BigInteger, ForeignKey("programs.id", ondelete="CASCADE"), primary_key=True),
     Column("lecturer_id", BigInteger, ForeignKey("lecturers.id", ondelete="CASCADE"), primary_key=True),
     Column("created_at", DateTime(timezone=True), server_default=func.now(), nullable=False),
-    Index("ix_session_lecturers_lecturer_id", "lecturer_id"),
+    Index("ix_program_lecturers_lecturer_id", "lecturer_id"),
 )
 
 
@@ -95,6 +96,7 @@ class Program(TimestampMixin, Base):
     sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
     specialties: Mapped[list[Specialty]] = relationship(secondary=program_specialties, lazy="raise")
+    lecturers: Mapped[list[Lecturer]] = relationship(secondary=program_lecturers, lazy="raise")
     sessions: Mapped[list["CourseSession"]] = relationship(back_populates="program", lazy="raise")
 
 
@@ -134,7 +136,6 @@ class CourseSession(TimestampMixin, Base):
         passive_deletes=True,
         lazy="raise",
     )
-    lecturers: Mapped[list[Lecturer]] = relationship(secondary=session_lecturers, lazy="raise")
     price_options: Mapped[list["PriceOption"]] = relationship(
         back_populates="session", order_by=lambda: PriceOption.sort_order, lazy="raise"
     )

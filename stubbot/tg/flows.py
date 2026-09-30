@@ -196,7 +196,7 @@ async def cabinet_view(session: AsyncSession, client: Client, settings: Settings
         referral_link=safe(f"https://t.me/{me.username}?start=ref_{profile.referral_code}"),
         referrals=referrals,
     )
-    return text, keyboards.cabinet_actions(marketing_on=marketing)
+    return text, keyboards.cabinet_actions(marketing_on=marketing, applications=settings.applications_enabled)
 
 
 async def show_cabinet(message: Message, session: AsyncSession, client: Client, settings: Settings, bot: Bot,

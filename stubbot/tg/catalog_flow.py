@@ -1,6 +1,6 @@
 """Экраны расписания и заявки. Не импортирует flows.py (flows вызывает отсюда start_application).
 
-Расписание — карусель: одно сообщение с фото курса и подробностями в подписи; ◀️ ▶️, «Подробнее», «Программа»,
+Расписание — карусель: одно сообщение с фото курса и подробностями в подписи; ◀️ ▶️, «Программа»,
 шаги заявки — всё меняет то же сообщение (tg/screen.py). in_place=False — прислать новое (например, после текста,
 который написал пользователь, или из главного меню).
 """
@@ -12,6 +12,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from stubbot.config import get_settings
 from stubbot.db.enums import SessionStatus
 from stubbot.db.models import Client, PriceOption
 from stubbot.services.enrollments import EnrollmentService, fixed_group_seats, seat_choices
@@ -49,13 +50,15 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         caption = render.program_caption(program)
         photo = program.cover_file_id
         notify = True
+    # MVP — афиша: без заявки и «Сообщить о наборе», пока они выключены в настройках.
+    applications = get_settings().applications_enabled
     markup = keyboards.course_carousel(
         index=slide.index,
         total=slide.total,
         program_id=program.id,
         session_id=card.session.id if card else None,
-        apply_text=_apply_button(card) if card else None,
-        notify=notify,
+        apply_text=_apply_button(card) if card and applications else None,
+        notify=notify and applications,
         has_program_text=bool(program.program_html),
     )
     await _screen(message, caption, markup, photo or DEFAULT_COVER, in_place)

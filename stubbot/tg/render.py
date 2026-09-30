@@ -71,6 +71,13 @@ def _with_excerpt(lines: list[str], program: Program) -> str:
     return caption + header + excerpt + more
 
 
+def _lecturers_line(program: Program) -> list[str]:
+    """Лекторы курса «Иванов С. П., Смирнова А. О.» — у курса, общие для всех его потоков."""
+    if not program.lecturers:
+        return []
+    return [texts.CAPTION_LECTURERS.format(value=safe(", ".join(short_name(lec.full_name) for lec in program.lecturers)))]
+
+
 def _meta_lines(program: Program, format_value: str) -> list[str]:
     lines = []
     if program.specialties:
@@ -102,8 +109,7 @@ def session_caption(card: SessionCard, deadline_text: str | None) -> str:
     if program.short_description:
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines.append("")
-    if s.lecturers:
-        lines.append(texts.CAPTION_LECTURERS.format(value=safe(", ".join(short_name(lec.full_name) for lec in s.lecturers))))
+    lines += _lecturers_line(program)
     lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)))
     if s.venue:
         lines.append(texts.CAPTION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
@@ -131,7 +137,7 @@ def program_caption(program: Program) -> str:
     lines = [texts.CAPTION_TITLE.format(title=safe(program.title))]
     if program.short_description:
         lines.append(f"<i>{safe(program.short_description)}</i>")
-    lines += ["", texts.CAPTION_DATES_TBD, *_meta_lines(program, program.default_format.value),
+    lines += ["", *_lecturers_line(program), texts.CAPTION_DATES_TBD, *_meta_lines(program, program.default_format.value),
               "", texts.CAPTION_STATUS_TBD]
     return _with_excerpt(lines, program)
 

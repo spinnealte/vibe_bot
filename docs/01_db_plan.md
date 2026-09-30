@@ -15,6 +15,11 @@
 | 6 | География | Только СПб, разные адреса | venues; единый часовой пояс Europe/Moscow |
 | 7 | Каналы | Листовки (QR), сайт, VK, Instagram, TG-канал, рефералы | acquisition_sources + client_source_touches в MVP |
 | 8 | ФИО (29.09.2026) | Одним полем, как написал человек; на части не разбираем | clients.full_name и lecturers.full_name вместо last/first/middle_name (миграция 7b1e2c9a4d10) |
+| 9 | Старая база (30.09.2026) | Реальных данных в mainDirectory не было — стартуем с чистой БД | Разовый перенос не нужен; MVP → FULL — обычными миграциями Alembic на той же БД |
+| 10 | Лекторы (30.09.2026) | Курсы авторские: курс читают только его лекторы | program_lecturers вместо session_lecturers (миграция 9c4f1a7e2b35) |
+| 11 | Онлайн (30.09.2026) | Онлайн-курсы — живые, в даты; записи не храним | Хватает sessions.format + online_url |
+| 12 | Объём MVP (30.09.2026) | MVP — афиша: расписание + личный кабинет, без заявок | Таблицы заявок остаются в схеме; в боте выключены (APPLICATIONS_ENABLED=false) |
+| 13 | Оплата [FULL] (30.09.2026) | Нет оплаты за 24–48 ч после заявки — место снимается | orders.expires_at + фоновая задача; тарифы «теория/практика», «для двух коллег», когда занимается место — решаем в FULL |
 
 ---
 
@@ -126,7 +131,7 @@
 - индекс (status, start_date)
 
 **session_days** [MVP] — id, session_id (CASCADE), date, start_time NULL, end_time NULL, topic NULL, venue_id NULL
-**session_lecturers** [MVP] — m2m
+**program_lecturers** [MVP] — m2m курс ↔ лектор (курсы авторские, у всех потоков курса одни лекторы)
 **lecturers** [MVP] — id, full_name, regalia, bio_html, photo_file_id, is_active, sort_order
 **venues** [MVP] — id, name, address, map_url, directions_text, is_active (город по умолчанию СПб)
 
@@ -201,7 +206,7 @@ issued_at, pdf_file_id NULL, verification_code UNIQUE (проверка подл
 clients, specialties, positions, client_specialties, client_positions,
 legal_documents, client_consents,
 acquisition_sources, client_source_touches, client_events,
-programs, program_specialties, sessions, session_days, session_lecturers, lecturers, venues, price_options,
+programs, program_specialties, program_lecturers, sessions, session_days, lecturers, venues, price_options,
 enrollments, program_interests,
 admins
 
@@ -221,11 +226,9 @@ promo_codes, promo_redemptions, referral_rewards, audit_log, bot_texts.
 
 ## 5. Мастер админки (MVP) под новую схему
 1. Справочники: лекторы, площадки, специальности, должности.
-2. «Новый курс» (programs) — один раз: название, описание, программа (текст/.docx), уровень, формат, направления, обложка.
-3. «Новый поток» (sessions) — на каждое проведение: курс → даты/дни и время → площадка → лекторы → места → тарифы → статус → превью → публикация.
+2. «Новый курс» (programs) — один раз: название, описание, программа (текст/.docx), уровень, формат, направления, лекторы, обложка.
+3. «Новый поток» (sessions) — на каждое проведение: курс → даты/дни и время → площадка / ссылка онлайн → места → тарифы → статус → превью → публикация.
    Кнопка «Скопировать прошлый поток» — меняются только даты.
 
 ## 6. Перенос старой БД (mainDirectory)
-Разовый скрипт: participants → clients (+ разбор ФИО на части, telegram_id, телефон в E.164), specialties/roles → specialties/positions,
-courses → programs + sessions (+ session_days из массива дат), course_prices → price_options, participants_courses → enrollments,
-personal_data_consents → client_consents (с пометкой версии), referred_by → referred_by_client_id.
+Не нужен: реальных данных в старом боте не было (решение 9). Полная версия продолжит эту же БД миграциями Alembic.

@@ -32,5 +32,5 @@ def create_dispatcher(
     dp.message.middleware(HandlerLogMiddleware())
     dp.callback_query.middleware(HandlerLogMiddleware())
 
-    dp.include_router(build_root_router())
+    dp.include_router(build_root_router(settings.applications_enabled))
     return dp
