@@ -1,6 +1,7 @@
 from aiogram.fsm.state import State, StatesGroup
 
 from stubbot.services.registration import OptionalField
+from stubbot.tg.callbacks import SelectGroup
 
 
 class Consent(StatesGroup):
@@ -46,8 +47,13 @@ PENDING_APPLY_KEY = "apply_session_id"
 FULL_NAME_KEY = "full_name"  # введённое ФИО до подтверждения
 
 
-# Шаги с мультивыбором (общий обработчик переключения галочек).
-SELECTION_STATES = (Registration.specialties, Registration.positions, EditProfile.specialties, EditProfile.positions)
+# Шаги с мультивыбором и справочник, который на них выбирают (общий обработчик переключения галочек).
+SELECTION_GROUP_BY_STATE: dict[str, SelectGroup] = {
+    Registration.specialties.state: SelectGroup.SPECIALTIES,
+    Registration.positions.state: SelectGroup.POSITIONS,
+    EditProfile.specialties.state: SelectGroup.SPECIALTIES,
+    EditProfile.positions.state: SelectGroup.POSITIONS,
+}
 
 
 OPTIONAL_STATES: dict[OptionalField, State] = {

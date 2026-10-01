@@ -4,7 +4,7 @@ import re
 from html import escape, unescape
 
 from stubbot.db.enums import EnrollmentStatus
-from stubbot.db.models import CourseSession, PriceOption, Program
+from stubbot.db.models import CourseSession, PriceOption, Program, Venue
 from stubbot.services.enrollments import MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
@@ -102,8 +102,11 @@ def _dates_text(course_session: CourseSession) -> str:
     return text
 
 
-def session_caption(card: SessionCard, deadline_text: str | None) -> str:
-    """Подпись под фото потока в карусели: всё главное сразу, полная программа — по кнопке «Программа»."""
+def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bool = True) -> str:
+    """Подпись под фото потока в карусели: всё главное сразу, полная программа — по кнопке «Программа».
+
+    show_seats=False — режим афиши (заявки выключены): мест никто не занимает, счётчик всегда равен вместимости.
+    """
     s, program = card.session, card.program
     lines = [texts.CAPTION_TITLE.format(title=safe(session_title(s)))]
     if program.short_description:
@@ -124,7 +127,7 @@ def session_caption(card: SessionCard, deadline_text: str | None) -> str:
         lines.append(texts.CAPTION_NO_PRICE)
 
     status = texts.SESSION_STATUS_LABELS[s.status.value]
-    if card.seats_left is not None and card.accepts_applications and not card.goes_to_waitlist:
+    if show_seats and card.seats_left is not None and card.accepts_applications and not card.goes_to_waitlist:
         status += texts.CAPTION_SEATS_LEFT.format(seats=card.seats_left)
     lines += ["", texts.CAPTION_STATUS.format(value=status)]
     if deadline_text:
@@ -151,6 +154,31 @@ def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str
     if len(pages) > 1:
         pages = [page + texts.PROGRAM_PAGE.format(page=i + 1, pages=len(pages)) for i, page in enumerate(pages)]
     return pages
+
+
+def manager_draft(program: Program, card: SessionCard | None) -> str:
+    """Черновик сообщения менеджеру по курсу на слайде (простой текст, без HTML)."""
+    if card is None:
+        return texts.MANAGER_DRAFT_PROGRAM.format(title=program.title)
+    s = card.session
+    return texts.MANAGER_DRAFT_SESSION.format(title=session_title(s),
+                                              dates=format_range_with_year(s.start_date, s.end_date))
+
+
+def about_text(venues: list[Venue], with_manager: bool) -> str:
+    """«О центре»: текст о центре, площадки из БД (с картой, если есть ссылка), подсказка про кнопку «Менеджер»."""
+    parts = [texts.ABOUT]
+    if venues:
+        lines = [texts.ABOUT_VENUES_TITLE]
+        for venue in venues:
+            line = texts.ABOUT_VENUE.format(name=safe(venue.name), address=safe(venue.address))
+            if venue.map_url and venue.map_url.startswith(("https://", "http://")):
+                line += texts.ABOUT_VENUE_MAP.format(url=escape(venue.map_url, quote=True))
+            lines.append(line)
+        parts.append("\n".join(lines))
+    if with_manager:
+        parts.append(texts.ABOUT_MANAGER_HINT)
+    return "\n\n".join(parts)
 
 
 def price_label(price: PriceOption) -> str:

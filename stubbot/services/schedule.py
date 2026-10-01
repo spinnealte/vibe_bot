@@ -5,7 +5,7 @@ from datetime import date
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.db.enums import SessionStatus
-from stubbot.db.models import CourseSession, PriceOption, Program
+from stubbot.db.models import CourseSession, PriceOption, Program, Venue
 from stubbot.repositories.catalog import CatalogRepository
 
 logger = logging.getLogger(__name__)
@@ -61,21 +61,26 @@ class ScheduleService:
 
     async def slide(self, today: date, index: int) -> CourseSlide | None:
         """Слайд номер index (с поправкой на границы — список мог измениться). None — курсов нет совсем."""
-        items = await self._carousel(today)
-        if not items:
-            logger.debug("[DB] Карусель: курсов нет")
-            return None
-        index = min(max(index, 0), len(items) - 1)
-        kind, item_id = items[index]
-        logger.debug("[DB] Карусель: слайд %d из %d (%s #%s)", index + 1, len(items),
-                     "поток" if kind == "s" else "курс без дат", item_id)
-        if kind == "s":
-            card = await self.card(item_id, today)
-            if card is not None:
-                return CourseSlide(card.program, card, index, len(items))
-            return None
-        program = await self.catalog.published_program(item_id)
-        return CourseSlide(program, None, index, len(items)) if program else None
+        # Между запросом списка и карточки курс могли скрыть — тогда список пересобирается, и на этом месте
+        # оказывается соседний курс. Попыток несколько: вдруг скрыли не один.
+        for _ in range(3):
+            items = await self._carousel(today)
+            if not items:
+                logger.debug("[DB] Карусель: курсов нет")
+                return None
+            index = min(max(index, 0), len(items) - 1)
+            kind, item_id = items[index]
+            logger.debug("[DB] Карусель: слайд %d из %d (%s #%s)", index + 1, len(items),
+                         "поток" if kind == "s" else "курс без дат", item_id)
+            if kind == "s":
+                card = await self.card(item_id, today)
+                if card is not None:
+                    return CourseSlide(card.program, card, index, len(items))
+            else:
+                program = await self.catalog.published_program(item_id)
+                if program is not None:
+                    return CourseSlide(program, None, index, len(items))
+        return None
 
     async def card(self, session_id: int, today: date) -> SessionCard | None:
         """Карточка публичного потока. None — потока нет, скрыт или уже прошёл."""
@@ -89,3 +94,7 @@ class ScheduleService:
 
     async def program(self, program_id: int) -> Program | None:
         return await self.catalog.published_program(program_id)
+
+    async def venues(self) -> list[Venue]:
+        """Площадки центра для «О центре» — действующие."""
+        return await self.catalog.active_venues()

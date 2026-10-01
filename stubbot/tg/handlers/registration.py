@@ -24,6 +24,7 @@ from stubbot.services.registration import (
 )
 from stubbot.tg import flows, keyboards, texts
 from stubbot.tg.callbacks import NameAction, NameCb, SelectDoneCb, SelectGroup, SkipOptionalCb
+from stubbot.tg.handlers.selection import group_matches_state
 from stubbot.tg.screen import delete_quietly, strip_keyboard
 from stubbot.tg.states import (
     FIELD_BY_STATE,
@@ -132,7 +133,8 @@ async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: A
 # --- Специальности и должности (общий мультивыбор) -------------------------------------------------------------
 
 # Переключение галочек — общий хендлер в handlers/selection.py.
-@router.callback_query(StateFilter(Registration.specialties, Registration.positions), SelectDoneCb.filter())
+@router.callback_query(StateFilter(Registration.specialties, Registration.positions), SelectDoneCb.filter(),
+                       group_matches_state)
 async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, state: FSMContext,
                          session: AsyncSession, client: Client) -> None:
     selected = list((await state.get_data()).get("selected", []))

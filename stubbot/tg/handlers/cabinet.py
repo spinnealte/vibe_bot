@@ -38,7 +38,7 @@ from stubbot.tg.callbacks import (
 from stubbot.tg.flows import PROMPT_MESSAGE_KEY
 from stubbot.tg.formatting import safe
 from stubbot.tg.handlers.consent import RETURN_TO_CABINET
-from stubbot.tg.handlers.selection import selection_options
+from stubbot.tg.handlers.selection import group_matches_state, selection_options
 from stubbot.tg.screen import delete_quietly, show_screen, strip_keyboard
 from stubbot.tg.states import FULL_NAME_KEY, EditProfile
 from stubbot.utils.dates import local_today
@@ -236,7 +236,8 @@ async def phone_expects_button(message: Message) -> None:
 
 # --- Специальности и должности ---------------------------------------------------------------------------------
 
-@router.callback_query(StateFilter(EditProfile.specialties, EditProfile.positions), SelectDoneCb.filter())
+@router.callback_query(StateFilter(EditProfile.specialties, EditProfile.positions), SelectDoneCb.filter(),
+                       group_matches_state)
 async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, state: FSMContext,
                          session: AsyncSession, client: Client, settings: Settings, bot: Bot) -> None:
     selected = list((await state.get_data()).get("selected", []))

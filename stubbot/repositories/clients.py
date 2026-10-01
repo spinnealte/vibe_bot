@@ -1,6 +1,7 @@
+from datetime import datetime
 from typing import Any
 
-from sqlalchemy import delete, exists, func, insert, select
+from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -70,6 +71,15 @@ class ClientRepository:
                 insert(client_positions),
                 [{"client_id": client_id, "position_id": pid} for pid in position_ids],
             )
+
+    async def mark_bot_blocked(self, telegram_id: int, at: datetime) -> int | None:
+        """Отметить, что клиент заблокировал бота. Возвращает id клиента; None — не найден или уже отмечен."""
+        return await self.session.scalar(
+            update(Client)
+            .where(Client.telegram_id == telegram_id, Client.is_bot_blocked.is_(False))
+            .values(is_bot_blocked=True, bot_blocked_at=at)
+            .returning(Client.id)
+        )
 
     async def count_referrals(self, client_id: int) -> int:
         return await self.session.scalar(

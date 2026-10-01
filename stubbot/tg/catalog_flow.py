@@ -22,6 +22,7 @@ from stubbot.tg.formatting import safe
 from stubbot.tg.screen import DEFAULT_COVER, Photo, send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import PENDING_APPLY_KEY, Application
 from stubbot.utils.dates import MONTHS_GENITIVE, format_range
+from stubbot.utils.links import with_draft_text
 
 CAROUSEL_INDEX_KEY = "carousel_index"
 PROMPT_MESSAGE_KEY = "prompt_message_id"
@@ -42,16 +43,17 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         await _screen(message, texts.SCHEDULE_EMPTY, in_place=in_place)
         return
     program, card = slide.program, slide.card
+    # MVP — афиша: без заявки, «Сообщить о наборе» и счётчика мест, пока заявки выключены в настройках.
+    settings = get_settings()
+    applications = settings.applications_enabled
     if card is not None:
-        caption = render.session_caption(card, _deadline_text(card, timezone))
+        caption = render.session_caption(card, _deadline_text(card, timezone), show_seats=applications)
         photo = card.session.cover_file_id or program.cover_file_id
         notify = card.session.status is SessionStatus.ANNOUNCED
     else:
         caption = render.program_caption(program)
         photo = program.cover_file_id
         notify = True
-    # MVP — афиша: без заявки и «Сообщить о наборе», пока они выключены в настройках.
-    applications = get_settings().applications_enabled
     markup = keyboards.course_carousel(
         index=slide.index,
         total=slide.total,
@@ -60,6 +62,9 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         apply_text=_apply_button(card) if card and applications else None,
         notify=notify and applications,
         has_program_text=bool(program.program_html),
+        # Запись в MVP — через менеджера: чат откроется с готовым черновиком про этот курс.
+        manager_url=with_draft_text(settings.manager_url, render.manager_draft(program, card))
+        if settings.manager_url else None,
     )
     await _screen(message, caption, markup, photo or DEFAULT_COVER, in_place)
 

@@ -144,9 +144,18 @@ def _pager(index: int, total: int, prev_data: str, next_data: str) -> list[Inlin
     return row
 
 
+def manager_button(url: str) -> InlineKeyboardButton:
+    """Кнопка-ссылка на чат менеджера. Telegram открывает чат сам, боту о нажатии не сообщает."""
+    return InlineKeyboardButton(text=texts.BTN_MANAGER, url=url)
+
+
+def contact_manager(url: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[manager_button(url)]])
+
+
 def course_carousel(index: int, total: int, program_id: int, session_id: int | None, apply_text: str | None,
-                    notify: bool, has_program_text: bool) -> InlineKeyboardMarkup:
-    """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Программа · Назад."""
+                    notify: bool, has_program_text: bool, manager_url: str | None = None) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Менеджер / Программа · Назад."""
     rows = [_pager(index, total, _sch(ScheduleAction.SLIDE, index=index - 1), _sch(ScheduleAction.SLIDE, index=index + 1))]
     if apply_text and session_id:
         rows.append([InlineKeyboardButton(text=apply_text,
@@ -154,6 +163,8 @@ def course_carousel(index: int, total: int, program_id: int, session_id: int | N
     if notify:
         rows.append([InlineKeyboardButton(text=texts.BTN_NOTIFY_ME,
                                           callback_data=_sch(ScheduleAction.NOTIFY, program_id, index))])
+    if manager_url:
+        rows.append([manager_button(manager_url)])
     bottom = []
     if has_program_text:
         bottom.append(InlineKeyboardButton(text=texts.BTN_PROGRAM_TEXT,

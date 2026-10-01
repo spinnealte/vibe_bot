@@ -107,6 +107,14 @@ def test_caption_dates_with_common_time_and_address() -> None:
     assert "<b>Даты:</b> 13–14 октября 2026\n" in session_caption(card, None)
 
 
+def test_caption_hides_seats_in_poster_mode() -> None:
+    """Режим афиши (заявки выключены): мест никто не занимает — счётчик не показываем, статус остаётся."""
+    assert "свободных мест: 5" in session_caption(_card(None), None)
+    poster = session_caption(_card(None), None, show_seats=False)
+    assert "свободных мест" not in poster
+    assert "Идёт набор" in poster
+
+
 def test_caption_short_program_shown_whole_without_hint() -> None:
     caption = session_caption(_card(None, program_html="<b>День 1.</b> Теория\n<b>День 2.</b> Практика"), None)
     assert caption.endswith("День 1. Теория\nДень 2. Практика")

@@ -21,6 +21,7 @@ def create_dispatcher(
 ) -> Dispatcher:
     dp = Dispatcher(storage=storage or RedisStorage.from_url(settings.redis_url))
     dp["settings"] = settings  # доступно в хендлерах аргументом `settings`
+    dp["session_factory"] = session_factory  # для работы с БД вне транзакции апдейта (обработчик ошибок)
     dp.errors.register(on_error)
 
     dp.update.outer_middleware(DbSessionMiddleware(session_factory))

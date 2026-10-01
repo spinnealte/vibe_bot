@@ -1,7 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 
-from pydantic import SecretStr
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -34,6 +34,18 @@ class Settings(BaseSettings):
 
     # MVP — афиша: заявки, «Мои заявки» и «Сообщить о наборе» выключены (код в tg/handlers/application.py).
     applications_enabled: bool = False
+
+    # Чат менеджера для записи: https://t.me/<username>. Пусто — кнопки «Менеджер» нет.
+    manager_url: str | None = None
+
+    @field_validator("manager_url", mode="before")
+    @classmethod
+    def _check_manager_url(cls, value: object) -> object:
+        if isinstance(value, str):
+            value = value.strip() or None
+        if value is not None and not str(value).startswith(("https://", "tg://")):
+            raise ValueError("MANAGER_URL — ссылка вида https://t.me/<username>")
+        return value
 
     @property
     def database_url(self) -> URL:

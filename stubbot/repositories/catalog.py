@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from stubbot.db.enums import EnrollmentStatus, SessionStatus
-from stubbot.db.models import CourseSession, Enrollment, Program, SessionDay
+from stubbot.db.models import CourseSession, Enrollment, Program, SessionDay, Venue
 
 # Статусы потоков, которые видны в расписании.
 PUBLIC_SESSION_STATUSES = (
@@ -80,6 +80,9 @@ class CatalogRepository:
             .where(Program.id == program_id, *_published_program())
             .options(selectinload(Program.specialties), selectinload(Program.lecturers))
         )
+
+    async def active_venues(self) -> list[Venue]:
+        return list(await self.session.scalars(select(Venue).where(Venue.is_active.is_(True)).order_by(Venue.name)))
 
     async def taken_seats(self, session_id: int) -> int:
         stmt = select(func.coalesce(func.sum(Enrollment.requested_seats), 0)).where(

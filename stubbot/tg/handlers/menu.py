@@ -9,8 +9,10 @@ from stubbot.config import Settings
 from stubbot.db.enums import ClientEventType
 from stubbot.db.models import Client
 from stubbot.repositories.analytics import AnalyticsRepository
-from stubbot.tg import catalog_flow, flows, keyboards, texts
+from stubbot.services.schedule import ScheduleService
+from stubbot.tg import catalog_flow, flows, keyboards, render, texts
 from stubbot.utils.dates import local_today
+from stubbot.utils.links import with_draft_text
 
 router = Router(name="menu")
 
@@ -31,6 +33,12 @@ async def open_cabinet(message: Message, state: FSMContext, session: AsyncSessio
 
 
 @router.message(F.text == texts.BTN_ABOUT)
-async def open_about(message: Message, state: FSMContext) -> None:
+async def open_about(message: Message, state: FSMContext, session: AsyncSession, settings: Settings) -> None:
     await state.clear()
-    await message.answer(texts.ABOUT, reply_markup=keyboards.main_menu())
+    venues = await ScheduleService(session).venues()
+    manager_url = settings.manager_url
+    text = render.about_text(venues, with_manager=manager_url is not None)
+    # Есть менеджер — под текстом его кнопка; иначе возвращаем клавиатуру меню (могли прийти из сценария).
+    markup = (keyboards.contact_manager(with_draft_text(manager_url, texts.MANAGER_DRAFT_ABOUT))
+              if manager_url else keyboards.main_menu())
+    await message.answer(text, reply_markup=markup)

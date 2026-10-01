@@ -1,23 +1,29 @@
 """Общий мультивыбор (специальности, должности): переключение галочек. Выбор хранится в FSM data["selected"].
 
-Что делать по «Готово», решает сценарий (регистрация или кабинет) — там свои хендлеры SelectDoneCb.
+Что делать по «Готово», решает сценарий (регистрация или кабинет) — там свои хендлеры SelectDoneCb
+с тем же фильтром group_matches_state.
 """
 
 from aiogram import Router
-from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.services.registration import RegistrationService
 from stubbot.tg import keyboards
-from stubbot.tg.callbacks import SelectGroup, ToggleCb
-from stubbot.tg.states import SELECTION_STATES
+from stubbot.tg.callbacks import SelectDoneCb, SelectGroup, ToggleCb
+from stubbot.tg.states import SELECTION_GROUP_BY_STATE
 
 router = Router(name="selection")
 
 
-@router.callback_query(StateFilter(*SELECTION_STATES), ToggleCb.filter())
+def group_matches_state(_: CallbackQuery, callback_data: ToggleCb | SelectDoneCb, raw_state: str | None) -> bool:
+    """Кнопка из клавиатуры текущего шага. Нажатие на старую клавиатуру (специальности, когда человек уже
+    выбирает должности) не подходит ни одному хендлеру и уходит в fallback: «Эта кнопка уже неактуальна»."""
+    return SELECTION_GROUP_BY_STATE.get(raw_state) is callback_data.group
+
+
+@router.callback_query(ToggleCb.filter(), group_matches_state)
 async def on_toggle(callback: CallbackQuery, callback_data: ToggleCb, state: FSMContext, session: AsyncSession) -> None:
     selected = set((await state.get_data()).get("selected", []))
     selected ^= {callback_data.item_id}

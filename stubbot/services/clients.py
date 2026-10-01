@@ -90,6 +90,12 @@ class ClientService:
     async def count_referrals(self, client_id: int) -> int:
         return await self.clients.count_referrals(client_id)
 
+    async def mark_bot_blocked(self, telegram_id: int) -> None:
+        """Пользователь заблокировал бота (Telegram ответил Forbidden). Снимается при следующем его сообщении."""
+        client_id = await self.clients.mark_bot_blocked(telegram_id, datetime.now(UTC))
+        if client_id is not None:
+            logger.info("Клиент #%s заблокировал бота", client_id)
+
     @staticmethod
     def _refresh_snapshot(client: Client, profile: TelegramProfile) -> None:
         client.tg_username = profile.username
