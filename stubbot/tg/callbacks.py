@@ -152,10 +152,14 @@ class DictAction(StrEnum):
     EDIT = "ed"  # изменить поле field
     SKIP = "skip"  # «Пропустить» необязательное поле в мастере
     CLEAR = "clr"  # «Очистить» необязательное поле при правке
+    PICK = "pick"  # выбрать вариант value в поле-выборе
+    TOGGLE = "tgl"  # отметить/снять запись value в поле-мультивыборе
+    DONE = "done"  # «Готово» в мультивыборе
     SAVE = "save"  # сохранить новую запись после предпросмотра
     CANCEL = "cnl"  # отменить мастер или правку
     ARCHIVE = "arc"
     RESTORE = "res"
+    PROGRAM = "prog"  # программа курса постранично, page — страница
 
 
 class DictCb(CallbackData, prefix="dic"):
@@ -164,3 +168,4 @@ class DictCb(CallbackData, prefix="dic"):
     item_id: int = 0
     field: str = ""
     page: int = 0
+    value: str = ""

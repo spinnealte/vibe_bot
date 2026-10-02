@@ -7,3 +7,4 @@ asyncpg==0.31.0
 alembic==1.20.0
 pydantic-settings==2.15.0
 tzdata==2026.4
+python-docx==1.2.0  # программа курса файлом .docx (админка)

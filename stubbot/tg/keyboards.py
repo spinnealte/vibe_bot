@@ -9,12 +9,15 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from stubbot.config import get_settings
+from stubbot.services.admin_dictionaries import DictKind
 from stubbot.tg import texts
 from stubbot.tg.callbacks import (
     ApplyAction,
     ApplyCb,
     ApplyPriceCb,
     ApplySeatsCb,
+    DictAction,
+    DictCb,
     MyApplicationAction,
     MyApplicationCb,
     ScheduleAction,
@@ -155,8 +158,9 @@ def contact_manager(url: str) -> InlineKeyboardMarkup:
 
 
 def course_carousel(index: int, total: int, program_id: int, session_id: int | None, apply_text: str | None,
-                    notify: bool, has_program_text: bool, manager_url: str | None = None) -> InlineKeyboardMarkup:
-    """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Менеджер / Программа · Назад."""
+                    notify: bool, has_program_text: bool, manager_url: str | None = None,
+                    admin: bool = False) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Менеджер / Программа · Назад / ✏️ Править (админу)."""
     rows = [_pager(index, total, _sch(ScheduleAction.SLIDE, index=index - 1), _sch(ScheduleAction.SLIDE, index=index + 1))]
     if apply_text and session_id:
         rows.append([InlineKeyboardButton(text=apply_text,
@@ -172,6 +176,12 @@ def course_carousel(index: int, total: int, program_id: int, session_id: int | N
                                            callback_data=_sch(ScheduleAction.PROGRAM, program_id, index)))
     bottom.append(InlineKeyboardButton(text=texts.BTN_CLOSE_SCHEDULE, callback_data=_sch(ScheduleAction.CLOSE)))
     rows.append(bottom)
+    if admin:
+        # Ведёт в карточку курса в админке; кнопку обрабатывает админ-роутер (фильтр IsAdmin).
+        rows.append([InlineKeyboardButton(
+            text=texts.BTN_COURSE_EDIT,
+            callback_data=DictCb(kind=DictKind.COURSES, action=DictAction.VIEW, item_id=program_id).pack(),
+        )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 

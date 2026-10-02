@@ -1,15 +1,19 @@
 """Админка без БД и Telegram: доступ, проверка полей справочников, экраны."""
 
 import asyncio
-from types import SimpleNamespace
+from io import BytesIO
 
 import pytest
 from aiogram.types import User
+from docx import Document
 
 from stubbot.config import Settings
+from stubbot.services.admin_courses import COURSE_SPEC
 from stubbot.services.admin_dictionaries import SPECS, DictField, DictKind, FieldKind, parse_field
 from stubbot.tg import admin_views, keyboards, texts
 from stubbot.tg.filters import IsAdmin
+from stubbot.utils.documents import file_to_html
+from stubbot.utils.slug import slugify
 
 
 def _settings(**overrides: object) -> Settings:
@@ -55,14 +59,14 @@ def test_is_admin_filter() -> None:
         (DictField("x", FieldKind.FULL_NAME, True, 300), "Иванов  Сергей", "Иванов Сергей"),
         (DictField("x", FieldKind.FULL_NAME, True, 300), "Иванов", None),
         (DictField("x", FieldKind.HTML, False, 30), "<b>Хирург</b>\nстаж 20 лет", "<b>Хирург</b>\nстаж 20 лет"),
+        (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), " 16 ", 16),
+        (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), "0", None),
+        (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), "16 часов", None),
+        (DictField("x", FieldKind.CHOICE, False, choices=("a",)), "a", None),  # выбор — только кнопками
     ],
 )
 def test_parse_field(field: DictField, raw: str, expected: str | None) -> None:
     assert parse_field(field, raw) == expected
-
-
-def _item(item_id: int, title: str, active: bool = True) -> SimpleNamespace:
-    return SimpleNamespace(id=item_id, title=title, is_active=active)
 
 
 def _buttons(markup) -> list[str]:
@@ -71,7 +75,7 @@ def _buttons(markup) -> list[str]:
 
 def test_dict_list_pages_and_archive_mark() -> None:
     spec = SPECS[DictKind.SPECIALTIES]
-    items = [_item(i, f"Специальность {i}") for i in range(1, 10)] + [_item(10, "Старая", active=False)]
+    items = [(i, f"Специальность {i}", True) for i in range(1, 10)] + [(10, "Старая", False)]
     text, markup = admin_views.dict_list(spec, items, page=0)
     assert "Всего: <b>10</b>" in text and "в архиве: 1" in text
     first = _buttons(markup)
@@ -85,8 +89,8 @@ def test_dict_list_pages_and_archive_mark() -> None:
 
 def test_card_escapes_values_and_keeps_bio_html() -> None:
     spec = SPECS[DictKind.LECTURERS]
-    item = SimpleNamespace(id=5, full_name="Иванов <Сергей>", regalia=None, bio_html="<b>Хирург</b>", is_active=False)
-    text, markup = admin_views.card(spec, item)
+    values = {"full_name": "Иванов <Сергей>", "regalia": None, "bio_html": "<b>Хирург</b>"}
+    text, markup = admin_views.card(spec, 5, values, active=False)
     assert "Иванов &lt;Сергей&gt;" in text
     assert "<b>Регалии:</b> —" in text
     assert "<b>Биография:</b> \n<b>Хирург</b>" in text  # HTML из Telegram — как есть
@@ -105,3 +109,58 @@ def test_field_prompt_buttons() -> None:
     assert _buttons(admin_views.field_prompt(spec, optional, "h", "https://a.ru", item_id=3)[1]) == [
         texts.BTN_ADMIN_CLEAR, texts.BTN_ADMIN_CANCEL]
     assert _buttons(admin_views.field_prompt(spec, optional, "h", None, item_id=3)[1]) == [texts.BTN_ADMIN_CANCEL]
+
+
+def test_course_choice_and_multi_prompts() -> None:
+    spec = COURSE_SPEC
+    text, markup = admin_views.field_prompt(spec, spec.field("default_format"), "h", "offline", item_id=7)
+    assert "✅ 🏫 Очно" in _buttons(markup) and "💻 Онлайн" in _buttons(markup)
+    assert texts.BTN_ADMIN_CLEAR not in _buttons(markup)  # формат обязателен — очищать нельзя
+    _, markup = admin_views.field_prompt(spec, spec.field("level"), "h", None)
+    assert texts.BTN_ADMIN_SKIP in _buttons(markup)  # уровень необязателен
+    text, markup = admin_views.field_prompt(spec, spec.field("lecturers"), "h", None,
+                                            options=[(1, "Иванов С. П."), (2, "Смирнова А. О.")], selected=[2])
+    assert _buttons(markup) == ["Иванов С. П.", "✅ Смирнова А. О.", texts.BTN_ADMIN_DONE, texts.BTN_ADMIN_CANCEL]
+    assert "Лекторы" in text and "необязательно" not in text
+    # У курса своя подсказка к «Названию» — не та, что у специальностей.
+    title_hint = admin_views.field_prompt(spec, spec.field("title"), "h", None)[0]
+    assert "в афише" in title_hint and "при регистрации" not in title_hint
+
+
+@pytest.mark.parametrize(
+    ("title", "expected"),
+    [
+        ("Имплантация: от планирования до протезирования", "implantatsiya-ot-planirovaniya-do-protezirovaniya"),
+        ("Эндодонтия под микроскопом!", "endodontiya-pod-mikroskopom"),
+        ("FP1 Concept — Digital", "fp1-concept-digital"),
+        ("«»!!!", "course"),
+    ],
+)
+def test_slugify(title: str, expected: str) -> None:
+    assert slugify(title) == expected
+    assert len(slugify("очень длинное название " * 10)) <= 50
+
+
+def test_docx_and_txt_to_html() -> None:
+    doc = Document()
+    doc.add_heading("Модуль 1. Хирургия", level=1)
+    paragraph = doc.add_paragraph()
+    paragraph.add_run("Важно: ").bold = True
+    paragraph.add_run("работа <на фантомах>").italic = True
+    doc.add_paragraph("Разбор случаев", style="List Bullet")
+    buffer = BytesIO()
+    doc.save(buffer)
+    html = file_to_html("Программа.DOCX", buffer.getvalue())
+    assert html == ("<b>Модуль 1. Хирургия</b>\n<b>Важно: </b><i>работа &lt;на фантомах&gt;</i>\n• Разбор случаев")
+    assert file_to_html("p.txt", "День 1\r\n<теория>".encode("cp1251")) == "День 1\n&lt;теория&gt;"
+    assert file_to_html("p.pdf", b"%PDF") is None
+    assert file_to_html("broken.docx", b"not a zip") is None
+
+
+def test_carousel_edit_button_only_for_admin() -> None:
+    def carousel(admin: bool) -> list[str]:
+        return _buttons(keyboards.course_carousel(0, 3, program_id=5, session_id=None, apply_text=None, notify=False,
+                                                  has_program_text=True, admin=admin))
+
+    assert texts.BTN_COURSE_EDIT in carousel(True)
+    assert texts.BTN_COURSE_EDIT not in carousel(False)

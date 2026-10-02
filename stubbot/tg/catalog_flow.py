@@ -65,6 +65,7 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         # Запись в MVP — через менеджера: чат откроется с готовым черновиком про этот курс.
         manager_url=with_draft_text(settings.manager_url, render.manager_draft(program, card))
         if settings.manager_url else None,
+        admin=settings.is_admin(message.chat.id),  # в личке chat.id = id пользователя
     )
     await _screen(message, caption, markup, photo or DEFAULT_COVER, in_place)
 

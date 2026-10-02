@@ -107,6 +107,13 @@ def test_caption_dates_with_common_time_and_address() -> None:
     assert "<b>Даты:</b> 13–14 октября 2026\n" in session_caption(card, None)
 
 
+def test_caption_without_nmo_points() -> None:
+    """Баллы НМО не показываем (решение 02.10.2026), даже если в БД они есть."""
+    caption = session_caption(_card(None), None)
+    assert "НМО" not in caption
+    assert "16 ак. ч." in caption
+
+
 def test_caption_hides_seats_in_poster_mode() -> None:
     """Режим афиши (заявки выключены): мест никто не занимает — счётчик не показываем, статус остаётся."""
     assert "свободных мест: 5" in session_caption(_card(None), None)

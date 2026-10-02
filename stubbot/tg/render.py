@@ -34,7 +34,7 @@ def visible_length(html_text: str) -> int:
     return len(unescape(_TAG.sub("", html_text)))
 
 
-def _plain_excerpt(html_text: str, limit: int) -> str:
+def plain_excerpt(html_text: str, limit: int) -> str:
     """Начало текста без разметки, по границе слова, с сохранением строк (пунктов программы).
 
     Разметку снимаем: обрезать HTML посередине тега нельзя — так ломалась подпись в старом боте.
@@ -65,7 +65,7 @@ def _with_excerpt(lines: list[str], program: Program) -> str:
     budget = min(EXCERPT_LIMIT, CAPTION_LIMIT - visible_length(caption + header + more))
     if budget < MIN_DESCRIPTION:
         return caption
-    excerpt = _plain_excerpt(source, budget)
+    excerpt = plain_excerpt(source, budget)
     if not excerpt.endswith("…"):
         more = ""  # программа короткая и показана целиком — подсказка про кнопку не нужна
     return caption + header + excerpt + more
@@ -85,11 +85,9 @@ def _meta_lines(program: Program, format_value: str) -> list[str]:
     lines.append(texts.CAPTION_FORMAT.format(value=texts.FORMAT_BADGES[format_value]))
     if program.level:
         lines.append(texts.CAPTION_LEVEL.format(value=texts.LEVEL_BADGES[program.level.value]))
-    volume = [f"{program.duration_hours} ак. ч."] if program.duration_hours else []
-    if program.nmo_points:
-        volume.append(f"🏅 НМО: {program.nmo_points}")
-    if volume:
-        lines.append(texts.CAPTION_VOLUME.format(value=" · ".join(volume)))
+    # Баллы НМО не показываем (решение 02.10.2026): колонка programs.nmo_points в БД остаётся на будущее.
+    if program.duration_hours:
+        lines.append(texts.CAPTION_VOLUME.format(value=f"{program.duration_hours} ак. ч."))
     return lines
 
 
