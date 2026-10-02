@@ -42,6 +42,13 @@ class Application(StatesGroup):
     confirm = State()
 
 
+class AdminDict(StatesGroup):
+    """Справочник в админке. В data: kind, mode (add/edit), item_id, step/field, values, prompt id."""
+
+    value = State()  # ждём текст для поля
+    confirm = State()  # предпросмотр новой записи
+
+
 # Ключ в FSM data: заявка, к которой вернуться после согласия и регистрации.
 PENDING_APPLY_KEY = "apply_session_id"
 FULL_NAME_KEY = "full_name"  # введённое ФИО до подтверждения

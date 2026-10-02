@@ -47,7 +47,7 @@ async def cancel_registration(message: Message, state: FSMContext) -> None:
     in_optional = await state.get_state() in FIELD_BY_STATE
     await state.clear()
     text = texts.REG_OPTIONAL_CANCELLED if in_optional else texts.REG_CANCELLED
-    await message.answer(text, reply_markup=keyboards.main_menu())
+    await message.answer(text, reply_markup=keyboards.main_menu(message.chat.id))
 
 
 @router.message(StateFilter(Registration), F.text == texts.BTN_BACK)
@@ -86,7 +86,7 @@ async def on_contact(message: Message, state: FSMContext, session: AsyncSession,
             await message.answer(texts.REG_PHONE_INVALID)
         case PhoneResult.TAKEN:
             await state.clear()
-            await message.answer(texts.REG_PHONE_TAKEN, reply_markup=keyboards.main_menu())
+            await message.answer(texts.REG_PHONE_TAKEN, reply_markup=keyboards.main_menu(message.chat.id))
         case PhoneResult.OK:
             await flows.show_registration_step(message, state, session, client, await service.next_step(client))
 

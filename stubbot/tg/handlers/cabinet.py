@@ -144,7 +144,7 @@ async def cancel_edit_by_keyboard(message: Message, state: FSMContext, session: 
                                   settings: Settings, bot: Bot) -> None:
     # «Отмена» с reply-клавиатуры телефона: возвращаем клавиатуру меню и кабинет новым сообщением.
     await state.clear()
-    await message.answer(texts.EDIT_CANCELLED, reply_markup=keyboards.main_menu())
+    await message.answer(texts.EDIT_CANCELLED, reply_markup=keyboards.main_menu(message.chat.id))
     await flows.show_cabinet(message, session, client, settings, bot)
 
 
@@ -225,7 +225,7 @@ async def on_contact(message: Message, state: FSMContext, session: AsyncSession,
             notice = texts.EDIT_SAVED
     await state.clear()
     # Новым сообщением: убираем кнопку «Поделиться номером», возвращаем клавиатуру меню.
-    await message.answer(notice, reply_markup=keyboards.main_menu())
+    await message.answer(notice, reply_markup=keyboards.main_menu(message.chat.id))
     await flows.show_cabinet(message, session, client, settings, bot)
 
 

@@ -113,7 +113,7 @@ async def show_registration_step(message: Message, state: FSMContext, session: A
             data = await state.get_data()
             if data.get(PENDING_APPLY_KEY):
                 # Регистрацию проходили ради заявки — сразу к ней; необязательные поля заполнят в кабинете.
-                await message.answer(texts.APPLY_PROFILE_READY, reply_markup=keyboards.main_menu())
+                await message.answer(texts.APPLY_PROFILE_READY, reply_markup=keyboards.main_menu(message.chat.id))
                 await catalog_flow.start_application(
                     message, state, session, client, local_today(get_settings().timezone), data[PENDING_APPLY_KEY],
                     index=data.get(catalog_flow.CAROUSEL_INDEX_KEY, 0), in_place=False,
@@ -124,7 +124,7 @@ async def show_registration_step(message: Message, state: FSMContext, session: A
                 await ask_optional(message, state, OPTIONAL_FIELDS_ORDER[0])
             else:
                 await state.clear()
-                await message.answer(texts.REG_COMPLETED, reply_markup=keyboards.main_menu())
+                await message.answer(texts.REG_COMPLETED, reply_markup=keyboards.main_menu(message.chat.id))
 
 
 async def ask_full_name(message: Message, state: FSMContext) -> None:
@@ -164,7 +164,7 @@ async def ask_next_optional(message: Message, state: FSMContext, current: Option
         await _strip_previous_prompt(message, state)
     await state.clear()
     # Новым сообщением: нужно вернуть reply-клавиатуру главного меню вместо «Назад/Отмена».
-    await message.answer(texts.REG_COMPLETED, reply_markup=keyboards.main_menu())
+    await message.answer(texts.REG_COMPLETED, reply_markup=keyboards.main_menu(message.chat.id))
 
 
 async def _strip_previous_prompt(message: Message, state: FSMContext) -> None:

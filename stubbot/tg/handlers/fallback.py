@@ -16,4 +16,4 @@ async def unknown_callback(callback: CallbackQuery) -> None:
 
 @router.message()
 async def unknown_message(message: Message) -> None:
-    await message.answer(texts.UNKNOWN_MESSAGE, reply_markup=keyboards.main_menu())
+    await message.answer(texts.UNKNOWN_MESSAGE, reply_markup=keyboards.main_menu(message.chat.id))

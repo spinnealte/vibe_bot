@@ -8,6 +8,7 @@ from aiogram.types import (
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from stubbot.config import get_settings
 from stubbot.tg import texts
 from stubbot.tg.callbacks import (
     ApplyAction,
@@ -35,15 +36,15 @@ from stubbot.tg.callbacks import (
 )
 
 
-def main_menu() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
-            [KeyboardButton(text=texts.BTN_ABOUT)],
-        ],
-        resize_keyboard=True,
-        is_persistent=True,
-    )
+def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
+    """Главное меню; админам (ADMIN_IDS / owner из .env) — ещё кнопка «⚙️ Админка». chat_id лички = id пользователя."""
+    keyboard = [
+        [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
+        [KeyboardButton(text=texts.BTN_ABOUT)],
+    ]
+    if get_settings().is_admin(chat_id):
+        keyboard[1].append(KeyboardButton(text=texts.BTN_ADMIN))
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
 
 
 def registration_nav() -> ReplyKeyboardMarkup:

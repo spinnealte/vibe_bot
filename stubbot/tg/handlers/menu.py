@@ -40,5 +40,5 @@ async def open_about(message: Message, state: FSMContext, session: AsyncSession,
     text = render.about_text(venues, with_manager=manager_url is not None)
     # Есть менеджер — под текстом его кнопка; иначе возвращаем клавиатуру меню (могли прийти из сценария).
     markup = (keyboards.contact_manager(with_draft_text(manager_url, texts.MANAGER_DRAFT_ABOUT))
-              if manager_url else keyboards.main_menu())
+              if manager_url else keyboards.main_menu(message.chat.id))
     await message.answer(text, reply_markup=markup)

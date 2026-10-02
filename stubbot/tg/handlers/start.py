@@ -19,4 +19,4 @@ async def cmd_start(message: Message, command: CommandObject, state: FSMContext,
     await state.clear()
     await ClientService(session).process_start(client, client_created, parse_start_payload(command.args))
     await message.answer(texts.WELCOME_NEW if client_created else texts.WELCOME_BACK,
-                         reply_markup=keyboards.main_menu())
+                         reply_markup=keyboards.main_menu(message.chat.id))

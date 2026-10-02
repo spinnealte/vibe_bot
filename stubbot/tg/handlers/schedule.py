@@ -38,7 +38,7 @@ async def on_close(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     await state.clear()
     await delete_quietly(callback.message)
-    await callback.message.answer(texts.SCHEDULE_CLOSED, reply_markup=keyboards.main_menu())
+    await callback.message.answer(texts.SCHEDULE_CLOSED, reply_markup=keyboards.main_menu(callback.message.chat.id))
 
 
 @router.callback_query(ScheduleCb.filter(F.action == ScheduleAction.PROGRAM))

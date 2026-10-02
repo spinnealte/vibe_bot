@@ -4,6 +4,8 @@ from enum import StrEnum
 
 from aiogram.filters.callback_data import CallbackData
 
+from stubbot.services.admin_dictionaries import DictKind
+
 
 class ConsentKind(StrEnum):
     PD = "pd"
@@ -129,3 +131,36 @@ class EditControl(StrEnum):
 
 class EditControlCb(CallbackData, prefix="editctl"):
     action: EditControl
+
+
+# --- Админка ---------------------------------------------------------------------------------------------------
+
+class AdminAction(StrEnum):
+    MENU = "menu"
+    CLOSE = "close"
+    NOOP = "noop"  # счётчик «2/5» между стрелками
+
+
+class AdminCb(CallbackData, prefix="adm"):
+    action: AdminAction
+
+
+class DictAction(StrEnum):
+    LIST = "ls"  # список, page — страница
+    VIEW = "v"  # карточка записи
+    ADD = "add"  # мастер новой записи
+    EDIT = "ed"  # изменить поле field
+    SKIP = "skip"  # «Пропустить» необязательное поле в мастере
+    CLEAR = "clr"  # «Очистить» необязательное поле при правке
+    SAVE = "save"  # сохранить новую запись после предпросмотра
+    CANCEL = "cnl"  # отменить мастер или правку
+    ARCHIVE = "arc"
+    RESTORE = "res"
+
+
+class DictCb(CallbackData, prefix="dic"):
+    kind: DictKind
+    action: DictAction
+    item_id: int = 0
+    field: str = ""
+    page: int = 0

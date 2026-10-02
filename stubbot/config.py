@@ -1,8 +1,9 @@
 from functools import lru_cache
 from pathlib import Path
+from typing import Annotated
 
 from pydantic import SecretStr, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy import URL
 
 
@@ -26,6 +27,8 @@ class Settings(BaseSettings):
     redis_url: str = "redis://127.0.0.1:6379/0"
 
     owner_telegram_id: int
+    # Кто видит «⚙️ Админка» и может в неё войти: owner + эти id. В .env через запятую: ADMIN_IDS=111,222
+    admin_ids: Annotated[list[int], NoDecode] = []
 
     log_level: str = "INFO"
     log_dir: Path = Path("logs")
@@ -37,6 +40,16 @@ class Settings(BaseSettings):
 
     # Чат менеджера для записи: https://t.me/<username>. Пусто — кнопки «Менеджер» нет.
     manager_url: str | None = None
+
+    @field_validator("admin_ids", mode="before")
+    @classmethod
+    def _split_admin_ids(cls, value: object) -> object:
+        if isinstance(value, str):
+            return [int(part) for part in value.replace(" ", "").split(",") if part]
+        return value
+
+    def is_admin(self, telegram_id: int) -> bool:
+        return telegram_id == self.owner_telegram_id or telegram_id in self.admin_ids
 
     @field_validator("manager_url", mode="before")
     @classmethod

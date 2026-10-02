@@ -1,6 +1,7 @@
 from aiogram import Router
 
 from stubbot.tg.handlers import (
+    admin,
     application,
     cabinet,
     consent,
@@ -25,6 +26,8 @@ def build_root_router(applications_enabled: bool) -> Router:
     root.include_router(schedule.router)
     if applications_enabled:
         root.include_router(application.router)
+    # Фильтр «только админ» — на всём роутере; не-админам он не мешает: их апдейты идут дальше, в fallback.
+    root.include_router(admin.router)
     # Всегда последним: ловит то, что не подошло остальным.
     root.include_router(fallback.router)
     return root
