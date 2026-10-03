@@ -2,24 +2,30 @@
 
 Значения экранируются; поля FieldKind.HTML / DOCUMENT — это HTML, который собрал aiogram из форматирования
 сообщения админа (message.html_text) или utils/documents из файла, он уже безопасен.
+
+Списки проведений можно открыть для одного курса: id курса едет в кнопках в поле value («родитель»).
 """
 
 from collections.abc import Mapping
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
+from stubbot.config import get_settings
 from stubbot.services.admin_dictionaries import DictField, DictionarySpec, DictKind, FieldKind
 from stubbot.tg import texts
 from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
 from stubbot.tg.formatting import safe
 from stubbot.tg.render import plain_excerpt, short
+from stubbot.utils.money import format_rub
+from stubbot.utils.schedule_input import format_days, format_deadline
 
 PAGE_SIZE = 8
 CURRENT_EXCERPT = 200  # сколько текущей программы показывать при правке
 
-# Запись в списке: id, название, действует ли (не в архиве).
+# Запись в списке: id, название, действует ли (не в архиве / не скрыта).
 ListEntry = tuple[int, str, bool]
 
 
@@ -42,51 +48,59 @@ def _pager(page: int, pages: int, prev_data: str, next_data: str) -> list[Inline
     return row
 
 
+def _parent(parent_id: int | None) -> str:
+    return str(parent_id) if parent_id else ""
+
+
 # --- Меню ------------------------------------------------------------------------------------------------------
 
 def menu() -> tuple[str, InlineKeyboardMarkup]:
     builder = InlineKeyboardBuilder()
-    builder.button(text=texts.ADMIN_DICT_TITLES[DictKind.COURSES.value],
-                   callback_data=_dict(DictKind.COURSES, DictAction.LIST))
-    for kind in (DictKind.LECTURERS, DictKind.VENUES, DictKind.SPECIALTIES, DictKind.POSITIONS):
+    for kind in (DictKind.COURSES, DictKind.SESSIONS, DictKind.LECTURERS, DictKind.VENUES, DictKind.SPECIALTIES,
+                 DictKind.POSITIONS):
         builder.button(text=texts.ADMIN_DICT_TITLES[kind.value], callback_data=_dict(kind, DictAction.LIST))
-    builder.adjust(1, 2)
+    builder.adjust(2)
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_CLOSE, callback_data=_admin(AdminAction.CLOSE)))
     return texts.ADMIN_MENU, builder.as_markup()
 
 
 # --- Список ----------------------------------------------------------------------------------------------------
 
-def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int) -> tuple[str, InlineKeyboardMarkup]:
+def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int,
+              parent_id: int | None = None, heading: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    """Список записей. parent_id — проведения одного курса (heading — его название вместо общего заголовка)."""
     kind = spec.kind
-    title = texts.ADMIN_DICT_TITLES[kind.value]
+    title = heading or texts.ADMIN_DICT_TITLES[kind.value]
+    parent = _parent(parent_id)
     pages = max((len(entries) + PAGE_SIZE - 1) // PAGE_SIZE, 1)
     page = min(max(page, 0), pages - 1)
-    archived = sum(1 for _, _, active in entries if not active)
+    hidden = sum(1 for _, _, active in entries if not active)
     if entries:
-        text = texts.ADMIN_LIST.format(
-            title=title, total=len(entries),
-            archived=texts.ADMIN_LIST_ARCHIVED.format(count=archived) if archived else "",
-        )
+        hidden_text = texts.ADMIN_LIST_HIDDEN.get(kind.value, texts.ADMIN_LIST_ARCHIVED).format(count=hidden)
+        text = texts.ADMIN_LIST.format(title=title, total=len(entries), archived=hidden_text if hidden else "")
     else:
         text = texts.ADMIN_LIST_EMPTY.format(title=title)
 
     rows = []
+    hidden_mark = texts.ADMIN_HIDDEN_MARKS.get(kind.value, texts.ADMIN_ARCHIVED_MARK)
     for item_id, item_title, active in entries[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
-        mark = "" if active else texts.ADMIN_ARCHIVED_MARK
-        rows.append([InlineKeyboardButton(text=mark + short(item_title),
-                                          callback_data=_dict(kind, DictAction.VIEW, item_id, page=page))])
+        rows.append([InlineKeyboardButton(text=("" if active else hidden_mark) + short(item_title),
+                                          callback_data=_dict(kind, DictAction.VIEW, item_id, page=page, value=parent))])
     if pages > 1:
-        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1),
-                           _dict(kind, DictAction.LIST, page=page + 1)))
-    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD, callback_data=_dict(kind, DictAction.ADD))])
+        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1, value=parent),
+                           _dict(kind, DictAction.LIST, page=page + 1, value=parent)))
+    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD,
+                                      callback_data=_dict(kind, DictAction.ADD, value=parent))])
+    if parent_id and kind is DictKind.SESSIONS:
+        rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK_TO_COURSE,
+                                          callback_data=_dict(DictKind.COURSES, DictAction.VIEW, parent_id))])
     rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK, callback_data=_admin(AdminAction.MENU))])
     return text, InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-# --- Карточка --------------------------------------------------------------------------------------------------
+# --- Значения полей --------------------------------------------------------------------------------------------
 
-def _value(field: DictField, value: Any) -> str:
+def _value(field: DictField, value: Any, options: list[tuple[int, str]] | None = None) -> str:
     """Значение поля для карточки справочника и «Сейчас: …» при правке."""
     if value is None or value == "" or value == []:
         return "—"
@@ -99,6 +113,14 @@ def _value(field: DictField, value: Any) -> str:
             return texts.ADMIN_CHOICE_LABELS[field.name].get(value, safe(value))
         case FieldKind.PHOTO:
             return texts.ADMIN_CURRENT_PHOTO
+        case FieldKind.REF:
+            return safe(dict(options or []).get(value, value))
+        case FieldKind.DAYS:
+            return f"\n<code>{format_days(value)}</code>"
+        case FieldKind.DATETIME:
+            return format_deadline(value, ZoneInfo(get_settings().timezone))
+        case FieldKind.PRICES:
+            return "".join(f"\n• {safe(p['label'])} — {format_rub(p['amount'])}" for p in value)
     return safe(value)
 
 
@@ -110,39 +132,82 @@ def card_text(spec: DictionarySpec, values: Mapping[str, Any], is_active: bool =
     return "\n".join(lines)
 
 
-def _edit_buttons(spec: DictionarySpec, item_id: int, page: int) -> InlineKeyboardBuilder:
+# --- Карточки --------------------------------------------------------------------------------------------------
+
+def _edit_buttons(spec: DictionarySpec, item_id: int, page: int, parent: str = "") -> InlineKeyboardBuilder:
     builder = InlineKeyboardBuilder()
     for field in spec.fields:
-        builder.button(text=texts.BTN_ADMIN_EDIT_FIELD.format(label=texts.ADMIN_FIELD_LABELS[field.name]),
-                       callback_data=_dict(spec.kind, DictAction.EDIT, item_id, field.name, page))
+        if field.editable:
+            builder.button(text=texts.BTN_ADMIN_EDIT_FIELD.format(label=texts.ADMIN_FIELD_LABELS[field.name]),
+                           callback_data=_dict(spec.kind, DictAction.EDIT, item_id, field.name, page, parent))
     builder.adjust(2)
     return builder
 
 
-def _archive_and_back(builder: InlineKeyboardBuilder, kind: DictKind, item_id: int, active: bool, page: int) -> None:
-    action, label = ((DictAction.ARCHIVE, texts.BTN_ADMIN_ARCHIVE) if active
-                     else (DictAction.RESTORE, texts.BTN_ADMIN_RESTORE))
-    builder.row(InlineKeyboardButton(text=label, callback_data=_dict(kind, action, item_id, page=page)))
+def _back_to_list(builder: InlineKeyboardBuilder, kind: DictKind, page: int, parent: str = "") -> None:
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_TO_LIST,
-                                     callback_data=_dict(kind, DictAction.LIST, page=page)))
+                                     callback_data=_dict(kind, DictAction.LIST, page=page, value=parent)))
+
+
+def _archive_button(kind: DictKind, item_id: int, active: bool, page: int, parent: str = "") -> InlineKeyboardButton:
+    if kind is DictKind.SESSIONS:
+        action, label = ((DictAction.ARCHIVE, texts.BTN_ADMIN_HIDE) if active
+                         else (DictAction.RESTORE, texts.BTN_ADMIN_SHOW))
+    else:
+        action, label = ((DictAction.ARCHIVE, texts.BTN_ADMIN_ARCHIVE) if active
+                         else (DictAction.RESTORE, texts.BTN_ADMIN_RESTORE))
+    return InlineKeyboardButton(text=label, callback_data=_dict(kind, action, item_id, page=page, value=parent))
 
 
 def card(spec: DictionarySpec, item_id: int, values: Mapping[str, Any], active: bool,
          page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
     """Карточка записи справочника: поля текстом, «✏️» у каждого, архив, к списку."""
     builder = _edit_buttons(spec, item_id, page)
-    _archive_and_back(builder, spec.kind, item_id, active, page)
+    builder.row(_archive_button(spec.kind, item_id, active, page))
+    _back_to_list(builder, spec.kind, page)
     return card_text(spec, values, active), builder.as_markup()
 
 
-def course_card_markup(spec: DictionarySpec, item_id: int, active: bool, has_program: bool,
+def course_card_markup(spec: DictionarySpec, item_id: int, active: bool, has_program: bool, show_without_dates: bool,
                        page: int = 0) -> InlineKeyboardMarkup:
-    """Под карточкой курса (фото + подпись как в афише): «✏️» у каждого поля, программа, архив, к списку."""
+    """Под карточкой курса (фото + подпись как в афише): поля, программа, проведения, показ без дат, архив."""
     builder = _edit_buttons(spec, item_id, page)
     if has_program:
         builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_PROGRAM,
                                          callback_data=_dict(spec.kind, DictAction.PROGRAM, item_id, page=0)))
-    _archive_and_back(builder, spec.kind, item_id, active, page)
+    builder.row(
+        InlineKeyboardButton(text=texts.BTN_ADMIN_SESSIONS_OF_COURSE,
+                             callback_data=_dict(DictKind.SESSIONS, DictAction.LIST, value=str(item_id))),
+        InlineKeyboardButton(text=texts.BTN_ADMIN_NEW_SESSION,
+                             callback_data=_dict(DictKind.SESSIONS, DictAction.ADD, value=str(item_id))),
+    )
+    tbd_label, tbd_value = ((texts.BTN_ADMIN_TBD_HIDE, "0") if show_without_dates else (texts.BTN_ADMIN_TBD_SHOW, "1"))
+    builder.row(InlineKeyboardButton(text=tbd_label,
+                                     callback_data=_dict(spec.kind, DictAction.SHOW_TBD, item_id, page=page,
+                                                         value=tbd_value)))
+    builder.row(_archive_button(spec.kind, item_id, active, page))
+    _back_to_list(builder, spec.kind, page)
+    return builder.as_markup()
+
+
+def session_card_markup(spec: DictionarySpec, item_id: int, status: str, active: bool, page: int = 0,
+                        parent_id: int | None = None) -> InlineKeyboardMarkup:
+    """Под карточкой проведения (как в афише): поля, статус в одно нажатие, копия, скрыть, к списку."""
+    parent = _parent(parent_id)
+    builder = _edit_buttons(spec, item_id, page, parent)
+    status_field = spec.field("status")
+    statuses = InlineKeyboardBuilder()
+    for choice in status_field.choices:
+        mark = "✅ " if choice == status else ""
+        statuses.button(text=mark + texts.ADMIN_CHOICE_LABELS["status"][choice],
+                        callback_data=_dict(spec.kind, DictAction.STATUS, item_id, page=page,
+                                            value=f"{choice}~{parent}"))  # «:» — разделитель callback_data
+    statuses.adjust(2)
+    builder.attach(statuses)
+    builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_COPY,
+                                     callback_data=_dict(spec.kind, DictAction.COPY, item_id, value=parent)))
+    builder.row(_archive_button(spec.kind, item_id, active, page, parent))
+    _back_to_list(builder, spec.kind, page, parent)
     return builder.as_markup()
 
 
@@ -164,10 +229,11 @@ def _hint(spec: DictionarySpec, field: DictField) -> str:
 
 def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: Any,
                  item_id: int = 0, page: int = 0, options: list[tuple[int, str]] | None = None,
-                 selected: list[int] | None = None) -> tuple[str, InlineKeyboardMarkup]:
+                 selected: list[Any] | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """Вопрос в мастере новой записи (item_id=0: «Пропустить») или при правке поля (item_id: «Очистить»).
 
-    Выбор — кнопки вариантов (✅ у текущего); мультивыбор — options с ✅ у selected и «Готово».
+    Выбор и запись справочника — кнопки вариантов (✅ у текущего); мультивыбор и категории тарифов —
+    кнопки с ✅ у selected и «Готово».
     """
     kind = spec.kind
     shows_current = current not in (None, "", []) and field.kind is not FieldKind.MULTI
@@ -176,7 +242,7 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
         label=texts.ADMIN_FIELD_LABELS[field.name],
         optional="" if field.required else texts.ADMIN_FIELD_OPTIONAL,
         hint=_hint(spec, field),
-        current=texts.ADMIN_CURRENT_VALUE.format(value=_value(field, current)) if shows_current else "",
+        current=texts.ADMIN_CURRENT_VALUE.format(value=_value(field, current, options)) if shows_current else "",
     )
     builder = InlineKeyboardBuilder()
     if field.kind is FieldKind.CHOICE:
@@ -185,8 +251,16 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
             builder.button(text=mark + texts.ADMIN_CHOICE_LABELS[field.name][choice],
                            callback_data=_dict(kind, DictAction.PICK, item_id, field.name, page, value=choice))
         builder.adjust(2)
-    elif field.kind is FieldKind.MULTI:
+    elif field.kind is FieldKind.REF:
+        for option_id, title in options or []:
+            mark = "✅ " if option_id == current else ""
+            builder.button(text=mark + short(title),
+                           callback_data=_dict(kind, DictAction.PICK, item_id, field.name, page, str(option_id)))
+        builder.adjust(1)
+    elif field.kind in (FieldKind.MULTI, FieldKind.PRICES):
         chosen = set(selected or [])
+        if field.kind is FieldKind.PRICES:
+            options = list(texts.PRICE_KIND_LABELS.items())
         for option_id, title in options or []:
             mark = "✅ " if option_id in chosen else ""
             builder.button(text=mark + short(title),
@@ -208,6 +282,31 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
     return text, builder.as_markup()
 
 
+def price_label_prompt(spec: DictionarySpec, header: str, n: int, total: int, price_kind: str,
+                       item_id: int = 0, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    """Тарифы, шаг «подпись»: своя подпись текстом или стандартная кнопкой."""
+    standard = texts.PRICE_KIND_LABELS[price_kind]
+    text = texts.ADMIN_PRICE_LABEL_PROMPT.format(header=header, n=n, total=total, category=standard)
+    markup = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts.BTN_ADMIN_PRICE_STD.format(label=standard),
+                              callback_data=_dict(spec.kind, DictAction.PICK, item_id, "prices", page, "std"))],
+        [InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL,
+                              callback_data=_dict(spec.kind, DictAction.CANCEL, item_id, page=page))],
+    ])
+    return text, markup
+
+
+def price_amount_prompt(spec: DictionarySpec, header: str, n: int, total: int, label: str, unit: str,
+                        item_id: int = 0, page: int = 0) -> tuple[str, InlineKeyboardMarkup]:
+    text = texts.ADMIN_PRICE_AMOUNT_PROMPT.format(header=header, n=n, total=total, label=safe(label),
+                                                  unit=texts.ADMIN_PRICE_UNIT[unit])
+    markup = InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL,
+                             callback_data=_dict(spec.kind, DictAction.CANCEL, item_id, page=page)),
+    ]])
+    return text, markup
+
+
 def preview(spec: DictionarySpec, values: Mapping[str, Any]) -> tuple[str, InlineKeyboardMarkup]:
     markup = InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=texts.BTN_ADMIN_SAVE, callback_data=_dict(spec.kind, DictAction.SAVE)),
@@ -216,9 +315,9 @@ def preview(spec: DictionarySpec, values: Mapping[str, Any]) -> tuple[str, Inlin
     return texts.ADMIN_PREVIEW.format(card=card_text(spec, values)), markup
 
 
-def course_preview_markup() -> InlineKeyboardMarkup:
-    """Курс публикуется сразу (черновиков нет)."""
+def publish_markup(kind: DictKind) -> InlineKeyboardMarkup:
+    """Курсы и проведения публикуются сразу (черновиков нет)."""
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=texts.BTN_ADMIN_PUBLISH, callback_data=_dict(DictKind.COURSES, DictAction.SAVE)),
-        InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(DictKind.COURSES, DictAction.CANCEL)),
+        InlineKeyboardButton(text=texts.BTN_ADMIN_PUBLISH, callback_data=_dict(kind, DictAction.SAVE)),
+        InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(kind, DictAction.CANCEL)),
     ]])

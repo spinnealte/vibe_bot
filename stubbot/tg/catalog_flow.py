@@ -47,7 +47,7 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
     settings = get_settings()
     applications = settings.applications_enabled
     if card is not None:
-        caption = render.session_caption(card, _deadline_text(card, timezone), show_seats=applications)
+        caption = render.session_caption(card, deadline_text(card, timezone), show_seats=applications)
         photo = card.session.cover_file_id or program.cover_file_id
         notify = card.session.status is SessionStatus.ANNOUNCED
     else:
@@ -87,7 +87,7 @@ def _apply_button(card: SessionCard) -> str | None:
     return texts.BTN_APPLY_WAITLIST if card.goes_to_waitlist else texts.BTN_APPLY
 
 
-def _deadline_text(card: SessionCard, timezone: str) -> str | None:
+def deadline_text(card: SessionCard, timezone: str) -> str | None:
     deadline = card.session.registration_deadline
     if deadline is None or not card.accepts_applications:
         return None

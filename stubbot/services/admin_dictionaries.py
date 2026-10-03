@@ -7,14 +7,17 @@
 
 import logging
 from dataclasses import dataclass
+from datetime import datetime
 from enum import StrEnum
 from typing import Any, Protocol
+from zoneinfo import ZoneInfo
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.db.models import Lecturer, Position, Specialty, Venue
 from stubbot.repositories.admin_dictionaries import AdminDictionaryRepository, DictionaryItem
 from stubbot.utils.names import parse_full_name
+from stubbot.utils.schedule_input import parse_days, parse_deadline
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +28,7 @@ class DictKind(StrEnum):
     SPECIALTIES = "spec"
     POSITIONS = "pos"
     COURSES = "crs"
+    SESSIONS = "ses"
 
 
 class FieldKind(StrEnum):
@@ -35,12 +39,16 @@ class FieldKind(StrEnum):
     NUMBER = "number"  # целое число в [min_value, max_value]
     CHOICE = "choice"  # один вариант из choices — кнопками
     MULTI = "multi"  # несколько записей справочника — кнопками с ✅; значение — список id
+    REF = "ref"  # одна запись справочника (курс, площадка) — кнопками; значение — id
     PHOTO = "photo"  # фото сообщением; значение — file_id
     DOCUMENT = "document"  # длинный текст: сообщением с форматированием или файлом .docx / .txt
+    DAYS = "days"  # дни проведения: «13.10 10:00-18:00» построчно; значение — список {date, start, end}
+    DATETIME = "datetime"  # «11.10 18:00» в часовом поясе центра; значение — ISO-строка
+    PRICES = "prices"  # тарифы: категории кнопками, затем подпись и цена каждой; значение — список словарей
 
 
 # Поля, которые заполняются кнопками, а не текстом.
-BUTTON_KINDS = (FieldKind.CHOICE, FieldKind.MULTI)
+BUTTON_KINDS = (FieldKind.CHOICE, FieldKind.MULTI, FieldKind.REF)
 
 
 @dataclass(frozen=True)
@@ -52,6 +60,12 @@ class DictField:
     min_value: int = 0
     max_value: int = 0
     choices: tuple[str, ...] = ()
+    editable: bool = True  # False — только в мастере (у проведения нельзя сменить курс)
+    # Спрашивать в мастере, только если другое поле имеет одно из значений: («format», («offline», «hybrid»)).
+    when: tuple[str, tuple[str, ...]] | None = None
+
+    def applies(self, values: dict[str, Any]) -> bool:
+        return self.when is None or values.get(self.when[0]) in self.when[1]
 
 
 @dataclass(frozen=True)
@@ -107,12 +121,17 @@ SPECS: dict[DictKind, DictionarySpec] = {
 }
 
 
-def parse_field(field: DictField, raw: str) -> str | int | None:
-    """Значение текстового ввода для БД или None — ввод не подходит (пусто, длиннее колонки, не ссылка, не ФИО).
+def parse_field(field: DictField, raw: str, now: datetime | None = None, tz: ZoneInfo | None = None) -> Any:
+    """Значение текстового ввода для БД или None — ввод не подходит (пусто, длиннее колонки, не ссылка, не ФИО,
+    прошедшая дата). now и tz нужны полям с датами.
 
-    Поля-кнопки и фото текстом не заполняются — для них всегда None.
+    Поля-кнопки, фото и тарифы текстом целиком не заполняются — для них всегда None.
     """
     match field.kind:
+        case FieldKind.DAYS:
+            return parse_days(raw, now.astimezone(tz).date())
+        case FieldKind.DATETIME:
+            return parse_deadline(raw, now, tz)
         case FieldKind.FULL_NAME:
             return parse_full_name(raw)
         case FieldKind.LINE:
@@ -147,7 +166,7 @@ class AdminEntityService(Protocol):
 
     spec: DictionarySpec
 
-    async def items(self) -> list[Any]: ...
+    async def items(self, parent_id: int | None = None) -> list[Any]: ...  # parent_id — проведения одного курса
     async def item(self, item_id: int) -> Any | None: ...
     def is_active(self, item: Any) -> bool: ...
     def title(self, item: Any) -> str: ...
@@ -164,7 +183,7 @@ class AdminDictionaryService:
         self.repo = AdminDictionaryRepository(session, spec.model, spec.title_field)
         self.admin_client_id = admin_client_id
 
-    async def items(self) -> list[DictionaryItem]:
+    async def items(self, parent_id: int | None = None) -> list[DictionaryItem]:
         return await self.repo.list_all()
 
     async def item(self, item_id: int) -> DictionaryItem | None:

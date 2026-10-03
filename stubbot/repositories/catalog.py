@@ -65,11 +65,11 @@ class CatalogRepository:
         return await self.session.scalar(stmt)
 
     async def programs_without_upcoming_ids(self, today: date) -> list[int]:
-        """Опубликованные курсы, у которых нет ни одного видимого ближайшего потока («даты уточняются»)."""
+        """Опубликованные курсы без видимого ближайшего потока («даты уточняются»), если админ их не скрыл."""
         with_sessions = self._public_sessions(today).with_only_columns(CourseSession.program_id)
         stmt = (
             select(Program.id)
-            .where(*_published_program(), Program.id.not_in(with_sessions))
+            .where(*_published_program(), Program.show_without_dates.is_(True), Program.id.not_in(with_sessions))
             .order_by(Program.sort_order, Program.title)
         )
         return list(await self.session.scalars(stmt))

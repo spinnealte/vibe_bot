@@ -160,6 +160,9 @@ class DictAction(StrEnum):
     ARCHIVE = "arc"
     RESTORE = "res"
     PROGRAM = "prog"  # программа курса постранично, page — страница
+    STATUS = "st"  # статус проведения в одно нажатие, value — статус
+    COPY = "copy"  # «📋 Скопировать» проведение: мастер спросит только новые даты
+    SHOW_TBD = "tbd"  # курс без дат в афише: value «1» — показывать, «0» — скрыть
 
 
 class DictCb(CallbackData, prefix="dic"):

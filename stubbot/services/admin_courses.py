@@ -46,7 +46,7 @@ class AdminCourseService:
         self.repo = AdminCourseRepository(session)
         self.admin_client_id = admin_client_id
 
-    async def items(self) -> list[Program]:
+    async def items(self, parent_id: int | None = None) -> list[Program]:
         return await self.repo.list_all()
 
     async def item(self, item_id: int) -> Program | None:
@@ -97,6 +97,15 @@ class AdminCourseService:
             return SaveResult.BAD_VALUE
         self._log("#%s: %s поле '%s'", item_id, "очищено" if not value else "изменено", field.name)
         return SaveResult.OK
+
+    async def set_show_without_dates(self, item_id: int, show: bool) -> Program | None:
+        """Показывать ли курс в афише, пока у него нет ближайших проведений («даты уточняются»)."""
+        program = await self.repo.get(item_id)
+        if program is None:
+            return None
+        program.show_without_dates = show
+        self._log("#%s: без дат %s", item_id, "показывается" if show else "скрыт из афиши")
+        return program
 
     async def set_active(self, item_id: int, active: bool) -> Program | None:
         program = await self.repo.get(item_id)

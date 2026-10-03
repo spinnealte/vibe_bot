@@ -92,6 +92,8 @@ class Program(TimestampMixin, Base):
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
     nmo_points: Mapped[int | None] = mapped_column(SmallInteger)
     is_published: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # Показывать в афише без ближайших проведений («даты уточняются»). Новое проведение включает обратно.
+    show_without_dates: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
     archived_at: Mapped[datetime | None]
     sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 

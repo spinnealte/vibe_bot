@@ -20,6 +20,7 @@
 | 11 | Онлайн (30.09.2026) | Онлайн-курсы — живые, в даты; записи не храним | Хватает sessions.format + online_url |
 | 12 | Объём MVP (30.09.2026) | MVP — афиша: расписание + личный кабинет, без заявок | Таблицы заявок остаются в схеме; в боте выключены (APPLICATIONS_ENABLED=false) |
 | 13 | Оплата [FULL] (30.09.2026) | Нет оплаты за 24–48 ч после заявки — место снимается | orders.expires_at + фоновая задача; тарифы «теория/практика», «для двух коллег», когда занимается место — решаем в FULL |
+| 14 | Курс без дат в афише (02.10.2026) | По умолчанию виден как «даты уточняются»; админ может скрыть. Новое проведение снова включает показ | programs.show_without_dates boolean default true (миграция на этапе 5) |
 
 ---
 
@@ -120,7 +121,7 @@
 **programs** [MVP] — курс как продукт
 - id, slug UNIQUE, title, short_description, description_html, program_html, level (basic / advanced),
   default_format (online / offline / hybrid), duration_hours NULL, cover_file_id NULL,
-  nmo_points NULL (если курсы аккредитуются в НМО), is_published, archived_at, sort_order
+  nmo_points NULL (не используется, решение 02.10.2026), is_published, show_without_dates (решение 14), archived_at, sort_order
 **program_specialties** [MVP] — m2m
 
 **sessions** [MVP] — поток (конкретное проведение)
