@@ -17,6 +17,7 @@ from typing import Any
 from aiogram import BaseMiddleware
 from aiogram.dispatcher.event.bases import UNHANDLED
 from aiogram.dispatcher.event.handler import HandlerObject
+from aiogram.exceptions import TelegramForbiddenError
 from aiogram.types import CallbackQuery, Message, TelegramObject, Update
 
 logger = logging.getLogger("stubbot.handlers")
@@ -69,6 +70,10 @@ class HandlerLogMiddleware(BaseMiddleware):
         started = time.perf_counter()
         try:
             result = await handler(event, data)
+        except TelegramForbiddenError:
+            # Пользователь заблокировал бота — штатная ситуация (её обрабатывает handlers/errors.py), не ошибка.
+            _log(logging.INFO, process, handler_name, f"бот заблокирован пользователем, {_elapsed_ms(started)} мс")
+            raise
         except Exception as exc:
             _log(logging.ERROR, process, handler_name, f"ошибка {type(exc).__name__}, {_elapsed_ms(started)} мс")
             raise

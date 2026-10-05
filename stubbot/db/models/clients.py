@@ -100,6 +100,8 @@ class Client(TimestampMixin, Base):
     first_source_id: Mapped[int | None] = mapped_column(
         ForeignKey("acquisition_sources.id", ondelete="RESTRICT"), index=True
     )
+    # Хвост ссылки t.me/<bot>?start=<хвост>, с которым клиент пришёл в первый раз, как есть. NULL — пришёл без ссылки.
+    start_param: Mapped[str | None] = mapped_column(String(64))
 
     is_bot_blocked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
     bot_blocked_at: Mapped[datetime | None]

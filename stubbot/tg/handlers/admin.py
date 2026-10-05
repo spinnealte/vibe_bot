@@ -16,7 +16,7 @@ from zoneinfo import ZoneInfo
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
-from aiogram.types import CallbackQuery, InlineKeyboardMarkup, Message
+from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.config import get_settings
@@ -34,6 +34,7 @@ from stubbot.services.admin_dictionaries import (
 )
 from stubbot.services.admin_registry import ADMIN_SPECS, admin_service
 from stubbot.services.admin_sessions import COPY_FIELDS, MAX_PRICE_LABEL, PRICE_KINDS, AdminSessionService
+from stubbot.services.client_export import ClientExportService
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import admin_views, catalog_flow, render, texts
 from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
@@ -105,6 +106,22 @@ async def close_admin(callback: CallbackQuery, state: FSMContext) -> None:
 @router.callback_query(AdminCb.filter(F.action == AdminAction.NOOP))
 async def on_counter(callback: CallbackQuery) -> None:
     await callback.answer()
+
+
+@router.callback_query(AdminCb.filter(F.action == AdminAction.EXPORT))
+async def export_clients(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
+    """Все клиенты одним CSV-файлом. Файл остаётся в чате, меню присылаем заново под ним — оно снова внизу."""
+    await callback.answer(texts.ADMIN_EXPORT_WAIT)
+    await state.clear()
+    tz = ZoneInfo(get_settings().timezone)
+    now = datetime.now(UTC)
+    export = await ClientExportService(session, client.id).build(now, tz)
+    await delete_quietly(callback.message)
+    await callback.message.answer_document(
+        BufferedInputFile(export.content, filename=export.filename),
+        caption=texts.ADMIN_EXPORT_CAPTION.format(count=export.count, moment=f"{now.astimezone(tz):%d.%m.%Y %H:%M}"),
+    )
+    await send_screen(callback.message, *admin_views.menu())
 
 
 # --- Список, карточка, архив, быстрые действия -----------------------------------------------------------------

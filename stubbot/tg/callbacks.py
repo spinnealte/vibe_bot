@@ -139,6 +139,7 @@ class AdminAction(StrEnum):
     MENU = "menu"
     CLOSE = "close"
     NOOP = "noop"  # счётчик «2/5» между стрелками
+    EXPORT = "export"  # выгрузка клиентов в CSV
 
 
 class AdminCb(CallbackData, prefix="adm"):

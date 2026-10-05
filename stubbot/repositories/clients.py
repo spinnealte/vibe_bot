@@ -38,6 +38,17 @@ class ClientRepository:
         )
         return (await self.session.scalars(stmt)).one()
 
+    async def all_for_export(self) -> list[Client]:
+        """Все клиенты (кроме удалённых) со специальностями и должностями — для выгрузки, в порядке прихода."""
+        stmt = (
+            select(Client)
+            .where(Client.deleted_at.is_(None))
+            .options(selectinload(Client.specialties), selectinload(Client.positions))
+            .order_by(Client.id)
+            .execution_options(populate_existing=True)
+        )
+        return list(await self.session.scalars(stmt))
+
     async def has_specialties(self, client_id: int) -> bool:
         return bool(await self.session.scalar(select(exists().where(client_specialties.c.client_id == client_id))))
 

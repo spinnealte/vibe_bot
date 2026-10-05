@@ -1,4 +1,4 @@
-"""Правила сценариев без БД и Telegram: фильтр мультивыбора, пересборка карусели расписания."""
+"""Правила сценариев без БД и Telegram: мультивыбор (фильтр кнопок, сохранение), пересборка карусели расписания."""
 
 import asyncio
 from datetime import date
@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+from stubbot.services.registration import RegistrationService
 from stubbot.services.schedule import ScheduleService
 from stubbot.tg.callbacks import SelectDoneCb, SelectGroup, ToggleCb
 from stubbot.tg.handlers.selection import group_matches_state
@@ -54,6 +55,38 @@ class _FakeCatalog:
 
     async def published_program(self, program_id: int) -> None:
         return None
+
+
+class _FakeDictionaries:
+    async def active_specialties(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id=1), SimpleNamespace(id=2)]
+
+    async def active_positions(self) -> list[SimpleNamespace]:
+        return [SimpleNamespace(id=5)]
+
+
+class _FakeClients:
+    def __init__(self) -> None:
+        self.saved: dict[str, list[int]] = {}
+
+    async def replace_specialties(self, client_id: int, ids: list[int]) -> None:
+        self.saved["specialties"] = ids
+
+    async def replace_positions(self, client_id: int, ids: list[int]) -> None:
+        self.saved["positions"] = ids
+
+
+def test_selection_saves_only_active_items() -> None:
+    """У клиента осталась специальность из архива (#7) — она не мешает сохранить выбор, а сама не сохраняется."""
+    service = RegistrationService(None)
+    service.dictionaries, service.clients = _FakeDictionaries(), _FakeClients()
+    client = SimpleNamespace(id=1)
+    assert asyncio.run(service.save_specialties(client, [2, 7, 1, 2]))
+    assert service.clients.saved["specialties"] == [1, 2]
+    assert not asyncio.run(service.save_specialties(client, [7]))  # отмечено только то, чего нет в списке
+    assert not asyncio.run(service.save_positions(client, []))
+    assert asyncio.run(service.save_positions(client, [5, 999999]))  # подделанная кнопка
+    assert service.clients.saved["positions"] == [5]
 
 
 def test_carousel_shows_neighbour_when_course_hidden_meanwhile() -> None:

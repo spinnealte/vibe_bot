@@ -70,6 +70,9 @@ class ClientService:
         if payload is None:
             return
 
+        if created and payload.from_link:
+            client.start_param = payload.raw  # хвост ссылки первого захода — как есть, с любым префиксом
+
         source_id: int | None = None
         if payload.kind is PayloadKind.SOURCE:
             source = await self.analytics.get_active_source(payload.value)

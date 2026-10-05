@@ -25,6 +25,15 @@ class ConsentRepository:
             )
         )
 
+    async def client_ids_with_active(self, consent_type: ConsentType) -> set[int]:
+        """id всех клиентов с действующим согласием этого типа (для выгрузки)."""
+        rows = await self.session.scalars(
+            select(ClientConsent.client_id).where(
+                ClientConsent.type == consent_type, ClientConsent.revoked_at.is_(None)
+            )
+        )
+        return set(rows)
+
     async def revoke_active(self, client_id: int, consent_type: ConsentType, at: datetime) -> None:
         await self.session.execute(
             update(ClientConsent)

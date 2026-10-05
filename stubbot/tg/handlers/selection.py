@@ -10,7 +10,7 @@ from aiogram.types import CallbackQuery
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.services.registration import RegistrationService
-from stubbot.tg import keyboards
+from stubbot.tg import keyboards, texts
 from stubbot.tg.callbacks import SelectDoneCb, SelectGroup, ToggleCb
 from stubbot.tg.states import SELECTION_GROUP_BY_STATE
 
@@ -25,10 +25,14 @@ def group_matches_state(_: CallbackQuery, callback_data: ToggleCb | SelectDoneCb
 
 @router.callback_query(ToggleCb.filter(), group_matches_state)
 async def on_toggle(callback: CallbackQuery, callback_data: ToggleCb, state: FSMContext, session: AsyncSession) -> None:
+    options = await selection_options(session, callback_data.group)
+    if callback_data.item_id not in {item_id for item_id, _ in options}:
+        # Записи нет в справочнике: её убрали в архив после показа клавиатуры или кнопка подделана.
+        await callback.answer(texts.UNKNOWN_CALLBACK)
+        return
     selected = set((await state.get_data()).get("selected", []))
     selected ^= {callback_data.item_id}
     await state.update_data(selected=sorted(selected))
-    options = await selection_options(session, callback_data.group)
     await callback.message.edit_reply_markup(
         reply_markup=keyboards.multiselect(callback_data.group, options, selected)
     )

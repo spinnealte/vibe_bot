@@ -6,6 +6,8 @@ from enum import StrEnum
 
 MAX_PAYLOAD_LENGTH = 64  # лимит Telegram на start-параметр
 _VALUE = re.compile(r"^[A-Za-z0-9_-]{1,60}$")
+# Только такие символы Telegram пропускает в ссылке ?start=…; всё остальное набрано руками после /start.
+_LINK_PARAM = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
 
 class PayloadKind(StrEnum):
@@ -23,6 +25,11 @@ class StartPayload:
     kind: PayloadKind
     value: str
     raw: str
+
+    @property
+    def from_link(self) -> bool:
+        """Параметр мог прийти из ссылки t.me/<bot>?start=… — такой хвост сохраняем у клиента (clients.start_param)."""
+        return bool(_LINK_PARAM.match(self.raw))
 
 
 def parse_start_payload(raw: str | None) -> StartPayload | None:

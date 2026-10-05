@@ -60,6 +60,7 @@ def menu() -> tuple[str, InlineKeyboardMarkup]:
                  DictKind.POSITIONS):
         builder.button(text=texts.ADMIN_DICT_TITLES[kind.value], callback_data=_dict(kind, DictAction.LIST))
     builder.adjust(2)
+    builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_EXPORT, callback_data=_admin(AdminAction.EXPORT)))
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_CLOSE, callback_data=_admin(AdminAction.CLOSE)))
     return texts.ADMIN_MENU, builder.as_markup()
 

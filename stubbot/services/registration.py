@@ -115,20 +115,22 @@ class RegistrationService:
         return await self.clients.position_ids(client_id)
 
     async def save_specialties(self, client: Client, specialty_ids: list[int]) -> bool:
-        """False — пустой выбор или id не из активного справочника (подделанный callback)."""
-        allowed = {s.id for s in await self.dictionaries.active_specialties()}
-        if not specialty_ids or not set(specialty_ids) <= allowed:
+        """Сохраняется то, что отмечено на экране: id не из действующего справочника отбрасываются (запись ушла
+        в архив, пока клиент выбирал, или была у него раньше; подделанная кнопка). False — не осталось ни одной."""
+        chosen = set(specialty_ids) & {s.id for s in await self.dictionaries.active_specialties()}
+        if not chosen:
             return False
-        await self.clients.replace_specialties(client.id, sorted(set(specialty_ids)))
-        logger.info("Клиент #%s: сохранены специальности (%d)", client.id, len(set(specialty_ids)))
+        await self.clients.replace_specialties(client.id, sorted(chosen))
+        logger.info("Клиент #%s: сохранены специальности (%d)", client.id, len(chosen))
         return True
 
     async def save_positions(self, client: Client, position_ids: list[int]) -> bool:
-        allowed = {p.id for p in await self.dictionaries.active_positions()}
-        if not position_ids or not set(position_ids) <= allowed:
+        """Как save_specialties: архивные и подделанные id отбрасываются. False — не осталось ни одной."""
+        chosen = set(position_ids) & {p.id for p in await self.dictionaries.active_positions()}
+        if not chosen:
             return False
-        await self.clients.replace_positions(client.id, sorted(set(position_ids)))
-        logger.info("Клиент #%s: сохранены должности (%d)", client.id, len(set(position_ids)))
+        await self.clients.replace_positions(client.id, sorted(chosen))
+        logger.info("Клиент #%s: сохранены должности (%d)", client.id, len(chosen))
         return True
 
     async def complete(self, client: Client) -> bool:
