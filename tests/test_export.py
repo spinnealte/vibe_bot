@@ -107,6 +107,11 @@ def test_client_row() -> None:
     assert "'-Ab12Cd3" in line and ";+79211234567;" in line
 
 
+def test_export_file_does_not_start_with_id() -> None:
+    """Файл, начинающийся с букв «ID», Excel принимает за формат SYLK — первая колонка называется иначе."""
+    assert not build_csv(HEADER, []).decode("utf-8-sig").startswith("ID")
+
+
 def test_admin_menu_has_export_button() -> None:
     _, markup = admin_views.menu()
     rows = [[b.text for b in row] for row in markup.inline_keyboard]

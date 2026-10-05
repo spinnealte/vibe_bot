@@ -74,17 +74,30 @@ def _buttons(markup) -> list[str]:
 
 
 def test_dict_list_pages_and_archive_mark() -> None:
-    spec = SPECS[DictKind.SPECIALTIES]
-    items = [(i, f"Специальность {i}", True) for i in range(1, 10)] + [(10, "Старая", False)]
+    spec = SPECS[DictKind.LECTURERS]  # длинные названия — по одной кнопке в ряд, 8 на странице
+    items = [(i, f"Лектор {i}", True) for i in range(1, 10)] + [(10, "Старый", False)]
     text, markup = admin_views.dict_list(spec, items, page=0)
     assert "Всего: <b>10</b>" in text and "в архиве: 1" in text
     first = _buttons(markup)
     assert first.count("➕ Добавить") == 1 and "1/2" in first and "▶️" in first and "◀️" not in first
+    assert [len(row) for row in markup.inline_keyboard[:8]] == [1] * 8
     _, markup = admin_views.dict_list(spec, items, page=1)
     second = _buttons(markup)
-    assert "🗄 Старая" in second and "◀️" in second and "▶️" not in second
+    assert "🗄 Старый" in second and "◀️" in second and "▶️" not in second
     text, markup = admin_views.dict_list(spec, [], page=0)
     assert "Пока пусто" in text and "1/1" not in _buttons(markup)
+
+
+@pytest.mark.parametrize("kind", [DictKind.SPECIALTIES, DictKind.POSITIONS])
+def test_short_dictionaries_listed_in_two_columns(kind: DictKind) -> None:
+    """Специальности (направления) и должности — кнопками в два столбца, как в пет-проекте: 16 на странице."""
+    items = [(i, f"Запись {i}", True) for i in range(1, 14)]
+    _, markup = admin_views.dict_list(SPECS[kind], items, page=0)
+    assert [len(row) for row in markup.inline_keyboard[:7]] == [2, 2, 2, 2, 2, 2, 1]  # 13 записей — одна страница
+    assert [b.text for b in markup.inline_keyboard[0]] == ["Запись 1", "Запись 2"]
+    assert "1/1" not in _buttons(markup) and "▶️" not in _buttons(markup)
+    _, markup = admin_views.dict_list(SPECS[kind], items + [(i, f"Запись {i}", True) for i in range(14, 20)], page=1)
+    assert [b.text for b in markup.inline_keyboard[0]] == ["Запись 17", "Запись 18"] and "2/2" in _buttons(markup)
 
 
 def test_card_escapes_values_and_keeps_bio_html() -> None:

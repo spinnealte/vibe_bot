@@ -73,7 +73,9 @@ def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int,
     kind = spec.kind
     title = heading or texts.ADMIN_DICT_TITLES[kind.value]
     parent = _parent(parent_id)
-    pages = max((len(entries) + PAGE_SIZE - 1) // PAGE_SIZE, 1)
+    columns = spec.list_columns
+    page_size = PAGE_SIZE * columns  # строк на странице столько же, кнопок — по числу столбцов
+    pages = max((len(entries) + page_size - 1) // page_size, 1)
     page = min(max(page, 0), pages - 1)
     hidden = sum(1 for _, _, active in entries if not active)
     if entries:
@@ -82,11 +84,11 @@ def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int,
     else:
         text = texts.ADMIN_LIST_EMPTY.format(title=title)
 
-    rows = []
     hidden_mark = texts.ADMIN_HIDDEN_MARKS.get(kind.value, texts.ADMIN_ARCHIVED_MARK)
-    for item_id, item_title, active in entries[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]:
-        rows.append([InlineKeyboardButton(text=("" if active else hidden_mark) + short(item_title),
-                                          callback_data=_dict(kind, DictAction.VIEW, item_id, page=page, value=parent))])
+    items = [InlineKeyboardButton(text=("" if active else hidden_mark) + short(item_title),
+                                  callback_data=_dict(kind, DictAction.VIEW, item_id, page=page, value=parent))
+             for item_id, item_title, active in entries[page * page_size:(page + 1) * page_size]]
+    rows = [items[i:i + columns] for i in range(0, len(items), columns)]
     if pages > 1:
         rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1, value=parent),
                            _dict(kind, DictAction.LIST, page=page + 1, value=parent)))

@@ -75,6 +75,7 @@ class DictionarySpec:
     model: type | None = None  # для справочников; курсы хранит свой сервис
     unique_title: bool = False  # название уникально (специальности, должности)
     has_sort_order: bool = False
+    list_columns: int = 1  # кнопок в ряд в списке админки: короткие названия — по две, как в пет-проекте
 
     @property
     def title_field(self) -> str:
@@ -110,6 +111,7 @@ SPECS: dict[DictKind, DictionarySpec] = {
         fields=(DictField("title", FieldKind.LINE, required=True, max_length=128),),
         unique_title=True,
         has_sort_order=True,
+        list_columns=2,
     ),
     DictKind.POSITIONS: DictionarySpec(
         kind=DictKind.POSITIONS,
@@ -117,6 +119,7 @@ SPECS: dict[DictKind, DictionarySpec] = {
         fields=(DictField("title", FieldKind.LINE, required=True, max_length=128),),
         unique_title=True,
         has_sort_order=True,
+        list_columns=2,
     ),
 }
 
