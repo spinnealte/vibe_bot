@@ -21,9 +21,10 @@ ADMIN_SPECS: dict[DictKind, DictionarySpec] = {
 }
 
 
-def admin_service(session: AsyncSession, kind: DictKind, admin_client_id: int) -> AdminEntityService:
+def admin_service(session: AsyncSession, kind: DictKind, admin_telegram_id: int | None) -> AdminEntityService:
+    """admin_telegram_id — кто действует: попадает в журнал действий админа (logs/admin.log)."""
     if kind is DictKind.COURSES:
-        return AdminCourseService(session, admin_client_id)
+        return AdminCourseService(session, admin_telegram_id)
     if kind is DictKind.SESSIONS:
-        return AdminSessionService(session, admin_client_id, local_today(get_settings().timezone))
-    return AdminDictionaryService(session, SPECS[kind], admin_client_id)
+        return AdminSessionService(session, admin_telegram_id, local_today(get_settings().timezone))
+    return AdminDictionaryService(session, SPECS[kind], admin_telegram_id)

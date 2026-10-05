@@ -5,7 +5,6 @@
 Записи не удаляются: «в архив» — их не предлагают в новых курсах и при регистрации, у старых данных они остаются.
 """
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -16,10 +15,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.db.models import Lecturer, Position, Specialty, Venue
 from stubbot.repositories.admin_dictionaries import AdminDictionaryRepository, DictionaryItem
+from stubbot.services.admin_log import log_admin_action
 from stubbot.utils.names import parse_full_name
 from stubbot.utils.schedule_input import parse_days, parse_deadline
-
-logger = logging.getLogger(__name__)
 
 
 class DictKind(StrEnum):
@@ -29,6 +27,17 @@ class DictKind(StrEnum):
     POSITIONS = "pos"
     COURSES = "crs"
     SESSIONS = "ses"
+
+
+# Как раздел называется в журнале действий админа (logs/admin.log).
+ENTITY_NAMES = {
+    DictKind.LECTURERS: "лектор",
+    DictKind.VENUES: "площадка",
+    DictKind.SPECIALTIES: "специальность",
+    DictKind.POSITIONS: "должность",
+    DictKind.COURSES: "курс",
+    DictKind.SESSIONS: "проведение",
+}
 
 
 class FieldKind(StrEnum):
@@ -181,10 +190,10 @@ class AdminEntityService(Protocol):
 
 
 class AdminDictionaryService:
-    def __init__(self, session: AsyncSession, spec: DictionarySpec, admin_client_id: int) -> None:
+    def __init__(self, session: AsyncSession, spec: DictionarySpec, admin_telegram_id: int | None) -> None:
         self.spec = spec
         self.repo = AdminDictionaryRepository(session, spec.model, spec.title_field)
-        self.admin_client_id = admin_client_id
+        self.admin_telegram_id = admin_telegram_id
 
     async def items(self, parent_id: int | None = None) -> list[DictionaryItem]:
         return await self.repo.list_all()
@@ -240,4 +249,4 @@ class AdminDictionaryService:
 
     def _log(self, message: str, *args: object) -> None:
         # Значения полей не пишем: в справочниках ФИО лекторов.
-        logger.info("Админ (клиент #%s), %s: " + message, self.admin_client_id, self.spec.kind.value, *args)
+        log_admin_action(self.admin_telegram_id, ENTITY_NAMES[self.spec.kind], message, *args)

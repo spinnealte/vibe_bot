@@ -6,9 +6,11 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from stubbot.services.admin_courses import COURSE_SPEC
-from stubbot.services.admin_dictionaries import FieldKind, parse_field
+from stubbot.services.admin_dictionaries import DictKind, FieldKind, parse_field
 from stubbot.services.admin_sessions import SESSION_SPEC, valid_prices
 from stubbot.tg import admin_views, texts
+from stubbot.tg.callbacks import DictAction, DictCb
+from stubbot.utils.dates import format_month, month_bounds, month_key
 from stubbot.utils.money import format_rub
 from stubbot.utils.schedule_input import format_days, parse_days, parse_deadline, parse_rubles
 
@@ -77,17 +79,73 @@ def test_session_fields_by_format() -> None:
     assert not SESSION_SPEC.field("program_id").editable and not SESSION_SPEC.field("status").editable
 
 
+def _ses(action: DictAction, **kwargs: object) -> str:
+    return DictCb(kind=DictKind.SESSIONS, action=action, **kwargs).pack()
+
+
+def test_month_helpers() -> None:
+    assert month_key(date(2026, 10, 5)) == 202610
+    assert month_bounds(202610) == (date(2026, 10, 1), date(2026, 11, 1))
+    assert month_bounds(202612) == (date(2026, 12, 1), date(2027, 1, 1))
+    assert month_bounds(202613) is None and month_bounds(0) is None and month_bounds(-5) is None  # подделанная кнопка
+    assert format_month(202701) == "Январь 2027"
+
+
+def test_session_months_screen() -> None:
+    """Проведения в админке — не кнопка на каждое, а месяцы в два столбца (только те, где проведения есть)."""
+    months = [(202608, 2), (202609, 1), (202610, 3), (202611, 1), (202701, 4)]
+    text, markup = admin_views.session_months(months, current_month=202610)
+    rows = [[b.text for b in row] for row in markup.inline_keyboard]
+    assert rows == [["Октябрь 2026 · 3", "Ноябрь 2026 · 1"], ["Январь 2027 · 4"],
+                    ["🗂 Прошедшие · 3"], [texts.BTN_ADMIN_ADD], [texts.BTN_ADMIN_BACK]]
+    assert "<b>8</b>" in text  # проведений с текущего месяца
+    assert markup.inline_keyboard[0][0].callback_data == _ses(DictAction.MONTH, page=202610)
+    assert markup.inline_keyboard[2][0].callback_data == _ses(DictAction.LIST, field="past")
+
+    # Прошедшие месяцы — отдельным экраном, свежие первыми; здесь же — проведения одного курса (#4).
+    text, markup = admin_views.session_months(months, 202610, past=True, parent_id=4, heading="🗓 Проведения: Курс")
+    rows = [[b.text for b in row] for row in markup.inline_keyboard]
+    assert rows == [["Сентябрь 2026 · 1", "Август 2026 · 2"], [texts.BTN_ADMIN_UPCOMING_MONTHS],
+                    [texts.BTN_ADMIN_BACK_TO_COURSE], [texts.BTN_ADMIN_BACK]]
+    assert "Проведения: Курс" in text and "<b>3</b>" in text
+    assert markup.inline_keyboard[0][1].callback_data == _ses(DictAction.MONTH, page=202608, value="4")
+    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.LIST, value="4")
+
+    text, markup = admin_views.session_months([], 202610)
+    assert "пока нет" in text and _buttons(markup) == [texts.BTN_ADMIN_ADD, texts.BTN_ADMIN_BACK]
+    text, markup = admin_views.session_months([(202609, 1)], 202610)  # остались только прошедшие
+    assert "пока нет" in text and _buttons(markup)[0] == "🗂 Прошедшие · 1"
+
+    # Очень много месяцев — по 16 на странице, со стрелками.
+    many = [(202600 + m, 1) for m in range(1, 13)] + [(202700 + m, 1) for m in range(1, 9)]
+    _, markup = admin_views.session_months(many, 202601)
+    assert [len(row) for row in markup.inline_keyboard[:8]] == [2] * 8 and "1/2" in _buttons(markup)
+    _, markup = admin_views.session_months(many, 202601, page=1)
+    assert _buttons(markup)[:4] == ["Май 2027 · 1", "Июнь 2027 · 1", "Июль 2027 · 1", "Август 2027 · 1"]
+
+
 def test_session_card_buttons() -> None:
-    markup = admin_views.session_card_markup(SESSION_SPEC, 7, "registration_open", active=True, parent_id=3)
+    markup = admin_views.session_card_markup(SESSION_SPEC, 7, "registration_open", active=True, parent_id=3,
+                                             index=1, total=3, prev_id=5, next_id=9)
     buttons = _buttons(markup)
+    # Листание по проведениям месяца — первой строкой, как в афише.
+    pager = markup.inline_keyboard[0]
+    assert [b.text for b in pager] == ["◀️", "2/3", "▶️"]
+    assert pager[0].callback_data == _ses(DictAction.VIEW, item_id=5, value="3")
+    assert pager[2].callback_data == _ses(DictAction.VIEW, item_id=9, value="3")
     assert "✏️ Дни и время" in buttons and "✏️ Тарифы" in buttons
     assert "✏️ Курс" not in buttons and "✏️ Статус" not in buttons
     assert "✅ 🟢 Идёт набор" in buttons and "🔴 Мест нет" in buttons
     assert texts.BTN_ADMIN_COPY in buttons and texts.BTN_ADMIN_HIDE in buttons
     status_data = next(b.callback_data for row in markup.inline_keyboard for b in row if b.text == "🔴 Мест нет")
-    assert status_data.endswith(":full~3")  # статус и курс-родитель для «⬅️ К списку»
-    hidden = _buttons(admin_views.session_card_markup(SESSION_SPEC, 7, "full", active=False))
-    assert texts.BTN_ADMIN_SHOW in hidden
+    assert status_data.endswith(":full~3")  # статус и курс-родитель для «⬅️ К месяцам»
+    back = markup.inline_keyboard[-1][0]
+    assert back.text == texts.BTN_ADMIN_TO_MONTHS and back.callback_data == _ses(DictAction.LIST, value="3")
+
+    hidden = admin_views.session_card_markup(SESSION_SPEC, 7, "full", active=False, past_month=True)
+    assert [b.text for b in hidden.inline_keyboard[0]] == ["1/1"]  # одно проведение в месяце — без стрелок
+    assert texts.BTN_ADMIN_SHOW in _buttons(hidden)
+    assert hidden.inline_keyboard[-1][0].callback_data == _ses(DictAction.LIST, field="past")  # к прошедшим месяцам
 
 
 def test_course_card_has_sessions_and_tbd_toggle() -> None:

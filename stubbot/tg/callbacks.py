@@ -147,7 +147,8 @@ class AdminCb(CallbackData, prefix="adm"):
 
 
 class DictAction(StrEnum):
-    LIST = "ls"  # список, page — страница
+    LIST = "ls"  # список, page — страница; у проведений — месяцы (field «past» — прошедшие)
+    MONTH = "mon"  # проведения месяца: page — месяц ГГГГММ; открывает первое ближайшее, дальше листание
     VIEW = "v"  # карточка записи
     ADD = "add"  # мастер новой записи
     EDIT = "ed"  # изменить поле field

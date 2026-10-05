@@ -19,6 +19,7 @@ from stubbot.tg import texts
 from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
 from stubbot.tg.formatting import safe
 from stubbot.tg.render import plain_excerpt, short
+from stubbot.utils.dates import format_month
 from stubbot.utils.money import format_rub
 from stubbot.utils.schedule_input import format_days, format_deadline
 
@@ -67,34 +68,77 @@ def menu() -> tuple[str, InlineKeyboardMarkup]:
 
 # --- Список ----------------------------------------------------------------------------------------------------
 
-def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int,
-              parent_id: int | None = None, heading: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
-    """Список записей. parent_id — проведения одного курса (heading — его название вместо общего заголовка)."""
+def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int) -> tuple[str, InlineKeyboardMarkup]:
+    """Список записей справочника или курсов. Проведения показываются иначе — по месяцам (session_months)."""
     kind = spec.kind
-    title = heading or texts.ADMIN_DICT_TITLES[kind.value]
-    parent = _parent(parent_id)
+    title = texts.ADMIN_DICT_TITLES[kind.value]
     columns = spec.list_columns
     page_size = PAGE_SIZE * columns  # строк на странице столько же, кнопок — по числу столбцов
     pages = max((len(entries) + page_size - 1) // page_size, 1)
     page = min(max(page, 0), pages - 1)
     hidden = sum(1 for _, _, active in entries if not active)
     if entries:
-        hidden_text = texts.ADMIN_LIST_HIDDEN.get(kind.value, texts.ADMIN_LIST_ARCHIVED).format(count=hidden)
-        text = texts.ADMIN_LIST.format(title=title, total=len(entries), archived=hidden_text if hidden else "")
+        text = texts.ADMIN_LIST.format(title=title, total=len(entries),
+                                       archived=texts.ADMIN_LIST_ARCHIVED.format(count=hidden) if hidden else "")
     else:
         text = texts.ADMIN_LIST_EMPTY.format(title=title)
 
-    hidden_mark = texts.ADMIN_HIDDEN_MARKS.get(kind.value, texts.ADMIN_ARCHIVED_MARK)
-    items = [InlineKeyboardButton(text=("" if active else hidden_mark) + short(item_title),
-                                  callback_data=_dict(kind, DictAction.VIEW, item_id, page=page, value=parent))
+    items = [InlineKeyboardButton(text=("" if active else texts.ADMIN_ARCHIVED_MARK) + short(item_title),
+                                  callback_data=_dict(kind, DictAction.VIEW, item_id, page=page))
              for item_id, item_title, active in entries[page * page_size:(page + 1) * page_size]]
     rows = [items[i:i + columns] for i in range(0, len(items), columns)]
     if pages > 1:
-        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1, value=parent),
-                           _dict(kind, DictAction.LIST, page=page + 1, value=parent)))
-    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD,
-                                      callback_data=_dict(kind, DictAction.ADD, value=parent))])
-    if parent_id and kind is DictKind.SESSIONS:
+        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1),
+                           _dict(kind, DictAction.LIST, page=page + 1)))
+    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD, callback_data=_dict(kind, DictAction.ADD))])
+    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK, callback_data=_admin(AdminAction.MENU))])
+    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def session_months(months: list[tuple[int, int]], current_month: int, past: bool = False, page: int = 0,
+                   parent_id: int | None = None, heading: str | None = None) -> tuple[str, InlineKeyboardMarkup]:
+    """Проведения по месяцам: кнопки «Октябрь 2026 · 3» в два столбца, только месяцы, где проведения есть.
+
+    months — [(ГГГГММ, сколько проведений)]. Основной экран — текущий месяц и будущие; прошедшие месяцы — на
+    отдельном экране (past), свежие первыми. parent_id — проведения одного курса (heading — его название).
+    Внутри месяца проведения листаются стрелками, как афиша (session_card_markup).
+    """
+    kind = DictKind.SESSIONS
+    title = heading or texts.ADMIN_DICT_TITLES[kind.value]
+    parent = _parent(parent_id)
+    upcoming = [(month, count) for month, count in months if month >= current_month]
+    older = [(month, count) for month, count in reversed(months) if month < current_month]
+    shown = older if past else upcoming
+    total = sum(count for _, count in shown)
+    if past:
+        text = texts.ADMIN_SESSION_MONTHS_PAST.format(title=title, total=total)
+    elif upcoming:
+        text = texts.ADMIN_SESSION_MONTHS.format(title=title, total=total)
+    else:
+        text = texts.ADMIN_SESSION_MONTHS_NONE.format(title=title)
+
+    page_size = PAGE_SIZE * 2
+    pages = max((len(shown) + page_size - 1) // page_size, 1)
+    page = min(max(page, 0), pages - 1)
+    field = "past" if past else ""
+    buttons = [InlineKeyboardButton(text=texts.BTN_ADMIN_MONTH.format(month=format_month(month), count=count),
+                                    callback_data=_dict(kind, DictAction.MONTH, page=month, value=parent))
+               for month, count in shown[page * page_size:(page + 1) * page_size]]
+    rows = [buttons[i:i + 2] for i in range(0, len(buttons), 2)]
+    if pages > 1:
+        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, field=field, page=page - 1, value=parent),
+                           _dict(kind, DictAction.LIST, field=field, page=page + 1, value=parent)))
+    if past:
+        rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_UPCOMING_MONTHS,
+                                          callback_data=_dict(kind, DictAction.LIST, value=parent))])
+    else:
+        if older:
+            rows.append([InlineKeyboardButton(
+                text=texts.BTN_ADMIN_PAST_MONTHS.format(count=sum(count for _, count in older)),
+                callback_data=_dict(kind, DictAction.LIST, field="past", value=parent))])
+        rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD,
+                                          callback_data=_dict(kind, DictAction.ADD, value=parent))])
+    if parent_id:
         rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK_TO_COURSE,
                                           callback_data=_dict(DictKind.COURSES, DictAction.VIEW, parent_id))])
     rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK, callback_data=_admin(AdminAction.MENU))])
@@ -147,9 +191,8 @@ def _edit_buttons(spec: DictionarySpec, item_id: int, page: int, parent: str = "
     return builder
 
 
-def _back_to_list(builder: InlineKeyboardBuilder, kind: DictKind, page: int, parent: str = "") -> None:
-    builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_TO_LIST,
-                                     callback_data=_dict(kind, DictAction.LIST, page=page, value=parent)))
+def _back_to_list(builder: InlineKeyboardBuilder, kind: DictKind, page: int) -> None:
+    builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_TO_LIST, callback_data=_dict(kind, DictAction.LIST, page=page)))
 
 
 def _archive_button(kind: DictKind, item_id: int, active: bool, page: int, parent: str = "") -> InlineKeyboardButton:
@@ -193,24 +236,35 @@ def course_card_markup(spec: DictionarySpec, item_id: int, active: bool, has_pro
     return builder.as_markup()
 
 
-def session_card_markup(spec: DictionarySpec, item_id: int, status: str, active: bool, page: int = 0,
-                        parent_id: int | None = None) -> InlineKeyboardMarkup:
-    """Под карточкой проведения (как в афише): поля, статус в одно нажатие, копия, скрыть, к списку."""
+def session_card_markup(spec: DictionarySpec, item_id: int, status: str, active: bool,
+                        parent_id: int | None = None, index: int = 0, total: int = 1,
+                        prev_id: int = 0, next_id: int = 0, past_month: bool = False) -> InlineKeyboardMarkup:
+    """Под карточкой проведения (как в афише): ◀️ n/N ▶️ по проведениям того же месяца, поля, статус в одно
+    нажатие, копия, скрыть, к месяцам.
+
+    index/total — место проведения среди проведений месяца, prev_id/next_id — соседи (0 — края).
+    past_month — месяц уже прошёл: «К месяцам» вернёт на экран прошедших.
+    """
     parent = _parent(parent_id)
-    builder = _edit_buttons(spec, item_id, page, parent)
+    builder = InlineKeyboardBuilder()
+    builder.row(*_pager(index, total, _dict(spec.kind, DictAction.VIEW, prev_id, value=parent),
+                        _dict(spec.kind, DictAction.VIEW, next_id, value=parent)))
+    builder.attach(_edit_buttons(spec, item_id, 0, parent))
     status_field = spec.field("status")
     statuses = InlineKeyboardBuilder()
     for choice in status_field.choices:
         mark = "✅ " if choice == status else ""
         statuses.button(text=mark + texts.ADMIN_CHOICE_LABELS["status"][choice],
-                        callback_data=_dict(spec.kind, DictAction.STATUS, item_id, page=page,
+                        callback_data=_dict(spec.kind, DictAction.STATUS, item_id,
                                             value=f"{choice}~{parent}"))  # «:» — разделитель callback_data
     statuses.adjust(2)
     builder.attach(statuses)
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_COPY,
                                      callback_data=_dict(spec.kind, DictAction.COPY, item_id, value=parent)))
-    builder.row(_archive_button(spec.kind, item_id, active, page, parent))
-    _back_to_list(builder, spec.kind, page, parent)
+    builder.row(_archive_button(spec.kind, item_id, active, 0, parent))
+    builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_TO_MONTHS,
+                                     callback_data=_dict(spec.kind, DictAction.LIST, field="past" if past_month else "",
+                                                         value=parent)))
     return builder.as_markup()
 
 

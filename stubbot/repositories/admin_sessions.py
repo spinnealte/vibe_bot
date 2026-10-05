@@ -1,3 +1,5 @@
+from datetime import date
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -13,6 +15,24 @@ class AdminSessionRepository:
 
     async def list_all(self, program_id: int | None = None) -> list[CourseSession]:
         stmt = select(CourseSession).options(selectinload(CourseSession.program))
+        if program_id is not None:
+            stmt = stmt.where(CourseSession.program_id == program_id)
+        return list(await self.session.scalars(stmt.order_by(CourseSession.start_date, CourseSession.id)))
+
+    async def start_dates(self, program_id: int | None = None) -> list[date]:
+        """Даты начала всех проведений (или одного курса) — чтобы показать, в каких месяцах они есть."""
+        stmt = select(CourseSession.start_date)
+        if program_id is not None:
+            stmt = stmt.where(CourseSession.program_id == program_id)
+        return list(await self.session.scalars(stmt))
+
+    async def list_between(self, first: date, before: date, program_id: int | None = None) -> list[CourseSession]:
+        """Проведения, которые начинаются в [first, before), по порядку дат."""
+        stmt = (
+            select(CourseSession)
+            .where(CourseSession.start_date >= first, CourseSession.start_date < before)
+            .options(selectinload(CourseSession.program))
+        )
         if program_id is not None:
             stmt = stmt.where(CourseSession.program_id == program_id)
         return list(await self.session.scalars(stmt.order_by(CourseSession.start_date, CourseSession.id)))

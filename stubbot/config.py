@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     legal_docs_dir: Path = Path("legal")
     timezone: str = "Europe/Moscow"
 
+    # Защита от флуда: не больше flood_limit обращений от одного человека за flood_window секунд. 0 — выключить.
+    flood_limit: int = 20
+    flood_window: float = 5.0
+
     # MVP — афиша: заявки, «Мои заявки» и «Сообщить о наборе» выключены (код в tg/handlers/application.py).
     applications_enabled: bool = False
 

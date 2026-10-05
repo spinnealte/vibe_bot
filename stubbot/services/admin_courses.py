@@ -4,7 +4,6 @@
 «В архив» — archived_at: курс и его проведения пропадают из афиши, но не удаляются.
 """
 
-import logging
 from datetime import UTC, datetime
 from typing import Any
 
@@ -13,11 +12,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.db.enums import DeliveryFormat, ProgramLevel
 from stubbot.db.models import Lecturer, Program, Specialty
 from stubbot.repositories.admin_courses import AdminCourseRepository
-from stubbot.services.admin_dictionaries import DictField, DictionarySpec, DictKind, FieldKind, SaveResult
+from stubbot.services.admin_dictionaries import (
+    ENTITY_NAMES,
+    DictField,
+    DictionarySpec,
+    DictKind,
+    FieldKind,
+    SaveResult,
+)
+from stubbot.services.admin_log import log_admin_action
 from stubbot.utils.names import short_name
 from stubbot.utils.slug import slugify
-
-logger = logging.getLogger(__name__)
 
 # Порядок — порядок шагов мастера (решение 02.10.2026).
 COURSE_SPEC = DictionarySpec(
@@ -42,9 +47,9 @@ _ENUMS = {"level": ProgramLevel, "default_format": DeliveryFormat}
 class AdminCourseService:
     spec = COURSE_SPEC
 
-    def __init__(self, session: AsyncSession, admin_client_id: int) -> None:
+    def __init__(self, session: AsyncSession, admin_telegram_id: int | None) -> None:
         self.repo = AdminCourseRepository(session)
-        self.admin_client_id = admin_client_id
+        self.admin_telegram_id = admin_telegram_id
 
     async def items(self, parent_id: int | None = None) -> list[Program]:
         return await self.repo.list_all()
@@ -150,4 +155,4 @@ class AdminCourseService:
         return slug
 
     def _log(self, message: str, *args: object) -> None:
-        logger.info("Админ (клиент #%s), crs: " + message, self.admin_client_id, *args)
+        log_admin_action(self.admin_telegram_id, ENTITY_NAMES[DictKind.COURSES], message, *args)

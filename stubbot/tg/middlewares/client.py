@@ -2,7 +2,8 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram import BaseMiddleware
-from aiogram.types import TelegramObject, User
+from aiogram.enums import ChatType
+from aiogram.types import Chat, TelegramObject, User
 
 from stubbot.services.clients import ClientService, TelegramProfile
 
@@ -20,7 +21,9 @@ class ClientMiddleware(BaseMiddleware):
         data: dict[str, Any],
     ) -> Any:
         user: User | None = data.get("event_from_user")
-        if user is None or user.is_bot:
+        chat: Chat | None = data.get("event_chat")
+        # Бот работает только в личных чатах (см. handlers/__init__.py): в группах клиентов не заводим.
+        if user is None or user.is_bot or chat is None or chat.type != ChatType.PRIVATE:
             return await handler(event, data)
         profile = TelegramProfile(
             telegram_id=user.id,

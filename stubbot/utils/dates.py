@@ -5,7 +5,30 @@ MONTHS_GENITIVE = (
     "января", "февраля", "марта", "апреля", "мая", "июня",
     "июля", "августа", "сентября", "октября", "ноября", "декабря",
 )
+MONTHS_NOMINATIVE = (
+    "Январь", "Февраль", "Март", "Апрель", "Май", "Июнь",
+    "Июль", "Август", "Сентябрь", "Октябрь", "Ноябрь", "Декабрь",
+)
 WEEKDAYS_SHORT = ("пн", "вт", "ср", "чт", "пт", "сб", "вс")
+
+
+def month_key(day: date) -> int:
+    """Месяц одним числом ГГГГММ (октябрь 2026 → 202610): так он помещается в данные кнопки и сортируется."""
+    return day.year * 100 + day.month
+
+
+def month_bounds(key: int) -> tuple[date, date] | None:
+    """Первый день месяца ГГГГММ и первый день следующего. None — число не похоже на месяц (подделанная кнопка)."""
+    year, month = divmod(key, 100)
+    if not (2000 <= year <= 2100 and 1 <= month <= 12):
+        return None
+    return date(year, month, 1), date(year + month // 12, month % 12 + 1, 1)
+
+
+def format_month(key: int) -> str:
+    """202610 → «Октябрь 2026»"""
+    year, month = divmod(key, 100)
+    return f"{MONTHS_NOMINATIVE[month - 1]} {year}"
 
 
 def local_today(timezone: str) -> date:

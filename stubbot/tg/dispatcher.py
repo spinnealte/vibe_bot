@@ -1,3 +1,5 @@
+from datetime import timedelta
+
 from aiogram import Dispatcher
 from aiogram.fsm.storage.base import BaseStorage
 from aiogram.fsm.storage.redis import RedisStorage
@@ -10,8 +12,18 @@ from stubbot.tg.middlewares import (
     ClientMiddleware,
     DbSessionMiddleware,
     HandlerLogMiddleware,
+    ThrottlingMiddleware,
     UnhandledLogMiddleware,
 )
+
+FSM_TTL = timedelta(days=2)
+
+
+def create_storage(redis_url: str) -> RedisStorage:
+    """Хранилище шагов сценариев. Незаконченный сценарий (шаг регистрации, черновик мастера в админке) Redis
+    забывает сам через FSM_TTL после последнего действия: там бывает ФИО до подтверждения, хранить это бессрочно
+    незачем. Человек просто начнёт с того шага, который не сохранён в БД."""
+    return RedisStorage.from_url(redis_url, state_ttl=FSM_TTL, data_ttl=FSM_TTL)
 
 
 def create_dispatcher(
@@ -19,13 +31,18 @@ def create_dispatcher(
     session_factory: async_sessionmaker[AsyncSession],
     storage: BaseStorage | None = None,
 ) -> Dispatcher:
-    dp = Dispatcher(storage=storage or RedisStorage.from_url(settings.redis_url))
+    dp = Dispatcher(storage=storage or create_storage(settings.redis_url))
     dp["settings"] = settings  # доступно в хендлерах аргументом `settings`
     dp["session_factory"] = session_factory  # для работы с БД вне транзакции апдейта (обработчик ошибок)
     dp.errors.register(on_error)
 
     dp.update.outer_middleware(DbSessionMiddleware(session_factory))
     dp.update.outer_middleware(UnhandledLogMiddleware())
+    # Защита от флуда — раньше всего остального: лишние обращения не доходят до БД.
+    if settings.flood_limit > 0:
+        throttle = ThrottlingMiddleware(settings.flood_limit, settings.flood_window)
+        dp.message.outer_middleware(throttle)
+        dp.callback_query.outer_middleware(throttle)
     # Клиент нужен только там, где есть отправитель-человек: сообщения и нажатия кнопок.
     dp.message.outer_middleware(ClientMiddleware())
     dp.callback_query.outer_middleware(ClientMiddleware())

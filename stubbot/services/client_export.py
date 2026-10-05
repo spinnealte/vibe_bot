@@ -1,9 +1,8 @@
 """Выгрузка клиентов в CSV (этап 6): вся таблица клиентов одним файлом для Excel, без аналитики.
 
-В файле персональные данные: он уходит только в чат админа, в лог пишется только число строк.
+В файле персональные данные: он уходит только в чат админа, в журнал действий пишется только число строк.
 """
 
-import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -14,9 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.db.enums import ConsentType, ProfileStatus
 from stubbot.repositories.clients import ClientRepository
 from stubbot.repositories.consents import ConsentRepository
+from stubbot.services.admin_log import log_admin_action
 from stubbot.utils.csv_export import build_csv
-
-logger = logging.getLogger(__name__)
 
 # Порядок колонок — как в client_row(). Первая колонка не «ID»: файл, который начинается с этих двух букв,
 # Excel принимает за формат SYLK и открывает с ошибкой.
@@ -79,17 +77,17 @@ def client_row(client: Any, pd_consent: bool, marketing: bool, tz: ZoneInfo) -> 
 
 
 class ClientExportService:
-    def __init__(self, session: AsyncSession, admin_client_id: int) -> None:
+    def __init__(self, session: AsyncSession, admin_telegram_id: int | None) -> None:
         self.clients = ClientRepository(session)
         self.consents = ConsentRepository(session)
-        self.admin_client_id = admin_client_id
+        self.admin_telegram_id = admin_telegram_id
 
     async def build(self, now: datetime, tz: ZoneInfo) -> ClientExport:
         clients = await self.clients.all_for_export()
         with_pd = await self.consents.client_ids_with_active(ConsentType.PERSONAL_DATA)
         with_marketing = await self.consents.client_ids_with_active(ConsentType.MARKETING)
         rows = [client_row(client, client.id in with_pd, client.id in with_marketing, tz) for client in clients]
-        logger.info("Админ (клиент #%s): выгрузка клиентов, строк: %s", self.admin_client_id, len(rows))
+        log_admin_action(self.admin_telegram_id, "клиенты", "выгрузка в CSV, строк: %s", len(rows))
         return ClientExport(
             filename=f"clients_{now.astimezone(tz):%Y-%m-%d_%H-%M}.csv",
             content=build_csv(HEADER, rows),

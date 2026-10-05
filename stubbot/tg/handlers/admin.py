@@ -32,6 +32,7 @@ from stubbot.services.admin_dictionaries import (
     SaveResult,
     parse_field,
 )
+from stubbot.services.admin_log import log_admin_action
 from stubbot.services.admin_registry import ADMIN_SPECS, admin_service
 from stubbot.services.admin_sessions import COPY_FIELDS, MAX_PRICE_LABEL, PRICE_KINDS, AdminSessionService
 from stubbot.services.client_export import ClientExportService
@@ -43,7 +44,7 @@ from stubbot.tg.flows import with_notice
 from stubbot.tg.formatting import safe
 from stubbot.tg.screen import DEFAULT_COVER, Photo, delete_quietly, send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import AdminDict
-from stubbot.utils.dates import local_today
+from stubbot.utils.dates import local_today, month_key
 from stubbot.utils.documents import MAX_FILE_SIZE, SUPPORTED_EXTENSIONS, file_to_html
 from stubbot.utils.schedule_input import parse_rubles
 
@@ -62,12 +63,18 @@ _SAVE_ERRORS = {
 
 
 def _service(session: AsyncSession, kind: DictKind, client: Client) -> AdminEntityService:
-    return admin_service(session, kind, client.id)
+    # Telegram ID админа — для журнала действий (logs/admin.log).
+    return admin_service(session, kind, client.telegram_id)
+
+
+def _courses(session: AsyncSession, client: Client) -> AdminCourseService:
+    """Сервис курсов — когда нужны его особые действия (предпросмотр, показ без дат)."""
+    return AdminCourseService(session, client.telegram_id)
 
 
 def _sessions(session: AsyncSession, client: Client) -> AdminSessionService:
     """Сервис проведений — когда нужны его особые действия (статус, копия, предпросмотр)."""
-    return AdminSessionService(session, client.id, local_today(get_settings().timezone))
+    return AdminSessionService(session, client.telegram_id, local_today(get_settings().timezone))
 
 
 def _parent(value: str) -> int | None:
@@ -85,6 +92,7 @@ async def _screen(message: Message, text: str, markup: InlineKeyboardMarkup, in_
 @router.message(F.text == texts.BTN_ADMIN)
 async def open_admin(message: Message, state: FSMContext) -> None:
     await state.clear()
+    log_admin_action(message.from_user.id, "админка", "вход")
     text, markup = admin_views.menu()
     await message.answer(text, reply_markup=markup)
 
@@ -115,7 +123,7 @@ async def export_clients(callback: CallbackQuery, state: FSMContext, session: As
     await state.clear()
     tz = ZoneInfo(get_settings().timezone)
     now = datetime.now(UTC)
-    export = await ClientExportService(session, client.id).build(now, tz)
+    export = await ClientExportService(session, client.telegram_id).build(now, tz)
     await delete_quietly(callback.message)
     await callback.message.answer_document(
         BufferedInputFile(export.content, filename=export.filename),
@@ -132,7 +140,25 @@ async def show_list(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
     await callback.answer()
     await state.clear()
     await _show_list(callback.message, session, client, callback_data.kind, callback_data.page,
-                     parent_id=_parent(callback_data.value))
+                     parent_id=_parent(callback_data.value), past=callback_data.field == "past")
+
+
+@router.callback_query(DictCb.filter((F.action == DictAction.MONTH) & (F.kind == DictKind.SESSIONS)))
+async def show_month(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
+                     client: Client) -> None:
+    """Проведения месяца (page — ГГГГММ): открываем первое ближайшее, дальше — стрелками ◀️ ▶️ в карточке."""
+    await state.clear()
+    service = _sessions(session, client)
+    parent_id = _parent(callback_data.value)
+    items = await service.month_items(callback_data.page, parent_id)
+    if not items:
+        # Проведения месяца перенесли или кнопка подделана — показываем актуальные месяцы.
+        await callback.answer(texts.ADMIN_MONTH_EMPTY)
+        await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, parent_id=parent_id)
+        return
+    await callback.answer()
+    first = next((item for item in items if not service.is_past(item)), items[0])
+    await _show_card(callback.message, session, client, DictKind.SESSIONS, first.id, 0, parent_id=parent_id)
 
 
 @router.callback_query(DictCb.filter(F.action == DictAction.VIEW))
@@ -158,7 +184,7 @@ async def toggle_archive(callback: CallbackQuery, callback_data: DictCb, state: 
         return
     await callback.answer()
     if callback_data.kind is DictKind.SESSIONS:
-        notice = texts.ADMIN_SESSION_SHOWN if active else texts.ADMIN_SESSION_HIDDEN
+        notice = texts.ADMIN_SESSION_SHOWN if active else None  # «скрыто» карточка проведения покажет пометкой
     else:
         notice = texts.ADMIN_RESTORED_NOTICE if active else texts.ADMIN_ARCHIVED_NOTICE
     await _show_card(callback.message, session, client, callback_data.kind, callback_data.item_id,
@@ -185,7 +211,7 @@ async def set_show_without_dates(callback: CallbackQuery, callback_data: DictCb,
     """Курс без проведений: показывать в афише как «даты уточняются» или нет (решение 14)."""
     await state.clear()
     show = callback_data.value == "1"
-    if await AdminCourseService(session, client.id).set_show_without_dates(callback_data.item_id, show) is None:
+    if await _courses(session, client).set_show_without_dates(callback_data.item_id, show) is None:
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
     await callback.answer()
@@ -195,7 +221,7 @@ async def set_show_without_dates(callback: CallbackQuery, callback_data: DictCb,
 
 @router.callback_query(DictCb.filter((F.action == DictAction.PROGRAM) & (F.kind == DictKind.COURSES)))
 async def show_program(callback: CallbackQuery, callback_data: DictCb, session: AsyncSession, client: Client) -> None:
-    program = await AdminCourseService(session, client.id).item(callback_data.item_id)
+    program = await _courses(session, client).item(callback_data.item_id)
     if program is None or not program.program_html:
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
@@ -216,7 +242,7 @@ async def start_add(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
     ask = [f.name for f in spec.fields]
     parent_id = _parent(callback_data.value)
     if callback_data.kind is DictKind.SESSIONS and parent_id is not None:
-        if await AdminCourseService(session, client.id).item(parent_id) is None:
+        if await _courses(session, client).item(parent_id) is None:
             await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
             return
         values["program_id"] = parent_id
@@ -625,7 +651,7 @@ async def _next_step(message: Message, state: FSMContext, session: AsyncSession,
     values = data["values"]
     if spec.kind is DictKind.COURSES:
         # Курс — ровно как его увидят в афише: обложка + подпись; кнопка «🚀 Опубликовать».
-        program = await AdminCourseService(session, client.id).preview(values)
+        program = await _courses(session, client).preview(values)
         await _screen(message, render.program_caption(program), admin_views.publish_markup(spec.kind), in_place,
                       photo=program.cover_file_id or DEFAULT_COVER)
         return
@@ -640,25 +666,32 @@ async def _next_step(message: Message, state: FSMContext, session: AsyncSession,
 # --- Вспомогательное -------------------------------------------------------------------------------------------
 
 async def _show_list(message: Message, session: AsyncSession, client: Client, kind: DictKind, page: int,
-                     notice: str | None = None, in_place: bool = True, parent_id: int | None = None) -> None:
+                     notice: str | None = None, in_place: bool = True, parent_id: int | None = None,
+                     past: bool = False) -> None:
+    """Список записей. Проведения — не списком, а по месяцам (past — экран прошедших месяцев);
+    parent_id — проведения одного курса."""
+    if kind is DictKind.SESSIONS:
+        service = _sessions(session, client)
+        heading = None
+        if parent_id is not None:
+            course = await _courses(session, client).item(parent_id)
+            heading = f"{texts.ADMIN_DICT_TITLES[kind.value]}: {safe(course.title)}" if course else None
+        text, markup = admin_views.session_months(await service.months(parent_id), service.current_month, past, page,
+                                                  parent_id, heading)
+        # После мастера или карточки с фото этот текстовый экран заменит фото: screen.py удалит и пришлёт заново.
+        await _screen(message, with_notice(notice, text), markup, in_place)
+        return
     service = _service(session, kind, client)
-    heading = None
-    if parent_id is not None:
-        course = await AdminCourseService(session, client.id).item(parent_id)
-        heading = f"{texts.ADMIN_DICT_TITLES[kind.value]}: {safe(course.title)}" if course else None
-    entries = []
-    for item in await service.items(parent_id):
-        title = service.title(item)
-        if kind is DictKind.SESSIONS and service.is_past(item):
-            title = texts.ADMIN_PAST_MARK + title
-        entries.append((item.id, title, service.is_active(item)))
-    text, markup = admin_views.dict_list(service.spec, entries, page, parent_id, heading)
+    entries = [(item.id, service.title(item), service.is_active(item)) for item in await service.items()]
+    text, markup = admin_views.dict_list(service.spec, entries, page)
     await _screen(message, with_notice(notice, text), markup, in_place)
 
 
 async def _show_card(message: Message, session: AsyncSession, client: Client, kind: DictKind, item_id: int, page: int, notice: str | None = None, in_place: bool = True,
                      parent_id: int | None = None) -> bool:
     """Карточка записи; курс и проведение — ровно как в афише (обложка + подпись). False — записи нет."""
+    if kind is DictKind.SESSIONS:
+        return await _show_session_card(message, session, client, item_id, notice, in_place, parent_id)
     service = _service(session, kind, client)
     item = await service.item(item_id)
     if item is None:
@@ -669,18 +702,40 @@ async def _show_card(message: Message, session: AsyncSession, client: Client, ki
         await _screen(message, _fit_notice(notice, render.program_caption(item)), markup, in_place,
                       photo=item.cover_file_id or DEFAULT_COVER)
         return True
-    if kind is DictKind.SESSIONS:
-        card = SessionCard(session=item, seats_left=None)
-        caption = _session_caption(card)
-        if item.program.archived_at is not None:
-            caption = _fit_notice(texts.ADMIN_COURSE_ARCHIVED_HINT, caption)
-        markup = admin_views.session_card_markup(service.spec, item.id, item.status.value, item.is_visible, page,
-                                                 parent_id)
-        await _screen(message, _fit_notice(notice, caption), markup, in_place, photo=_session_photo(card))
-        return True
     values = {f.name: service.field_value(item, f) for f in service.spec.fields}
     text, markup = admin_views.card(service.spec, item.id, values, service.is_active(item), page)
     await _screen(message, with_notice(notice, text), markup, in_place)
+    return True
+
+
+async def _show_session_card(message: Message, session: AsyncSession, client: Client, item_id: int,
+                             notice: str | None, in_place: bool, parent_id: int | None) -> bool:
+    """Карточка проведения как в афише, со стрелками ◀️ n/N ▶️ по проведениям того же месяца
+    (или того же месяца одного курса, если пришли из карточки курса). False — проведения нет."""
+    service = _sessions(session, client)
+    item = await service.item(item_id)
+    if item is None:
+        return False
+    month = month_key(item.start_date)
+    siblings = [s.id for s in await service.month_items(month, parent_id)]
+    index = siblings.index(item.id) if item.id in siblings else 0
+    markup = admin_views.session_card_markup(
+        service.spec, item.id, item.status.value, item.is_visible, parent_id,
+        index=index, total=max(len(siblings), 1),
+        prev_id=siblings[index - 1] if index > 0 else 0,
+        next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
+        past_month=month < service.current_month,
+    )
+    card = SessionCard(session=item, seats_left=None)
+    caption = _session_caption(card)
+    # Пометки над подписью — то, чего по самой карточке не видно: в списке их раньше показывали значки.
+    hints = [hint for hint, shown in (
+        (texts.ADMIN_COURSE_ARCHIVED_HINT, item.program.archived_at is not None),
+        (texts.ADMIN_SESSION_HIDDEN, not item.is_visible),
+        (texts.ADMIN_SESSION_PAST_HINT, service.is_past(item)),
+    ) if shown]
+    caption = _fit_notice("\n".join(hints) or None, caption)
+    await _screen(message, _fit_notice(notice, caption), markup, in_place, photo=_session_photo(card))
     return True
 
 

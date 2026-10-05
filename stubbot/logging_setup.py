@@ -3,6 +3,8 @@ import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+from stubbot.services.admin_log import ADMIN_LOGGER_NAME
+
 # Маскируем то, что не должно попасть в логи, даже если случайно окажется в сообщении или трейсбеке.
 # Порядок важен: учётные данные в URL — до email, иначе «pass@host» примется за адрес почты.
 _MASKS = [
@@ -44,6 +46,15 @@ def setup_logging(level: str, log_dir: Path) -> None:
     root.setLevel(level.upper())
     root.addHandler(console)
     root.addHandler(file)
+
+    # Действия админа — ещё и в отдельный файл (services/admin_log.py): его удобно читать без остального лога.
+    # Уровень INFO — всегда, даже если общий лог настроен строже.
+    admin_file = RotatingFileHandler(log_dir / "admin.log", maxBytes=5 * 1024 * 1024, backupCount=10, encoding="utf-8")
+    admin_file.setFormatter(formatter)
+    admin = logging.getLogger(ADMIN_LOGGER_NAME)
+    admin.handlers.clear()
+    admin.setLevel(logging.INFO)
+    admin.addHandler(admin_file)
 
     # aiogram.event пишет «Update id=… is handled. Duration … ms» — оставляем, как в старом боте.
     # SQL-запросы SQLAlchemy не пишем даже на DEBUG: там параметры с ПД.

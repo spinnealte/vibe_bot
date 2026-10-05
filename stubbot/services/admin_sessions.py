@@ -5,7 +5,7 @@
 Тарифы не удаляются: при замене старые выключаются (is_active=false) — на них могут ссылаться будущие заявки.
 """
 
-import logging
+from collections import Counter
 from datetime import date, datetime, time
 from types import SimpleNamespace
 from typing import Any
@@ -15,11 +15,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.db.enums import DeliveryFormat, PriceKind, PriceUnit, SessionStatus
 from stubbot.db.models import CourseSession, PriceOption, SessionDay
 from stubbot.repositories.admin_sessions import AdminSessionRepository
-from stubbot.services.admin_dictionaries import DictField, DictionarySpec, DictKind, FieldKind, SaveResult
+from stubbot.services.admin_dictionaries import (
+    ENTITY_NAMES,
+    DictField,
+    DictionarySpec,
+    DictKind,
+    FieldKind,
+    SaveResult,
+)
+from stubbot.services.admin_log import log_admin_action
 from stubbot.services.schedule import SessionCard
-from stubbot.utils.dates import format_range
-
-logger = logging.getLogger(__name__)
+from stubbot.utils.dates import format_range, month_bounds, month_key
 
 # Категории тарифов — как в пет-проекте. «Для двух коллег» — цена за группу из двух человек.
 PRICE_KINDS = (PriceKind.FULL.value, PriceKind.GROUP.value, PriceKind.THEORY.value, PriceKind.PRACTICE.value)
@@ -73,17 +79,31 @@ def valid_prices(value: Any) -> bool:
 class AdminSessionService:
     spec = SESSION_SPEC
 
-    def __init__(self, session: AsyncSession, admin_client_id: int, today: date) -> None:
+    def __init__(self, session: AsyncSession, admin_telegram_id: int | None, today: date) -> None:
         self.repo = AdminSessionRepository(session)
-        self.admin_client_id = admin_client_id
+        self.admin_telegram_id = admin_telegram_id
         self.today = today
 
     async def items(self, parent_id: int | None = None) -> list[CourseSession]:
-        """Ближайшие и текущие — по дате начала; прошедшие — в конце, свежие первыми."""
-        sessions = await self.repo.list_all(parent_id)
-        upcoming = [s for s in sessions if s.end_date >= self.today]
-        past = sorted((s for s in sessions if s.end_date < self.today), key=lambda s: s.start_date, reverse=True)
-        return upcoming + past
+        """Все проведения по дате начала. В админке они показываются по месяцам: months() и month_items()."""
+        return await self.repo.list_all(parent_id)
+
+    async def months(self, parent_id: int | None = None) -> list[tuple[int, int]]:
+        """Месяцы, в которых есть проведения (по дате начала): [(ГГГГММ, сколько проведений)] по порядку.
+
+        В админке проведения не показываются одним длинным списком: сначала месяц, внутри — листание стрелками.
+        """
+        counts = Counter(month_key(day) for day in await self.repo.start_dates(parent_id))
+        return sorted(counts.items())
+
+    async def month_items(self, month: int, parent_id: int | None = None) -> list[CourseSession]:
+        """Проведения месяца ГГГГММ по порядку дат — их и листают стрелками. Скрытые и прошедшие тоже здесь."""
+        bounds = month_bounds(month)
+        return await self.repo.list_between(*bounds, parent_id) if bounds else []
+
+    @property
+    def current_month(self) -> int:
+        return month_key(self.today)
 
     async def item(self, item_id: int) -> CourseSession | None:
         return await self.repo.get(item_id)
@@ -231,7 +251,7 @@ class AdminSessionService:
         return True
 
     def _log(self, message: str, *args: object) -> None:
-        logger.info("Админ (клиент #%s), ses: " + message, self.admin_client_id, *args)
+        log_admin_action(self.admin_telegram_id, ENTITY_NAMES[DictKind.SESSIONS], message, *args)
 
 
 def _price_option(index: int, price: dict[str, Any]) -> PriceOption:
