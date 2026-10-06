@@ -1,0 +1,27 @@
+# Служба stubBot. Ставится установщиком deploy/install.sh в /etc/systemd/system/stubbot.service.
+[Unit]
+Description=stubBot Telegram bot
+After=network-online.target postgresql.service redis-server.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=stubbot
+Group=stubbot
+WorkingDirectory=/opt/stubbot
+ExecStart=/opt/stubbot/.venv/bin/python -m stubbot
+Environment=PYTHONUNBUFFERED=1
+# Упал или нет связи с Telegram — пробуем снова через 10 секунд.
+Restart=always
+RestartSec=10
+# Бот завершается сам по SIGTERM: закрывает соединения с базой и Redis.
+TimeoutStopSec=30
+
+# Ограничения: бот не получает новых прав, не видит домашние каталоги, системные каталоги — только для чтения.
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

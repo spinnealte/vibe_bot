@@ -2,3 +2,16 @@
 * text=auto eol=lf
 # Скрипты для сервера — обязательно LF, иначе bash на Ubuntu споткнётся о \r
 *.sh text eol=lf
+*.service text eol=lf
+# Скрипт для Windows — CRLF, как ждёт cmd.exe
+*.cmd text eol=crlf
+
+# На сервер (git archive в deploy/deploy.cmd) не едет то, что нужно только при разработке.
+# Скрипты с демо-курсами и выдуманными клиентами — тоже: на рабочей базе их запускать нельзя.
+/tests export-ignore
+/docs export-ignore
+/CLAUDE.md export-ignore
+/requirements-dev.txt export-ignore
+/scripts/seed_demo.py export-ignore
+/scripts/seed_fake_clients.py export-ignore
+/scripts/make_default_cover.py export-ignore
