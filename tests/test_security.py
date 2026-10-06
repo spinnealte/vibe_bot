@@ -1,5 +1,5 @@
-"""Защита данных без БД и Telegram: только личные чаты, ограничение частоты, срок жизни шагов в Redis,
-журнал действий админа."""
+"""Защита данных без БД и Telegram: только личные чаты, ограничение частоты, обработка по очереди,
+срок жизни шагов в Redis, журнал действий админа."""
 
 import asyncio
 import logging
@@ -11,7 +11,8 @@ import pytest
 from aiogram import Bot, Dispatcher
 from aiogram.client.session.base import BaseSession
 from aiogram.enums import ChatMemberStatus, ChatType
-from aiogram.fsm.storage.memory import MemoryStorage
+from aiogram.fsm.storage.base import StorageKey
+from aiogram.fsm.storage.memory import MemoryStorage, SimpleEventIsolation
 from aiogram.methods import LeaveChat
 from aiogram.types import (
     CallbackQuery,
@@ -140,6 +141,28 @@ def test_throttle_registered_for_messages_and_buttons(dp: Dispatcher) -> None:
         assert isinstance(first, ThrottlingMiddleware)  # раньше остальных — до работы с БД
         assert (first.limit, first.window) == (20, 5.0)
     assert dp.message.outer_middleware[0] is dp.callback_query.outer_middleware[0]  # счёт общий
+
+
+def test_one_persons_updates_are_handled_in_turn(dp: Dispatcher) -> None:
+    """Два быстрых нажатия одного человека не обрабатываются одновременно (иначе «Сохранить» создаёт две записи):
+    второе ждёт первое. Проверено сценарием на БД; здесь — что очередь включена и у разных людей она своя."""
+    isolation = dp.fsm.events_isolation
+    assert isinstance(isolation, SimpleEventIsolation)
+    order: list[str] = []
+
+    async def tap(key: StorageKey, name: str, delay: float) -> None:
+        async with isolation.lock(key=key):
+            order.append(f"{name}:начало")
+            await asyncio.sleep(delay)
+            order.append(f"{name}:конец")
+
+    async def scenario() -> None:
+        ivan, anna = (StorageKey(bot_id=1, chat_id=uid, user_id=uid) for uid in (5, 6))
+        await asyncio.gather(tap(ivan, "иван-1", 0.05), tap(ivan, "иван-2", 0.0), tap(anna, "анна", 0.0))
+
+    asyncio.run(scenario())
+    assert order.index("иван-1:конец") < order.index("иван-2:начало")  # второе нажатие ждёт первое
+    assert order.index("анна:конец") < order.index("иван-1:конец")  # другой человек не ждёт
 
 
 class _Clock:

@@ -2,6 +2,7 @@ from datetime import timedelta
 
 from aiogram import Dispatcher
 from aiogram.fsm.storage.base import BaseStorage
+from aiogram.fsm.storage.memory import SimpleEventIsolation
 from aiogram.fsm.storage.redis import RedisStorage
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
@@ -31,7 +32,10 @@ def create_dispatcher(
     session_factory: async_sessionmaker[AsyncSession],
     storage: BaseStorage | None = None,
 ) -> Dispatcher:
-    dp = Dispatcher(storage=storage or create_storage(settings.redis_url))
+    # Обращения одного человека обрабатываются строго по очереди (events_isolation): иначе два быстрых нажатия
+    # «Сохранить» идут одновременно, оба видят один и тот же шаг и создают две одинаковые записи.
+    # Замки в памяти процесса — бот работает одним процессом. Разные люди друг друга не ждут.
+    dp = Dispatcher(storage=storage or create_storage(settings.redis_url), events_isolation=SimpleEventIsolation())
     dp["settings"] = settings  # доступно в хендлерах аргументом `settings`
     dp["session_factory"] = session_factory  # для работы с БД вне транзакции апдейта (обработчик ошибок)
     dp.errors.register(on_error)
