@@ -157,12 +157,12 @@ def contact_manager(url: str) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[[manager_button(url)]])
 
 
-def course_carousel(index: int, total: int, program_id: int, session_id: int | None, apply_text: str | None,
+def course_carousel(index: int, total: int, program_id: int, session_id: int, apply_text: str | None,
                     notify: bool, has_program_text: bool, manager_url: str | None = None,
                     admin: bool = False) -> InlineKeyboardMarkup:
     """◀️ n/N ▶️ / Оставить заявку (или «Сообщить о наборе») / Менеджер / Программа · Назад / ✏️ Править (админу)."""
     rows = [_pager(index, total, _sch(ScheduleAction.SLIDE, index=index - 1), _sch(ScheduleAction.SLIDE, index=index + 1))]
-    if apply_text and session_id:
+    if apply_text:
         rows.append([InlineKeyboardButton(text=apply_text,
                                           callback_data=_sch(ScheduleAction.APPLY, session_id, index))])
     if notify:
@@ -177,10 +177,11 @@ def course_carousel(index: int, total: int, program_id: int, session_id: int | N
     bottom.append(InlineKeyboardButton(text=texts.BTN_CLOSE_SCHEDULE, callback_data=_sch(ScheduleAction.CLOSE)))
     rows.append(bottom)
     if admin:
-        # Ведёт в карточку курса в админке; кнопку обрабатывает админ-роутер (фильтр IsAdmin).
+        # Ведёт в карточку этого проведения в админке (афиша правится в «Проведениях»); кнопку обрабатывает
+        # админ-роутер (фильтр IsAdmin).
         rows.append([InlineKeyboardButton(
             text=texts.BTN_COURSE_EDIT,
-            callback_data=DictCb(kind=DictKind.COURSES, action=DictAction.VIEW, item_id=program_id).pack(),
+            callback_data=DictCb(kind=DictKind.SESSIONS, action=DictAction.VIEW, item_id=session_id).pack(),
         )])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 

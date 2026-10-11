@@ -1,6 +1,6 @@
 from datetime import date
 
-from sqlalchemy import Select, func, select
+from sqlalchemy import Select, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -38,21 +38,24 @@ class CatalogRepository:
         self.session = session
 
     def _public_sessions(self, today: date) -> Select[tuple[CourseSession]]:
+        """Афиша — только проведения: не в архиве и не прошедшие (без дат — «даты уточняются» — тоже здесь).
+        Сам по себе курс в афишу не попадает (решение 16)."""
         return (
             select(CourseSession)
             .join(CourseSession.program)
             .where(
-                CourseSession.is_visible.is_(True),
+                CourseSession.archived_at.is_(None),
                 CourseSession.status.in_(PUBLIC_SESSION_STATUSES),
-                CourseSession.end_date >= today,
+                or_(CourseSession.end_date.is_(None), CourseSession.end_date >= today),
                 *_published_program(),
             )
         )
 
     async def upcoming_session_ids(self, today: date) -> list[int]:
-        """Порядок карусели расписания: по дате начала. Потоков десятки — список id дешевле, чем offset-запросы."""
+        """Порядок карусели расписания: по дате начала, проведения без дат — в конце.
+        Потоков десятки — список id дешевле, чем offset-запросы."""
         stmt = self._public_sessions(today).with_only_columns(CourseSession.id).order_by(
-            CourseSession.start_date, CourseSession.id
+            CourseSession.start_date.asc().nulls_last(), CourseSession.id
         )
         return list(await self.session.scalars(stmt))
 
@@ -63,16 +66,6 @@ class CatalogRepository:
             .options(*_full_session_options())
         )
         return await self.session.scalar(stmt)
-
-    async def programs_without_upcoming_ids(self, today: date) -> list[int]:
-        """Опубликованные курсы без видимого ближайшего потока («даты уточняются»), если админ их не скрыл."""
-        with_sessions = self._public_sessions(today).with_only_columns(CourseSession.program_id)
-        stmt = (
-            select(Program.id)
-            .where(*_published_program(), Program.show_without_dates.is_(True), Program.id.not_in(with_sessions))
-            .order_by(Program.sort_order, Program.title)
-        )
-        return list(await self.session.scalars(stmt))
 
     async def published_program(self, program_id: int) -> Program | None:
         return await self.session.scalar(

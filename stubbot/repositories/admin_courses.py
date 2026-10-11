@@ -1,20 +1,29 @@
-from sqlalchemy import select
+from sqlalchemy import delete, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from stubbot.db.models import Lecturer, Program, Specialty
+from stubbot.db.models import Lecturer, Program, ProgramInterest, Specialty
 
 
 class AdminCourseRepository:
-    """Курсы (programs) для админки: все, включая архив; связи — направления и лекторы."""
+    """Курсы (programs) для админки: действующие и архив; связи — направления и лекторы."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
-    async def list_all(self) -> list[Program]:
-        """Действующие сначала, архив — в конце; внутри — как в афише (sort_order, название)."""
-        stmt = select(Program).order_by(Program.archived_at.is_not(None), Program.sort_order, Program.title)
+    async def list_active(self) -> list[Program]:
+        """Раздел «Курсы»: не в архиве, по порядку (sort_order, название)."""
+        stmt = select(Program).where(Program.archived_at.is_(None)).order_by(Program.sort_order, Program.title)
         return list(await self.session.scalars(stmt))
+
+    async def list_archived(self) -> list[Program]:
+        """«Архив → Курсы»: недавно убранные — первыми."""
+        stmt = select(Program).where(Program.archived_at.is_not(None)).order_by(Program.archived_at.desc(), Program.id)
+        return list(await self.session.scalars(stmt))
+
+    async def archived_count(self) -> int:
+        stmt = select(func.count()).select_from(Program).where(Program.archived_at.is_not(None))
+        return int(await self.session.scalar(stmt) or 0)
 
     async def get(self, program_id: int) -> Program | None:
         stmt = (
@@ -47,3 +56,13 @@ class AdminCourseRepository:
         self.session.add(program)
         await self.session.flush()  # нужен id для карточки
         return program
+
+    async def has_interests(self, program_id: int) -> bool:
+        """Есть ли подписки «Сообщить о наборе» на курс — это данные клиентов, такой курс не удаляем."""
+        stmt = select(ProgramInterest.id).where(ProgramInterest.program_id == program_id).limit(1)
+        return await self.session.scalar(stmt) is not None
+
+    async def delete(self, program_id: int) -> None:
+        """Удалить курс навсегда; связи с направлениями и лекторами удаляет база (CASCADE).
+        Проведения курса должны быть удалены раньше."""
+        await self.session.execute(delete(Program).where(Program.id == program_id))

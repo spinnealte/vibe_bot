@@ -37,7 +37,7 @@ async def _screen(message: Message, text: str, markup: InlineKeyboardMarkup | No
 
 async def show_course(message: Message, session: AsyncSession, today: date, index: int, timezone: str,
                       in_place: bool = True) -> None:
-    """Слайд карусели: поток с датами или курс «даты уточняются»."""
+    """Слайд карусели — проведение: с датами или без дат («даты уточняются»)."""
     slide = await ScheduleService(session).slide(today, index)
     if slide is None:
         await _screen(message, texts.SCHEDULE_EMPTY, in_place=in_place)
@@ -46,28 +46,22 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
     # MVP — афиша: без заявки, «Сообщить о наборе» и счётчика мест, пока заявки выключены в настройках.
     settings = get_settings()
     applications = settings.applications_enabled
-    if card is not None:
-        caption = render.session_caption(card, deadline_text(card, timezone), show_seats=applications)
-        photo = card.session.cover_file_id or program.cover_file_id
-        notify = card.session.status is SessionStatus.ANNOUNCED
-    else:
-        caption = render.program_caption(program)
-        photo = program.cover_file_id
-        notify = True
     markup = keyboards.course_carousel(
         index=slide.index,
         total=slide.total,
         program_id=program.id,
-        session_id=card.session.id if card else None,
-        apply_text=_apply_button(card) if card and applications else None,
-        notify=notify and applications,
+        session_id=card.session.id,
+        apply_text=_apply_button(card) if applications else None,
+        notify=card.session.status is SessionStatus.ANNOUNCED and applications,
         has_program_text=bool(program.program_html),
         # Запись в MVP — через менеджера: чат откроется с готовым черновиком про этот курс.
-        manager_url=with_draft_text(settings.manager_url, render.manager_draft(program, card))
+        manager_url=with_draft_text(settings.manager_url, render.manager_draft(card))
         if settings.manager_url else None,
         admin=settings.is_admin(message.chat.id),  # в личке chat.id = id пользователя
     )
-    await _screen(message, caption, markup, photo or DEFAULT_COVER, in_place)
+    caption = render.session_caption(card, deadline_text(card, timezone), show_seats=applications)
+    photo = card.session.cover_file_id or program.cover_file_id or DEFAULT_COVER
+    await _screen(message, caption, markup, photo, in_place)
 
 
 async def show_program_page(message: Message, session: AsyncSession, program_id: int, index: int,
@@ -158,7 +152,8 @@ async def show_confirm(message: Message, state: FSMContext, session: AsyncSessio
         message,
         texts.APPLY_CONFIRM.format(
             title=safe(render.session_title(card.session)),
-            dates=format_range(card.session.start_date, card.session.end_date),
+            dates=(format_range(card.session.start_date, card.session.end_date) if card.session.start_date
+                   else texts.DATES_TBD),
             price=safe(render.price_label(price)) if price else texts.APPLY_NO_PRICE,
             seats=seats,
             comment=safe(data.get("comment")) if data.get("comment") else f"<i>{texts.APPLY_NO_COMMENT}</i>",

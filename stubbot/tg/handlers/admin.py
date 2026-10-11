@@ -3,7 +3,12 @@
 Фильтр IsAdmin стоит на весь роутер (message и callback_query): чужие нажатия и текст уходят в fallback.
 Один общий редактор для курсов, проведений и справочников (services/admin_registry.py): список → карточка →
 правка поля / архив; «➕ Добавить» — мастер по полям с предпросмотром. Ответ сообщением — новым экраном, у вопроса
-убираем кнопки; ответ кнопкой — в том же сообщении.
+убираем кнопки; ответ кнопкой — в том же сообщении. Курсы и проведения списком кнопок не показываются: карточки
+как в афише листаются стрелками ◀️ n/N ▶️ (курсы — все подряд, проведения — внутри выбранного месяца).
+
+Три раздела (решение 16): «Курсы» — библиотека, афишу не меняет; «Проведения» — это и есть афиша (с датами или
+без дат), убрать из неё — отправить в архив; «Архив» — убранные курсы и проведения и прошедшие мероприятия,
+только там есть «Удалить навсегда».
 
 Состояние мастера в FSM: kind, mode (add/edit), ask (какие поля спрашивать), step, values; при правке — item_id,
 field. Тарифы проведения — вложенный мини-мастер: категории кнопками → для каждой подпись → цена.
@@ -25,6 +30,7 @@ from stubbot.services.admin_courses import AdminCourseService
 from stubbot.services.admin_dictionaries import (
     BUTTON_KINDS,
     AdminEntityService,
+    DeleteResult,
     DictField,
     DictionarySpec,
     DictKind,
@@ -34,7 +40,13 @@ from stubbot.services.admin_dictionaries import (
 )
 from stubbot.services.admin_log import log_admin_action
 from stubbot.services.admin_registry import ADMIN_SPECS, admin_service
-from stubbot.services.admin_sessions import COPY_FIELDS, MAX_PRICE_LABEL, PRICE_KINDS, AdminSessionService
+from stubbot.services.admin_sessions import (
+    COPY_FIELDS,
+    MAX_PRICE_LABEL,
+    PRICE_KINDS,
+    AdminSessionService,
+    SessionScope,
+)
 from stubbot.services.client_export import ClientExportService
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import admin_views, catalog_flow, render, texts
@@ -44,7 +56,7 @@ from stubbot.tg.flows import with_notice
 from stubbot.tg.formatting import safe
 from stubbot.tg.screen import DEFAULT_COVER, Photo, delete_quietly, send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import AdminDict
-from stubbot.utils.dates import local_today, month_key
+from stubbot.utils.dates import local_today
 from stubbot.utils.documents import MAX_FILE_SIZE, SUPPORTED_EXTENSIONS, file_to_html
 from stubbot.utils.schedule_input import parse_rubles
 
@@ -68,18 +80,25 @@ def _service(session: AsyncSession, kind: DictKind, client: Client) -> AdminEnti
 
 
 def _courses(session: AsyncSession, client: Client) -> AdminCourseService:
-    """Сервис курсов — когда нужны его особые действия (предпросмотр, показ без дат)."""
-    return AdminCourseService(session, client.telegram_id)
+    """Сервис курсов — когда нужны его особые действия (предпросмотр, архив, удаление)."""
+    return AdminCourseService(session, client.telegram_id, local_today(get_settings().timezone))
 
 
 def _sessions(session: AsyncSession, client: Client) -> AdminSessionService:
-    """Сервис проведений — когда нужны его особые действия (статус, копия, предпросмотр)."""
+    """Сервис проведений — когда нужны его особые действия (статус, копия, предпросмотр, разделы)."""
     return AdminSessionService(session, client.telegram_id, local_today(get_settings().timezone))
 
 
-def _parent(value: str) -> int | None:
-    """id курса из кнопки («родитель» списка проведений) или None."""
-    return int(value) if value.isdigit() else None
+def _scope(value: str) -> SessionScope:
+    """Раздел из кнопки: афиша, архив или прошедшие. Непонятное значение (подделанная кнопка) — афиша."""
+    try:
+        return SessionScope(value)
+    except ValueError:
+        return SessionScope.ACTIVE
+
+
+def _local_date(moment: datetime) -> str:
+    return f"{moment.astimezone(ZoneInfo(get_settings().timezone)):%d.%m.%Y}"
 
 
 async def _screen(message: Message, text: str, markup: InlineKeyboardMarkup, in_place: bool,
@@ -132,7 +151,15 @@ async def export_clients(callback: CallbackQuery, state: FSMContext, session: As
     await send_screen(callback.message, *admin_views.menu())
 
 
-# --- Список, карточка, архив, быстрые действия -----------------------------------------------------------------
+@router.callback_query(AdminCb.filter(F.action == AdminAction.ARCHIVE))
+async def open_archive(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
+    """Раздел «Архив»: убранные курсы и проведения, прошедшие мероприятия."""
+    await callback.answer()
+    await state.clear()
+    await _show_archive(callback.message, session, client)
+
+
+# --- Список, карточка, архив, удаление, быстрые действия -------------------------------------------------------
 
 @router.callback_query(DictCb.filter(F.action == DictAction.LIST))
 async def show_list(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
@@ -140,34 +167,32 @@ async def show_list(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
     await callback.answer()
     await state.clear()
     await _show_list(callback.message, session, client, callback_data.kind, callback_data.page,
-                     parent_id=_parent(callback_data.value), past=callback_data.field == "past")
+                     scope=_scope(callback_data.value))
 
 
 @router.callback_query(DictCb.filter((F.action == DictAction.MONTH) & (F.kind == DictKind.SESSIONS)))
 async def show_month(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """Проведения месяца (page — ГГГГММ): открываем первое ближайшее, дальше — стрелками ◀️ ▶️ в карточке."""
+    """Проведения месяца (page — ГГГГММ, 0 — без дат; value — раздел): открываем первое, дальше — стрелками."""
     await state.clear()
-    service = _sessions(session, client)
-    parent_id = _parent(callback_data.value)
-    items = await service.month_items(callback_data.page, parent_id)
+    scope = _scope(callback_data.value)
+    items = await _sessions(session, client).month_items(callback_data.page, scope)
     if not items:
-        # Проведения месяца перенесли или кнопка подделана — показываем актуальные месяцы.
+        # Проведения месяца перенесли, убрали или кнопка подделана — показываем актуальные месяцы.
         await callback.answer(texts.ADMIN_MONTH_EMPTY)
-        await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, parent_id=parent_id)
+        await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, scope=scope)
         return
     await callback.answer()
-    first = next((item for item in items if not service.is_past(item)), items[0])
-    await _show_card(callback.message, session, client, DictKind.SESSIONS, first.id, 0, parent_id=parent_id)
+    await _show_card(callback.message, session, client, DictKind.SESSIONS, items[0].id, 0)
 
 
 @router.callback_query(DictCb.filter(F.action == DictAction.VIEW))
 async def show_item(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                     client: Client) -> None:
-    """Карточка записи. Для курса сюда ведёт и «✏️ Править» под карточкой в афише."""
+    """Карточка записи. Для проведения сюда ведёт и «✏️ Править» под карточкой в афише."""
     await state.clear()
     if not await _show_card(callback.message, session, client, callback_data.kind, callback_data.item_id,
-                            callback_data.page, parent_id=_parent(callback_data.value)):
+                            callback_data.page):
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
     await callback.answer()
@@ -176,47 +201,136 @@ async def show_item(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
 @router.callback_query(DictCb.filter(F.action.in_({DictAction.ARCHIVE, DictAction.RESTORE})))
 async def toggle_archive(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                          client: Client) -> None:
-    """Архив курса и справочника; у проведения — «скрыть из афиши» / «показать»."""
+    """«В архив» / «Вернуть из архива». Курс и проведение при этом переезжают в другой раздел — показываем
+    соседнюю карточку прежнего; запись справочника остаётся на месте с пометкой."""
     await state.clear()
     active = callback_data.action is DictAction.RESTORE
+    if callback_data.kind is DictKind.COURSES:
+        await _move_course(callback, session, client, callback_data.item_id, active)
+        return
+    if callback_data.kind is DictKind.SESSIONS:
+        await _move_session(callback, session, client, callback_data.item_id, active)
+        return
     if await _service(session, callback_data.kind, client).set_active(callback_data.item_id, active) is None:
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
     await callback.answer()
-    if callback_data.kind is DictKind.SESSIONS:
-        notice = texts.ADMIN_SESSION_SHOWN if active else None  # «скрыто» карточка проведения покажет пометкой
-    else:
-        notice = texts.ADMIN_RESTORED_NOTICE if active else texts.ADMIN_ARCHIVED_NOTICE
     await _show_card(callback.message, session, client, callback_data.kind, callback_data.item_id,
-                     callback_data.page, notice=notice, parent_id=_parent(callback_data.value))
+                     callback_data.page,
+                     notice=texts.ADMIN_RESTORED_NOTICE if active else texts.ADMIN_ARCHIVED_NOTICE)
+
+
+async def _move_course(callback: CallbackQuery, session: AsyncSession, client: Client, item_id: int,
+                       active: bool) -> None:
+    """Курс в архив или обратно. В архив — только если у курса нет проведений в афише: из раздела «Курсы»
+    афиша не меняется, сначала в архив уходят сами проведения."""
+    service = _courses(session, client)
+    item = await service.item(item_id)
+    if item is None:
+        await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
+        return
+    if service.is_active(item) == active:  # кнопка от старой карточки: курс уже там, куда просят
+        await callback.answer()
+        await _show_card(callback.message, session, client, DictKind.COURSES, item_id, 0)
+        return
+    if not active and (count := await service.sessions_in_afisha(item_id)):
+        await callback.answer(texts.ADMIN_COURSE_HAS_SESSIONS.format(count=count), show_alert=True)
+        return
+    siblings = await service.siblings(item)  # раздел, из которого курс уходит
+    await service.set_active(item_id, active)
+    await callback.answer()
+    await _show_neighbour(callback.message, session, client, DictKind.COURSES, siblings, item_id,
+                          texts.ADMIN_COURSE_RESTORED_NOTICE if active else texts.ADMIN_COURSE_ARCHIVED_NOTICE,
+                          SessionScope.ARCHIVED if active else SessionScope.ACTIVE)
+
+
+async def _move_session(callback: CallbackQuery, session: AsyncSession, client: Client, item_id: int,
+                        active: bool) -> None:
+    """Проведение в архив (убрать из афиши) или из архива обратно."""
+    service = _sessions(session, client)
+    item = await service.item(item_id)
+    if item is None:
+        await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
+        return
+    scope = service.scope(item)
+    if scope is not (SessionScope.ARCHIVED if active else SessionScope.ACTIVE):
+        await callback.answer()  # кнопка от старой карточки: проведение уже в другом разделе
+        await _show_card(callback.message, session, client, DictKind.SESSIONS, item_id, 0)
+        return
+    if active and item.program.archived_at is not None:
+        await callback.answer(texts.ADMIN_RESTORE_COURSE_FIRST, show_alert=True)
+        return
+    siblings = await service.siblings(item)  # месяц раздела, из которого проведение уходит
+    await service.set_active(item_id, active)
+    await callback.answer()
+    if not active:
+        notice = texts.ADMIN_SESSION_ARCHIVED_NOTICE
+    else:
+        notice = (texts.ADMIN_SESSION_RESTORED_PAST_NOTICE if service.is_past(item)
+                  else texts.ADMIN_SESSION_RESTORED_NOTICE)
+    await _show_neighbour(callback.message, session, client, DictKind.SESSIONS, siblings, item_id, notice, scope)
+
+
+@router.callback_query(DictCb.filter((F.action == DictAction.DELETE)
+                                     & F.kind.in_({DictKind.COURSES, DictKind.SESSIONS})))
+async def ask_delete(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
+                     client: Client) -> None:
+    """«🗑 Удалить навсегда» под карточкой в архиве: сначала вопрос. Если удалить нельзя — сразу говорим почему."""
+    await state.clear()
+    kind, item_id = callback_data.kind, callback_data.item_id
+    if kind is DictKind.COURSES:
+        courses = _courses(session, client)
+        result = await courses.can_delete(item_id)
+        if result is DeleteResult.OK:
+            count = await courses.sessions_total(item_id)
+            text = texts.ADMIN_DELETE_COURSE_CONFIRM.format(
+                title=texts.CAPTION_TITLE.format(title=safe((await courses.item(item_id)).title)),
+                sessions=texts.ADMIN_DELETE_COURSE_SESSIONS.format(count=count) if count else "",
+            )
+    else:
+        sessions = _sessions(session, client)
+        result = await sessions.can_delete(item_id)
+        if result is DeleteResult.OK:
+            title = sessions.title(await sessions.item(item_id))
+            text = texts.ADMIN_DELETE_SESSION_CONFIRM.format(title=f"🗓 <b>{safe(title)}</b>")
+    if result is not DeleteResult.OK:
+        await callback.answer(texts.ADMIN_DELETE_ERRORS[result.value], show_alert=True)
+        return
+    await callback.answer()
+    await show_screen(callback.message, text, admin_views.delete_confirm_markup(kind, item_id))
+
+
+@router.callback_query(DictCb.filter((F.action == DictAction.PURGE)
+                                     & F.kind.in_({DictKind.COURSES, DictKind.SESSIONS})))
+async def purge(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
+                client: Client) -> None:
+    """«Да, удалить навсегда»: курс (вместе с его проведениями) или проведение — только из архива."""
+    await state.clear()
+    kind, item_id = callback_data.kind, callback_data.item_id
+    service = _courses(session, client) if kind is DictKind.COURSES else _sessions(session, client)
+    item = await service.item(item_id)
+    # Раздел и соседей запоминаем до удаления: после него спросить будет не у кого.
+    siblings = await service.siblings(item) if item is not None else []
+    scope = service.scope(item) if item is not None and kind is DictKind.SESSIONS else SessionScope.ARCHIVED
+    result = await service.delete(item_id)
+    if result is not DeleteResult.OK:
+        await callback.answer(texts.ADMIN_DELETE_ERRORS[result.value], show_alert=True)
+        return
+    await callback.answer(texts.ADMIN_DELETED_NOTICE)
+    await _show_neighbour(callback.message, session, client, kind, siblings, item_id, texts.ADMIN_DELETED_NOTICE, scope)
 
 
 @router.callback_query(DictCb.filter((F.action == DictAction.STATUS) & (F.kind == DictKind.SESSIONS)))
 async def set_status(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """Статус проведения в одно нажатие прямо в карточке. value — «статус~id курса-родителя»."""
+    """Статус проведения в одно нажатие прямо в карточке. value — статус."""
     await state.clear()
-    status, _, parent = callback_data.value.partition("~")
-    if await _sessions(session, client).set_status(callback_data.item_id, status) is None:
+    if await _sessions(session, client).set_status(callback_data.item_id, callback_data.value) is None:
         await callback.answer(texts.UNKNOWN_CALLBACK)
         return
     await callback.answer()
     await _show_card(callback.message, session, client, DictKind.SESSIONS, callback_data.item_id,
-                     callback_data.page, notice=texts.ADMIN_STATUS_SET, parent_id=_parent(parent))
-
-
-@router.callback_query(DictCb.filter((F.action == DictAction.SHOW_TBD) & (F.kind == DictKind.COURSES)))
-async def set_show_without_dates(callback: CallbackQuery, callback_data: DictCb, state: FSMContext,
-                                 session: AsyncSession, client: Client) -> None:
-    """Курс без проведений: показывать в афише как «даты уточняются» или нет (решение 14)."""
-    await state.clear()
-    show = callback_data.value == "1"
-    if await _courses(session, client).set_show_without_dates(callback_data.item_id, show) is None:
-        await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
-        return
-    await callback.answer()
-    await _show_card(callback.message, session, client, DictKind.COURSES, callback_data.item_id,
-                     callback_data.page, notice=texts.ADMIN_TBD_SHOWN if show else texts.ADMIN_TBD_HIDDEN)
+                     callback_data.page, notice=texts.ADMIN_STATUS_SET)
 
 
 @router.callback_query(DictCb.filter((F.action == DictAction.PROGRAM) & (F.kind == DictKind.COURSES)))
@@ -236,30 +350,26 @@ async def show_program(callback: CallbackQuery, callback_data: DictCb, session: 
 @router.callback_query(DictCb.filter(F.action == DictAction.ADD))
 async def start_add(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                     client: Client) -> None:
-    """Новая запись. Новое проведение из карточки курса (value = id курса) — курс уже выбран, его не спрашиваем."""
+    """Новая запись: мастер по всем полям сущности."""
     spec = ADMIN_SPECS[callback_data.kind]
-    values: dict[str, Any] = {}
-    ask = [f.name for f in spec.fields]
-    parent_id = _parent(callback_data.value)
-    if callback_data.kind is DictKind.SESSIONS and parent_id is not None:
-        if await _courses(session, client).item(parent_id) is None:
-            await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
-            return
-        values["program_id"] = parent_id
-        ask.remove("program_id")
     await callback.answer()
-    await _start_wizard(callback.message, state, session, client, spec, values, ask)
+    await _start_wizard(callback.message, state, session, client, spec, {}, [f.name for f in spec.fields])
 
 
 @router.callback_query(DictCb.filter((F.action == DictAction.COPY) & (F.kind == DictKind.SESSIONS)))
 async def start_copy(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """«📋 Скопировать»: всё из исходного проведения, спрашиваем только новые дни и время."""
+    """«📋 Скопировать»: всё из исходного проведения, спрашиваем только новые дни и время. Работает и из
+    архива, и из прошедших — так повторяют прошлое мероприятие; копия сразу встаёт в афишу."""
     service = _sessions(session, client)
-    values = await service.copy_values(callback_data.item_id)
-    if values is None:
+    item = await service.item(callback_data.item_id)
+    if item is None:
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
+    if item.program.archived_at is not None:
+        await callback.answer(texts.ADMIN_COPY_COURSE_ARCHIVED, show_alert=True)
+        return
+    values = await service.copy_values(item.id)
     await callback.answer()
     await _start_wizard(callback.message, state, session, client, service.spec, values, list(COPY_FIELDS), copy=True)
 
@@ -268,16 +378,26 @@ async def start_copy(callback: CallbackQuery, callback_data: DictCb, state: FSMC
 async def start_edit(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
     field = ADMIN_SPECS[callback_data.kind].field(callback_data.field)
-    if (field is None or not field.editable
-            or await _service(session, callback_data.kind, client).item(callback_data.item_id) is None):
+    service = _service(session, callback_data.kind, client)
+    item = await service.item(callback_data.item_id) if field is not None and field.editable else None
+    if item is None or not _editable(service, item):
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
     await callback.answer()
     await state.clear()
     await state.set_state(AdminDict.value)
     await state.update_data(kind=callback_data.kind.value, mode="edit", item_id=callback_data.item_id,
-                            field=field.name, page=callback_data.page, parent=callback_data.value)
+                            field=field.name, page=callback_data.page)
     await _ask_field(callback.message, state, session, client, in_place=True)
+
+
+def _editable(service: AdminEntityService, item: Any) -> bool:
+    """Курс в архиве и проведение из архива или прошедших не правятся: карточка там — «как было»."""
+    if isinstance(service, AdminSessionService):
+        return service.scope(item) is SessionScope.ACTIVE
+    if isinstance(service, AdminCourseService):
+        return service.is_active(item)
+    return True
 
 
 async def _start_wizard(message: Message, state: FSMContext, session: AsyncSession, client: Client,
@@ -412,12 +532,11 @@ async def on_save(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
 async def on_cancel(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                     client: Client) -> None:
     """Отмена мастера — к списку, отмена правки — к карточке записи."""
-    parent_id = _parent((await state.get_data()).get("parent", ""))
     await callback.answer()
     await state.clear()
     if callback_data.item_id and await _show_card(callback.message, session, client, callback_data.kind,
                                                   callback_data.item_id, callback_data.page,
-                                                  notice=texts.ADMIN_CANCELLED, parent_id=parent_id):
+                                                  notice=texts.ADMIN_CANCELLED):
         return
     await _show_list(callback.message, session, client, callback_data.kind, callback_data.page,
                      notice=texts.ADMIN_CANCELLED)
@@ -628,7 +747,7 @@ async def _accept(message: Message, state: FSMContext, session: AsyncSession, cl
         await _strip_prompt(message, state)
     await state.clear()
     if not await _show_card(message, session, client, spec.kind, data["item_id"], data.get("page", 0),
-                            notice=texts.ADMIN_SAVED, in_place=in_place, parent_id=_parent(data.get("parent", ""))):
+                            notice=texts.ADMIN_SAVED, in_place=in_place):
         await _show_list(message, session, client, spec.kind, data.get("page", 0), in_place=in_place)
     return SaveResult.OK
 
@@ -650,7 +769,7 @@ async def _next_step(message: Message, state: FSMContext, session: AsyncSession,
     await state.set_state(AdminDict.confirm)
     values = data["values"]
     if spec.kind is DictKind.COURSES:
-        # Курс — ровно как его увидят в афише: обложка + подпись; кнопка «🚀 Опубликовать».
+        # Карточка курса для библиотеки: обложка + подпись; кнопка «✅ Сохранить» (в афишу курс сам не попадает).
         program = await _courses(session, client).preview(values)
         await _screen(message, render.program_caption(program), admin_views.publish_markup(spec.kind), in_place,
                       photo=program.cover_file_id or DEFAULT_COVER)
@@ -665,75 +784,129 @@ async def _next_step(message: Message, state: FSMContext, session: AsyncSession,
 
 # --- Вспомогательное -------------------------------------------------------------------------------------------
 
+async def _show_archive(message: Message, session: AsyncSession, client: Client, notice: str | None = None,
+                        in_place: bool = True) -> None:
+    """Экран «Архив» с числом записей в каждом из трёх разделов."""
+    sessions = _sessions(session, client)
+    text, markup = admin_views.archive_menu(
+        await _courses(session, client).archived_count(),
+        await sessions.count(SessionScope.ARCHIVED),
+        await sessions.count(SessionScope.PAST),
+    )
+    await _screen(message, with_notice(notice, text), markup, in_place)
+
+
 async def _show_list(message: Message, session: AsyncSession, client: Client, kind: DictKind, page: int,
-                     notice: str | None = None, in_place: bool = True, parent_id: int | None = None,
-                     past: bool = False) -> None:
-    """Список записей. Проведения — не списком, а по месяцам (past — экран прошедших месяцев);
-    parent_id — проведения одного курса."""
+                     notice: str | None = None, in_place: bool = True,
+                     scope: SessionScope = SessionScope.ACTIVE) -> None:
+    """Список записей. Проведения — не списком, а по месяцам своего раздела (scope: афиша, архив, прошедшие).
+    Курсы — тоже не списком: сразу карточка первого курса с листанием (scope не «афиша» — курсы из архива)."""
     if kind is DictKind.SESSIONS:
-        service = _sessions(session, client)
-        heading = None
-        if parent_id is not None:
-            course = await _courses(session, client).item(parent_id)
-            heading = f"{texts.ADMIN_DICT_TITLES[kind.value]}: {safe(course.title)}" if course else None
-        text, markup = admin_views.session_months(await service.months(parent_id), service.current_month, past, page,
-                                                  parent_id, heading)
+        text, markup = admin_views.session_months(await _sessions(session, client).months(scope), scope, page)
         # После мастера или карточки с фото этот текстовый экран заменит фото: screen.py удалит и пришлёт заново.
         await _screen(message, with_notice(notice, text), markup, in_place)
         return
+    if kind is DictKind.COURSES:
+        courses = _courses(session, client)
+        archived = scope is not SessionScope.ACTIVE
+        items = await courses.archived_items() if archived else await courses.items()
+        if items:
+            await _show_card(message, session, client, kind, items[0].id, 0, notice=notice, in_place=in_place)
+            return
+        if archived:
+            text, markup = admin_views.archive_section_empty(texts.ADMIN_ARCHIVE_COURSES_TITLE)
+            await _screen(message, with_notice(notice, text), markup, in_place)
+            return
     service = _service(session, kind, client)
     entries = [(item.id, service.title(item), service.is_active(item)) for item in await service.items()]
     text, markup = admin_views.dict_list(service.spec, entries, page)
     await _screen(message, with_notice(notice, text), markup, in_place)
 
 
-async def _show_card(message: Message, session: AsyncSession, client: Client, kind: DictKind, item_id: int, page: int, notice: str | None = None, in_place: bool = True,
-                     parent_id: int | None = None) -> bool:
-    """Карточка записи; курс и проведение — ровно как в афише (обложка + подпись). False — записи нет."""
+async def _show_neighbour(message: Message, session: AsyncSession, client: Client, kind: DictKind,
+                          siblings: list[int], gone_id: int, notice: str, scope: SessionScope) -> None:
+    """Запись ушла из раздела (в архив, из архива, удалена): показываем соседнюю карточку того же раздела,
+    а если карточек там не осталось — экран раздела. siblings — карточки, среди которых она листалась."""
+    place = siblings.index(gone_id) if gone_id in siblings else 0
+    rest = [item_id for item_id in siblings if item_id != gone_id]
+    if rest and await _show_card(message, session, client, kind, rest[min(place, len(rest) - 1)], 0, notice=notice):
+        return
+    if scope is SessionScope.ACTIVE:
+        await _show_list(message, session, client, kind, 0, notice=notice)
+    elif kind is DictKind.SESSIONS and await _sessions(session, client).count(scope):
+        await _show_list(message, session, client, kind, 0, notice=notice, scope=scope)  # остались другие месяцы
+    else:
+        await _show_archive(message, session, client, notice=notice)
+
+
+async def _show_card(message: Message, session: AsyncSession, client: Client, kind: DictKind, item_id: int, page: int,
+                     notice: str | None = None, in_place: bool = True) -> bool:
+    """Карточка записи; курс и проведение — фото с подписью, как в афише. False — записи нет."""
     if kind is DictKind.SESSIONS:
-        return await _show_session_card(message, session, client, item_id, notice, in_place, parent_id)
+        return await _show_session_card(message, session, client, item_id, notice, in_place)
+    if kind is DictKind.COURSES:
+        return await _show_course_card(message, session, client, item_id, notice, in_place)
     service = _service(session, kind, client)
     item = await service.item(item_id)
     if item is None:
         return False
-    if kind is DictKind.COURSES:
-        markup = admin_views.course_card_markup(service.spec, item.id, service.is_active(item),
-                                                bool(item.program_html), item.show_without_dates, page)
-        await _screen(message, _fit_notice(notice, render.program_caption(item)), markup, in_place,
-                      photo=item.cover_file_id or DEFAULT_COVER)
-        return True
     values = {f.name: service.field_value(item, f) for f in service.spec.fields}
     text, markup = admin_views.card(service.spec, item.id, values, service.is_active(item), page)
     await _screen(message, with_notice(notice, text), markup, in_place)
     return True
 
 
+async def _show_course_card(message: Message, session: AsyncSession, client: Client, item_id: int,
+                            notice: str | None, in_place: bool) -> bool:
+    """Карточка курса со стрелками ◀️ n/N ▶️ по курсам своего раздела: «Курсы» (с правкой) или архив
+    («как было»: вернуть или удалить). False — курса нет."""
+    service = _courses(session, client)
+    item = await service.item(item_id)
+    if item is None:
+        return False
+    archived = not service.is_active(item)
+    siblings = await service.siblings(item)
+    index = siblings.index(item.id) if item.id in siblings else 0
+    markup = admin_views.course_card_markup(
+        service.spec, item.id, bool(item.program_html),
+        index=index, total=max(len(siblings), 1),
+        prev_id=siblings[index - 1] if index > 0 else 0,
+        next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
+        archived=archived,
+    )
+    hint = texts.ADMIN_ARCHIVED_SINCE_HINT.format(date=_local_date(item.archived_at)) if archived else None
+    caption = _fit_notice(hint, render.program_caption(item))
+    await _screen(message, _fit_notice(notice, caption), markup, in_place, photo=item.cover_file_id or DEFAULT_COVER)
+    return True
+
+
 async def _show_session_card(message: Message, session: AsyncSession, client: Client, item_id: int,
-                             notice: str | None, in_place: bool, parent_id: int | None) -> bool:
-    """Карточка проведения как в афише, со стрелками ◀️ n/N ▶️ по проведениям того же месяца
-    (или того же месяца одного курса, если пришли из карточки курса). False — проведения нет."""
+                             notice: str | None, in_place: bool) -> bool:
+    """Карточка проведения как в афише, со стрелками ◀️ n/N ▶️ по проведениям того же раздела и месяца
+    (или по всем проведениям без дат). False — проведения нет."""
     service = _sessions(session, client)
     item = await service.item(item_id)
     if item is None:
         return False
-    month = month_key(item.start_date)
-    siblings = [s.id for s in await service.month_items(month, parent_id)]
+    scope = service.scope(item)
+    siblings = await service.siblings(item)
     index = siblings.index(item.id) if item.id in siblings else 0
     markup = admin_views.session_card_markup(
-        service.spec, item.id, item.status.value, item.is_visible, parent_id,
+        service.spec, item.id, item.status.value, scope,
         index=index, total=max(len(siblings), 1),
         prev_id=siblings[index - 1] if index > 0 else 0,
         next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
-        past_month=month < service.current_month,
     )
     card = SessionCard(session=item, seats_left=None)
     caption = _session_caption(card)
-    # Пометки над подписью — то, чего по самой карточке не видно: в списке их раньше показывали значки.
-    hints = [hint for hint, shown in (
-        (texts.ADMIN_COURSE_ARCHIVED_HINT, item.program.archived_at is not None),
-        (texts.ADMIN_SESSION_HIDDEN, not item.is_visible),
-        (texts.ADMIN_SESSION_PAST_HINT, service.is_past(item)),
-    ) if shown]
+    # Пометки над подписью — то, чего по самой карточке не видно.
+    hints = []
+    if scope is SessionScope.ACTIVE and item.program.archived_at is not None:
+        hints.append(texts.ADMIN_COURSE_ARCHIVED_HINT)
+    if item.archived_at is not None:
+        hints.append(texts.ADMIN_ARCHIVED_SINCE_HINT.format(date=_local_date(item.archived_at)))
+    if service.is_past(item):
+        hints.append(texts.ADMIN_SESSION_PAST_HINT)
     caption = _fit_notice("\n".join(hints) or None, caption)
     await _screen(message, _fit_notice(notice, caption), markup, in_place, photo=_session_photo(card))
     return True

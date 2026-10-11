@@ -2,7 +2,8 @@
 
 Описание сущности (DictionarySpec) — какие поля, обязательные ли, как проверять ввод. Сервис сущности даёт
 одинаковые операции (AdminEntityService), поэтому мастер «➕ Добавить», правка поля и архив — один код на всех.
-Записи не удаляются: «в архив» — их не предлагают в новых курсах и при регистрации, у старых данных они остаются.
+Записи справочников не удаляются: «в архив» — их не предлагают в новых курсах и при регистрации, у старых данных
+они остаются. Курсы и проведения можно удалить навсегда, но только из раздела «Архив» (DeleteResult).
 """
 
 from dataclasses import dataclass
@@ -173,12 +174,22 @@ class SaveResult(StrEnum):
     BAD_VALUE = "bad_value"  # например, id не из справочника (подделанная кнопка)
 
 
+class DeleteResult(StrEnum):
+    """Итог «Удалить навсегда» — оно есть только у курсов и проведений и только из архива."""
+
+    OK = "ok"
+    NOT_FOUND = "not_found"
+    NOT_IN_ARCHIVE = "not_in_archive"  # запись в работе: сначала в архив (подделанная или устаревшая кнопка)
+    HAS_ACTIVE_SESSIONS = "has_active_sessions"  # у курса есть проведения в афише
+    IN_USE = "in_use"  # есть данные клиентов: заявки или подписки «сообщить о наборе»
+
+
 class AdminEntityService(Protocol):
     """Что общий редактор умеет делать с любой сущностью админки."""
 
     spec: DictionarySpec
 
-    async def items(self, parent_id: int | None = None) -> list[Any]: ...  # parent_id — проведения одного курса
+    async def items(self) -> list[Any]: ...
     async def item(self, item_id: int) -> Any | None: ...
     def is_active(self, item: Any) -> bool: ...
     def title(self, item: Any) -> str: ...
@@ -195,7 +206,7 @@ class AdminDictionaryService:
         self.repo = AdminDictionaryRepository(session, spec.model, spec.title_field)
         self.admin_telegram_id = admin_telegram_id
 
-    async def items(self, parent_id: int | None = None) -> list[DictionaryItem]:
+    async def items(self) -> list[DictionaryItem]:
         return await self.repo.list_all()
 
     async def item(self, item_id: int) -> DictionaryItem | None:

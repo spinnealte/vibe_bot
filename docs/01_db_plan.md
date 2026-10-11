@@ -20,8 +20,9 @@
 | 11 | Онлайн (30.09.2026) | Онлайн-курсы — живые, в даты; записи не храним | Хватает sessions.format + online_url |
 | 12 | Объём MVP (30.09.2026) | MVP — афиша: расписание + личный кабинет, без заявок | Таблицы заявок остаются в схеме; в боте выключены (APPLICATIONS_ENABLED=false) |
 | 13 | Оплата [FULL] (30.09.2026) | Нет оплаты за 24–48 ч после заявки — место снимается | orders.expires_at + фоновая задача; тарифы «теория/практика», «для двух коллег», когда занимается место — решаем в FULL |
-| 14 | Курс без дат в афише (02.10.2026) | По умолчанию виден как «даты уточняются»; админ может скрыть. Новое проведение снова включает показ | programs.show_without_dates boolean default true (миграция на этапе 5) |
+| 14 | Курс без дат в афише (02.10.2026) | **Отменено решением 16.** Было: курс без проведений по умолчанию виден как «даты уточняются», админ может скрыть | programs.show_without_dates — колонка удалена (миграция c7d2e91f4a58) |
 | 15 | Откуда пришёл клиент (05.10.2026) | Хвост ссылки первого /start хранится текстом у клиента, даже если источник не заведён в справочнике. Аналитики в боте пока нет — только выгрузка клиентов в CSV | clients.start_param varchar(64) NULL (миграция a1f47c2d9e60); acquisition_sources и touches остаются как есть |
+| 16 | Афиша — только проведения (11.10.2026) | Курс — запись библиотеки, сам в афишу не попадает. В афише стоят проведения: с датами или без дат («даты уточняются»). «Скрыть» нет: убрать из афиши — отправить в архив; прошедшее по датам считается архивом само («прошедшие мероприятия»). Удаление навсегда — только из архива; с заявками или подписками клиентов удалять нельзя | sessions.start_date / end_date NULL (оба сразу, CHECK dates_together), sessions.archived_at NULL вместо is_visible; programs.show_without_dates удалена (миграция c7d2e91f4a58, только структура) |
 
 ---
 
@@ -123,14 +124,16 @@
 **programs** [MVP] — курс как продукт
 - id, slug UNIQUE, title, short_description, description_html, program_html, level (basic / advanced),
   default_format (online / offline / hybrid), duration_hours NULL, cover_file_id NULL,
-  nmo_points NULL (не используется, решение 02.10.2026), is_published, show_without_dates (решение 14), archived_at, sort_order
+  nmo_points NULL (не используется, решение 02.10.2026), is_published, archived_at, sort_order
+- курс — запись библиотеки: в афише его нет, пока у него нет проведения (решение 16)
 **program_specialties** [MVP] — m2m
 
 **sessions** [MVP] — поток (конкретное проведение)
 - id, program_id
 - status: draft / announced / registration_open / waitlist / full / registration_closed / in_progress / completed / cancelled
-- format, venue_id NULL, online_url NULL, start_date, end_date, registration_deadline NULL,
-  capacity NULL, title_override NULL, cover_file_id NULL, is_visible
+- format, venue_id NULL, online_url NULL, start_date NULL, end_date NULL (оба NULL — проведение без дат,
+  «даты уточняются»), registration_deadline NULL, capacity NULL, title_override NULL, cover_file_id NULL,
+  archived_at NULL (в афише — пока не в архиве и не прошло; решение 16)
 - индекс (status, start_date)
 
 **session_days** [MVP] — id, session_id (CASCADE), date, start_time NULL, end_time NULL, topic NULL, venue_id NULL

@@ -1,13 +1,22 @@
 """Этап 5: ввод расписания админом, правила полей проведения, экраны карточек — без БД и Telegram."""
 
+import asyncio
 from datetime import UTC, date, datetime
+from types import SimpleNamespace
 from zoneinfo import ZoneInfo
 
 import pytest
 
-from stubbot.services.admin_courses import COURSE_SPEC
-from stubbot.services.admin_dictionaries import DictKind, FieldKind, parse_field
-from stubbot.services.admin_sessions import SESSION_SPEC, valid_prices
+from stubbot.services.admin_courses import COURSE_SPEC, AdminCourseService
+from stubbot.services.admin_dictionaries import DeleteResult, DictKind, FieldKind, SaveResult, parse_field
+from stubbot.services.admin_sessions import (
+    NO_DATES,
+    SESSION_SPEC,
+    AdminSessionService,
+    SessionScope,
+    session_scope,
+    valid_prices,
+)
 from stubbot.tg import admin_views, texts
 from stubbot.tg.callbacks import DictAction, DictCb
 from stubbot.utils.dates import format_month, month_bounds, month_key
@@ -83,6 +92,14 @@ def _ses(action: DictAction, **kwargs: object) -> str:
     return DictCb(kind=DictKind.SESSIONS, action=action, **kwargs).pack()
 
 
+def _crs(action: DictAction, **kwargs: object) -> str:
+    return DictCb(kind=DictKind.COURSES, action=action, **kwargs).pack()
+
+
+def _rows(markup) -> list[list[str]]:
+    return [[b.text for b in row] for row in markup.inline_keyboard]
+
+
 def test_month_helpers() -> None:
     assert month_key(date(2026, 10, 5)) == 202610
     assert month_bounds(202610) == (date(2026, 10, 1), date(2026, 11, 1))
@@ -91,70 +108,321 @@ def test_month_helpers() -> None:
     assert format_month(202701) == "Январь 2027"
 
 
+# --- Три раздела проведений: афиша, архив, прошедшие -----------------------------------------------------------
+
+@pytest.mark.parametrize(
+    ("archived", "end_date", "expected"),
+    [
+        (False, date(2026, 10, 2), SessionScope.ACTIVE),  # идёт сегодня — ещё в афише
+        (False, date(2026, 11, 20), SessionScope.ACTIVE),
+        (False, None, SessionScope.ACTIVE),  # без дат — в афише, пока не убрали
+        (False, date(2026, 10, 1), SessionScope.PAST),  # прошло вчера — само ушло в «прошедшие»
+        (True, date(2026, 11, 20), SessionScope.ARCHIVED),
+        (True, None, SessionScope.ARCHIVED),
+        (True, date(2026, 10, 1), SessionScope.ARCHIVED),  # убрано вручную — остаётся в архиве и после дат
+    ],
+    ids=["today", "future", "no-dates", "yesterday", "archived", "archived-no-dates", "archived-and-past"],
+)
+def test_session_scope(archived: bool, end_date: date | None, expected: SessionScope) -> None:
+    assert session_scope(archived, end_date, TODAY) is expected
+
+
+def _service() -> AdminSessionService:
+    service = AdminSessionService.__new__(AdminSessionService)  # без БД: только правила
+    service.today, service.admin_telegram_id = TODAY, 1
+    return service
+
+
+class _Dates:
+    def __init__(self, dates: list[date | None]) -> None:
+        self.dates = dates
+
+    async def start_dates(self, scope: SessionScope, today: date) -> list[date | None]:
+        return self.dates
+
+
+def test_months_put_sessions_without_dates_last() -> None:
+    service = _service()
+    service.repo = _Dates([date(2026, 11, 20), None, date(2026, 10, 13), date(2026, 10, 27), None])
+    assert asyncio.run(service.months()) == [(202610, 2), (202611, 1), (NO_DATES, 2)]
+    service.repo = _Dates([])
+    assert asyncio.run(service.months(SessionScope.PAST)) == []
+
+
+def test_days_are_optional_session_can_have_no_dates() -> None:
+    days = SESSION_SPEC.field("days")
+    assert not days.required and days.editable
+    # В мастере вместо «Пропустить» — «Даты уточняются», при правке вместо «Очистить» — она же.
+    _, markup = admin_views.field_prompt(SESSION_SPEC, days, "h", None)
+    assert _buttons(markup) == [texts.BTN_ADMIN_NO_DATES, texts.BTN_ADMIN_CANCEL]
+    saved = [{"date": "2026-10-13", "start": "10:00", "end": "18:00"}]
+    text, markup = admin_views.field_prompt(SESSION_SPEC, days, "h", saved, item_id=7)
+    assert _buttons(markup) == [texts.BTN_ADMIN_NO_DATES, texts.BTN_ADMIN_CANCEL] and "13.10.2026" in text
+    # Дат и так нет — убирать нечего.
+    assert _buttons(admin_views.field_prompt(SESSION_SPEC, days, "h", None, item_id=7)[1]) == [texts.BTN_ADMIN_CANCEL]
+
+
+def test_session_dates_can_be_removed_and_set_again() -> None:
+    service = _service()
+    item = SimpleNamespace(days=[SimpleNamespace()], start_date=date(2026, 10, 13), end_date=date(2026, 10, 14),
+                           title_override=None, program=SimpleNamespace(title="Имплантация"), archived_at=None)
+    field = SESSION_SPEC.field("days")
+    assert asyncio.run(service._apply(item, field, None))
+    assert (item.days, item.start_date, item.end_date) == ([], None, None)
+    assert service.title(item) == "без дат · Имплантация"
+    assert service.month_of(item) == NO_DATES and not service.is_past(item)
+    assert service.scope(item) is SessionScope.ACTIVE  # без дат проведение остаётся в афише
+    days = [{"date": "2026-10-13", "start": "10:00", "end": "18:00"}, {"date": "2026-10-14", "start": None, "end": None}]
+    assert asyncio.run(service._apply(item, field, days))
+    assert (item.start_date, item.end_date) == (date(2026, 10, 13), date(2026, 10, 14))
+    assert service.month_of(item) == 202610 and service.title(item) == "13–14 октября · Имплантация"
+
+
+class _SessionRepo:
+    def __init__(self, item: SimpleNamespace | None, enrollments: bool = False) -> None:
+        self.item, self.enrollments, self.deleted = item, enrollments, None
+
+    async def get(self, session_id: int) -> SimpleNamespace | None:
+        return self.item
+
+    async def has_enrollments(self, session_ids: list[int]) -> bool:
+        return self.enrollments
+
+    async def delete(self, session_ids: list[int]) -> None:
+        self.deleted = list(session_ids)
+
+
+def _session_item(archived: bool = False, end: date | None = date(2026, 11, 20),
+                  course_archived: bool = False) -> SimpleNamespace:
+    moment = datetime.now(UTC)
+    return SimpleNamespace(id=7, archived_at=moment if archived else None, start_date=end, end_date=end, status=None,
+                           program=SimpleNamespace(archived_at=moment if course_archived else None))
+
+
+def test_session_archive_and_restore_rules() -> None:
+    service, item = _service(), _session_item()
+    service.repo = _SessionRepo(item)
+    assert asyncio.run(service.set_active(7, False)) is item and service.scope(item) is SessionScope.ARCHIVED
+    assert asyncio.run(service.set_active(7, True)) is item and service.scope(item) is SessionScope.ACTIVE
+    # Курс в архиве — проведение из архива не вернуть: в афише его всё равно не было бы видно.
+    orphan = _session_item(archived=True, course_archived=True)
+    service.repo = _SessionRepo(orphan)
+    assert asyncio.run(service.set_active(7, True)) is None and orphan.archived_at is not None
+
+
+def test_session_delete_and_edit_only_where_allowed() -> None:
+    service = _service()
+    service.repo = _SessionRepo(_session_item())
+    assert asyncio.run(service.delete(7)) is DeleteResult.NOT_IN_ARCHIVE  # из афиши удалить нельзя — сначала в архив
+    assert service.repo.deleted is None
+    for item in (_session_item(archived=True), _session_item(end=date(2026, 10, 1))):  # архив и прошедшее
+        service.repo = _SessionRepo(item)
+        # Править и менять статус там нельзя: карточка «как была».
+        assert asyncio.run(service.update_field(7, SESSION_SPEC.field("capacity"), 5)) is SaveResult.NOT_FOUND
+        assert asyncio.run(service.set_status(7, "full")) is None
+        assert asyncio.run(service.delete(7)) is DeleteResult.OK and service.repo.deleted == [7]
+    service.repo = _SessionRepo(_session_item(archived=True), enrollments=True)
+    assert asyncio.run(service.delete(7)) is DeleteResult.IN_USE and service.repo.deleted is None  # есть заявки
+    service.repo = _SessionRepo(None)
+    assert asyncio.run(service.delete(7)) is DeleteResult.NOT_FOUND
+
+
+# --- Курс: архив и удаление ------------------------------------------------------------------------------------
+
+class _CourseSessions:
+    """Проведения курса для проверки без БД."""
+
+    def __init__(self, in_afisha: int = 0, ids: tuple[int, ...] = (), enrollments: bool = False) -> None:
+        self.in_afisha, self.ids, self.enrollments, self.deleted = in_afisha, ids, enrollments, None
+
+    async def active_count_for_program(self, program_id: int, today: date) -> int:
+        return self.in_afisha
+
+    async def ids_for_program(self, program_id: int) -> list[int]:
+        return list(self.ids)
+
+    async def has_enrollments(self, session_ids: list[int]) -> bool:
+        return self.enrollments
+
+    async def delete(self, session_ids: list[int]) -> None:
+        self.deleted = list(session_ids)
+
+
+class _CourseRepo:
+    def __init__(self, program: SimpleNamespace | None, interests: bool = False) -> None:
+        self.program, self.interests, self.deleted = program, interests, None
+
+    async def get(self, program_id: int) -> SimpleNamespace | None:
+        return self.program
+
+    async def has_interests(self, program_id: int) -> bool:
+        return self.interests
+
+    async def delete(self, program_id: int) -> None:
+        self.deleted = program_id
+
+
+def _course_service(program: SimpleNamespace | None, sessions: _CourseSessions,
+                    interests: bool = False) -> AdminCourseService:
+    service = AdminCourseService.__new__(AdminCourseService)
+    service.repo, service.sessions = _CourseRepo(program, interests), sessions
+    service.admin_telegram_id, service.today = 1, TODAY
+    return service
+
+
+def test_course_with_sessions_in_afisha_cannot_be_archived() -> None:
+    """Из раздела «Курсы» афиша не меняется: пока у курса есть проведения в афише, в архив он не уходит."""
+    program = SimpleNamespace(id=5, archived_at=None)
+    service = _course_service(program, _CourseSessions(in_afisha=2))
+    assert asyncio.run(service.set_active(5, False)) is None and program.archived_at is None
+    service.sessions.in_afisha = 0
+    assert asyncio.run(service.set_active(5, False)) is program and program.archived_at is not None
+    # В архиве курс не правится; вернуть можно всегда.
+    assert asyncio.run(service.update_field(5, COURSE_SPEC.field("title"), "Новое")) is SaveResult.NOT_FOUND
+    assert asyncio.run(service.set_active(5, True)) is program and program.archived_at is None
+
+
+def test_course_delete_rules() -> None:
+    active = SimpleNamespace(id=5, archived_at=None)
+    archived = SimpleNamespace(id=5, archived_at=datetime.now(UTC))
+    assert asyncio.run(_course_service(active, _CourseSessions()).delete(5)) is DeleteResult.NOT_IN_ARCHIVE
+    assert asyncio.run(_course_service(None, _CourseSessions()).delete(5)) is DeleteResult.NOT_FOUND
+    blocked = _course_service(archived, _CourseSessions(in_afisha=1))
+    assert asyncio.run(blocked.delete(5)) is DeleteResult.HAS_ACTIVE_SESSIONS
+    with_applications = _course_service(archived, _CourseSessions(ids=(1,), enrollments=True))
+    assert asyncio.run(with_applications.delete(5)) is DeleteResult.IN_USE
+    with_interests = _course_service(archived, _CourseSessions(), interests=True)
+    assert asyncio.run(with_interests.delete(5)) is DeleteResult.IN_USE
+    assert blocked.repo.deleted is None and with_applications.repo.deleted is None
+    # Курс удаляется вместе со своими проведениями (они все в архиве или прошли).
+    service = _course_service(archived, _CourseSessions(ids=(1, 2)))
+    assert asyncio.run(service.sessions_total(5)) == 2
+    assert asyncio.run(service.delete(5)) is DeleteResult.OK
+    assert service.sessions.deleted == [1, 2] and service.repo.deleted == 5
+
+
+# --- Экраны ----------------------------------------------------------------------------------------------------
+
 def test_session_months_screen() -> None:
-    """Проведения в админке — не кнопка на каждое, а месяцы в два столбца (только те, где проведения есть)."""
-    months = [(202608, 2), (202609, 1), (202610, 3), (202611, 1), (202701, 4)]
-    text, markup = admin_views.session_months(months, current_month=202610)
-    rows = [[b.text for b in row] for row in markup.inline_keyboard]
-    assert rows == [["Октябрь 2026 · 3", "Ноябрь 2026 · 1"], ["Январь 2027 · 4"],
-                    ["🗂 Прошедшие · 3"], [texts.BTN_ADMIN_ADD], [texts.BTN_ADMIN_BACK]]
-    assert "<b>8</b>" in text  # проведений с текущего месяца
+    """Раздел «Проведения» — это афиша: месяцы в два столбца (только те, где проведения есть), отдельной кнопкой
+    проведения без дат; прошедших здесь нет — они в архиве."""
+    months = [(202610, 3), (202611, 1), (202701, 4), (NO_DATES, 2)]
+    text, markup = admin_views.session_months(months)
+    assert _rows(markup) == [["Октябрь 2026 · 3", "Ноябрь 2026 · 1"], ["Январь 2027 · 4"], ["⏳ Без дат · 2"],
+                             [texts.BTN_ADMIN_ADD], [texts.BTN_ADMIN_BACK]]
+    assert "<b>10</b>" in text  # столько сейчас в афише
     assert markup.inline_keyboard[0][0].callback_data == _ses(DictAction.MONTH, page=202610)
-    assert markup.inline_keyboard[2][0].callback_data == _ses(DictAction.LIST, field="past")
+    assert markup.inline_keyboard[2][0].callback_data == _ses(DictAction.MONTH, page=NO_DATES)
 
-    # Прошедшие месяцы — отдельным экраном, свежие первыми; здесь же — проведения одного курса (#4).
-    text, markup = admin_views.session_months(months, 202610, past=True, parent_id=4, heading="🗓 Проведения: Курс")
-    rows = [[b.text for b in row] for row in markup.inline_keyboard]
-    assert rows == [["Сентябрь 2026 · 1", "Август 2026 · 2"], [texts.BTN_ADMIN_UPCOMING_MONTHS],
-                    [texts.BTN_ADMIN_BACK_TO_COURSE], [texts.BTN_ADMIN_BACK]]
-    assert "Проведения: Курс" in text and "<b>3</b>" in text
-    assert markup.inline_keyboard[0][1].callback_data == _ses(DictAction.MONTH, page=202608, value="4")
-    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.LIST, value="4")
-
-    text, markup = admin_views.session_months([], 202610)
-    assert "пока нет" in text and _buttons(markup) == [texts.BTN_ADMIN_ADD, texts.BTN_ADMIN_BACK]
-    text, markup = admin_views.session_months([(202609, 1)], 202610)  # остались только прошедшие
-    assert "пока нет" in text and _buttons(markup)[0] == "🗂 Прошедшие · 1"
+    text, markup = admin_views.session_months([])
+    assert "пока пусто" in text and _buttons(markup) == [texts.BTN_ADMIN_ADD, texts.BTN_ADMIN_BACK]
 
     # Очень много месяцев — по 16 на странице, со стрелками.
     many = [(202600 + m, 1) for m in range(1, 13)] + [(202700 + m, 1) for m in range(1, 9)]
-    _, markup = admin_views.session_months(many, 202601)
+    _, markup = admin_views.session_months(many)
     assert [len(row) for row in markup.inline_keyboard[:8]] == [2] * 8 and "1/2" in _buttons(markup)
-    _, markup = admin_views.session_months(many, 202601, page=1)
+    _, markup = admin_views.session_months(many, page=1)
     assert _buttons(markup)[:4] == ["Май 2027 · 1", "Июнь 2027 · 1", "Июль 2027 · 1", "Август 2027 · 1"]
 
 
-def test_session_card_buttons() -> None:
-    markup = admin_views.session_card_markup(SESSION_SPEC, 7, "registration_open", active=True, parent_id=3,
-                                             index=1, total=3, prev_id=5, next_id=9)
+def test_archive_months_screens() -> None:
+    """В архиве и в прошедших свежие месяцы первыми, добавлять нельзя, назад — к архиву; раздел едет в кнопках."""
+    text, markup = admin_views.session_months([(202608, 2), (202609, 1), (NO_DATES, 1)], SessionScope.ARCHIVED)
+    assert _rows(markup) == [["Сентябрь 2026 · 1", "Август 2026 · 2"], ["⏳ Без дат · 1"],
+                             [texts.BTN_ADMIN_TO_ARCHIVE]]
+    assert texts.ADMIN_ARCHIVE_SESSIONS_TITLE in text and "<b>4</b>" in text
+    assert markup.inline_keyboard[0][1].callback_data == _ses(DictAction.MONTH, page=202608, value="a")
+    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.MONTH, page=NO_DATES, value="a")
+
+    text, markup = admin_views.session_months([(202609, 1)], SessionScope.PAST)
+    assert texts.ADMIN_ARCHIVE_PAST_TITLE in text
+    assert markup.inline_keyboard[0][0].callback_data == _ses(DictAction.MONTH, page=202609, value="p")
+    text, markup = admin_views.session_months([], SessionScope.PAST)
+    assert "пока пусто" in text and _buttons(markup) == [texts.BTN_ADMIN_TO_ARCHIVE]
+
+
+def test_archive_menu() -> None:
+    text, markup = admin_views.archive_menu(courses=2, sessions=3, past=7)
+    assert _rows(markup) == [["📚 Курсы · 2"], ["🗓 Проведения · 3"], ["✔️ Прошедшие · 7"], [texts.BTN_ADMIN_BACK]]
+    assert markup.inline_keyboard[0][0].callback_data == _crs(DictAction.LIST, value="a")
+    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.LIST, value="a")
+    assert markup.inline_keyboard[2][0].callback_data == _ses(DictAction.LIST, value="p")
+    assert all(f"<b>{n}</b>" in text for n in (2, 3, 7))
+
+
+def test_session_card_in_afisha() -> None:
+    markup = admin_views.session_card_markup(SESSION_SPEC, 7, "registration_open", index=1, total=3,
+                                             prev_id=5, next_id=9)
     buttons = _buttons(markup)
     # Листание по проведениям месяца — первой строкой, как в афише.
     pager = markup.inline_keyboard[0]
     assert [b.text for b in pager] == ["◀️", "2/3", "▶️"]
-    assert pager[0].callback_data == _ses(DictAction.VIEW, item_id=5, value="3")
-    assert pager[2].callback_data == _ses(DictAction.VIEW, item_id=9, value="3")
+    assert pager[0].callback_data == _ses(DictAction.VIEW, item_id=5)
+    assert pager[2].callback_data == _ses(DictAction.VIEW, item_id=9)
     assert "✏️ Дни и время" in buttons and "✏️ Тарифы" in buttons
     assert "✏️ Курс" not in buttons and "✏️ Статус" not in buttons
     assert "✅ 🟢 Идёт набор" in buttons and "🔴 Мест нет" in buttons
-    assert texts.BTN_ADMIN_COPY in buttons and texts.BTN_ADMIN_HIDE in buttons
     status_data = next(b.callback_data for row in markup.inline_keyboard for b in row if b.text == "🔴 Мест нет")
-    assert status_data.endswith(":full~3")  # статус и курс-родитель для «⬅️ К месяцам»
-    back = markup.inline_keyboard[-1][0]
-    assert back.text == texts.BTN_ADMIN_TO_MONTHS and back.callback_data == _ses(DictAction.LIST, value="3")
-
-    hidden = admin_views.session_card_markup(SESSION_SPEC, 7, "full", active=False, past_month=True)
-    assert [b.text for b in hidden.inline_keyboard[0]] == ["1/1"]  # одно проведение в месяце — без стрелок
-    assert texts.BTN_ADMIN_SHOW in _buttons(hidden)
-    assert hidden.inline_keyboard[-1][0].callback_data == _ses(DictAction.LIST, field="past")  # к прошедшим месяцам
+    assert status_data == _ses(DictAction.STATUS, item_id=7, value="full")
+    # «Скрыть» больше нет: убрать из афиши — отправить в архив. Удаления в афише тоже нет.
+    assert _rows(markup)[-3:] == [[texts.BTN_ADMIN_COPY], [texts.BTN_ADMIN_ARCHIVE], [texts.BTN_ADMIN_TO_MONTHS]]
+    assert markup.inline_keyboard[-2][0].callback_data == _ses(DictAction.ARCHIVE, item_id=7)
+    assert markup.inline_keyboard[-1][0].callback_data == _ses(DictAction.LIST)
+    assert texts.BTN_ADMIN_DELETE not in buttons and texts.BTN_ADMIN_RESTORE not in buttons
 
 
-def test_course_card_has_sessions_and_tbd_toggle() -> None:
-    buttons = _buttons(admin_views.course_card_markup(COURSE_SPEC, 5, active=True, has_program=True,
-                                                      show_without_dates=True))
-    assert texts.BTN_ADMIN_SESSIONS_OF_COURSE in buttons and texts.BTN_ADMIN_NEW_SESSION in buttons
-    assert texts.BTN_ADMIN_TBD_HIDE in buttons
-    assert texts.BTN_ADMIN_TBD_SHOW in _buttons(admin_views.course_card_markup(
-        COURSE_SPEC, 5, active=True, has_program=True, show_without_dates=False))
+def test_session_card_in_archive_and_past() -> None:
+    """В архиве карточка «как была»: без правки и статусов. Вернуть можно убранное вручную, прошедшее — нет."""
+    archived = admin_views.session_card_markup(SESSION_SPEC, 7, "full", SessionScope.ARCHIVED)
+    assert _rows(archived) == [["1/1"], [texts.BTN_ADMIN_RESTORE], [texts.BTN_ADMIN_COPY], [texts.BTN_ADMIN_DELETE],
+                               [texts.BTN_ADMIN_TO_MONTHS]]
+    assert archived.inline_keyboard[1][0].callback_data == _ses(DictAction.RESTORE, item_id=7)
+    assert archived.inline_keyboard[3][0].callback_data == _ses(DictAction.DELETE, item_id=7)
+    assert archived.inline_keyboard[4][0].callback_data == _ses(DictAction.LIST, value="a")
+    past = admin_views.session_card_markup(SESSION_SPEC, 7, "full", SessionScope.PAST)
+    assert _rows(past) == [["1/1"], [texts.BTN_ADMIN_COPY], [texts.BTN_ADMIN_DELETE], [texts.BTN_ADMIN_TO_MONTHS]]
+    assert past.inline_keyboard[-1][0].callback_data == _ses(DictAction.LIST, value="p")
+
+
+def test_course_card_is_library_slider() -> None:
+    """Курсы — не кнопка на каждый курс, а карточки со стрелками ◀️ n/N ▶️; все поля правятся из карточки."""
+    markup = admin_views.course_card_markup(COURSE_SPEC, 5, has_program=True, index=1, total=4, prev_id=2, next_id=9)
+    pager = markup.inline_keyboard[0]
+    assert [b.text for b in pager] == ["◀️", "2/4", "▶️"]
+    assert pager[0].callback_data == _crs(DictAction.VIEW, item_id=2)
+    assert pager[2].callback_data == _crs(DictAction.VIEW, item_id=9)
+    buttons = _buttons(markup)
+    for field in COURSE_SPEC.fields:
+        assert texts.BTN_ADMIN_EDIT_FIELD.format(label=texts.ADMIN_FIELD_LABELS[field.name]) in buttons
+    assert [len(row) for row in markup.inline_keyboard[1:6]] == [2] * 5
+    # Курс — запись библиотеки, афиша отсюда не меняется: ни проведений, ни «показывать без дат», ни удаления.
+    assert _rows(markup)[6:] == [[texts.BTN_ADMIN_PROGRAM], [texts.BTN_ADMIN_ARCHIVE], [texts.BTN_ADMIN_NEW_COURSE],
+                                 [texts.BTN_ADMIN_BACK]]
+    assert markup.inline_keyboard[-2][0].callback_data == _crs(DictAction.ADD)
+    assert markup.inline_keyboard[-3][0].callback_data == _crs(DictAction.ARCHIVE, item_id=5)
+
+
+def test_course_card_in_archive() -> None:
+    markup = admin_views.course_card_markup(COURSE_SPEC, 5, has_program=True, index=0, total=2, next_id=9,
+                                            archived=True)
+    assert _rows(markup) == [["1/2", "▶️"], [texts.BTN_ADMIN_PROGRAM], [texts.BTN_ADMIN_RESTORE],
+                             [texts.BTN_ADMIN_DELETE], [texts.BTN_ADMIN_TO_ARCHIVE]]
+    assert markup.inline_keyboard[2][0].callback_data == _crs(DictAction.RESTORE, item_id=5)
+    assert markup.inline_keyboard[3][0].callback_data == _crs(DictAction.DELETE, item_id=5)
+    no_program = admin_views.course_card_markup(COURSE_SPEC, 5, has_program=False, archived=True)
+    assert texts.BTN_ADMIN_PROGRAM not in _buttons(no_program)
+
+
+def test_delete_confirm_and_popup_limits() -> None:
+    markup = admin_views.delete_confirm_markup(DictKind.SESSIONS, 7)
+    assert _rows(markup) == [[texts.BTN_ADMIN_DELETE_YES], [texts.BTN_ADMIN_CANCEL]]
+    assert markup.inline_keyboard[0][0].callback_data == _ses(DictAction.PURGE, item_id=7)
+    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.VIEW, item_id=7)  # «Отмена» — к карточке
+    # На каждую причину отказа есть объяснение; всплывающие окна Telegram — до 200 символов.
+    assert set(texts.ADMIN_DELETE_ERRORS) == {result.value for result in DeleteResult} - {DeleteResult.OK.value}
+    popups = [texts.ADMIN_COURSE_HAS_SESSIONS.format(count=999), texts.ADMIN_RESTORE_COURSE_FIRST,
+              texts.ADMIN_COPY_COURSE_ARCHIVED, texts.ADMIN_DELETED_NOTICE, *texts.ADMIN_DELETE_ERRORS.values()]
+    assert all(len(popup) <= 200 for popup in popups)
 
 
 def test_session_prompts_ref_and_prices() -> None:

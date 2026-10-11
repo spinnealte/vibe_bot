@@ -31,20 +31,39 @@ def test_manager_draft_mentions_course_and_dates() -> None:
     session = SimpleNamespace(title_override=None, program=program,
                               start_date=date(2026, 10, 13), end_date=date(2026, 10, 14))
     card = SimpleNamespace(session=session)
-    assert manager_draft(program, card) == "Здравствуйте! Хочу записаться на курс «Имплантация» (13–14 октября 2026)."
-    assert "Когда ближайший поток" in manager_draft(program, None)  # курс без дат
+    assert manager_draft(card) == "Здравствуйте! Хочу записаться на курс «Имплантация» (13–14 октября 2026)."
+    session.start_date = session.end_date = None  # проведение без дат — «даты уточняются»
+    assert manager_draft(card) == "Здравствуйте! Интересует курс «Имплантация». Когда ближайший поток?"
 
 
-def test_about_text_lists_venues_and_manager_hint() -> None:
-    venues = [
-        SimpleNamespace(name="Класс <на Невском>", address="Невский пр., 1", map_url="https://yandex.ru/maps/?text=a&b"),
-        SimpleNamespace(name="Клиника", address="ул. Мира, 5", map_url=None),
-    ]
-    text = about_text(venues, with_manager=True)
+VENUES = [
+    SimpleNamespace(name="Класс <на Невском>", address="Невский пр., 1", map_url="https://yandex.ru/maps/?text=a&b"),
+    SimpleNamespace(name="Клиника", address="ул. Мира, 5", map_url=None),
+]
+
+
+def test_about_text_lists_venues_and_manager_hint(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Список площадок в «О центре» — когда задан шаблон строки площадки."""
+    monkeypatch.setattr(texts, "ABOUT_VENUES_TITLE", "🏫 <b>Где проходят занятия</b>")
+    monkeypatch.setattr(texts, "ABOUT_VENUE", "• <b>{name}</b> — {address}")
+    monkeypatch.setattr(texts, "ABOUT_VENUE_MAP", ' · <a href="{url}">на карте</a>')
+    text = about_text(VENUES, with_manager=True)
     assert "АкваСтом" in text
     assert "&lt;на Невском&gt;" in text  # данные из БД экранируются
     assert 'href="https://yandex.ru/maps/?text=a&amp;b"' in text
     assert text.count("на карте") == 1
     assert text.endswith(texts.ABOUT_MANAGER_HINT)
-    assert texts.ABOUT_MANAGER_HINT not in about_text(venues, with_manager=False)  # нет ссылки — нет и подсказки
+    assert texts.ABOUT_MANAGER_HINT not in about_text(VENUES, with_manager=False)  # нет ссылки — нет и подсказки
     assert texts.ABOUT_VENUES_TITLE not in about_text([], with_manager=False)
+
+
+def test_about_text_without_venue_list(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Шаблон строки площадки пуст — адреса не показываем: один заголовок («Уточняется»), без пустых строк,
+    и неважно, заведены ли площадки в базе."""
+    monkeypatch.setattr(texts, "ABOUT_VENUES_TITLE", "🏫 <b>Где проходят занятия</b>\n Уточняется...")
+    monkeypatch.setattr(texts, "ABOUT_VENUE", "")
+    for venues in (VENUES, []):
+        text = about_text(venues, with_manager=True)
+        assert "Уточняется..." in text and "Невском" not in text and "Клиника" not in text
+        assert "\n\n\n" not in text
+        assert text.endswith(texts.ABOUT_MANAGER_HINT)

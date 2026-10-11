@@ -11,6 +11,7 @@ from stubbot.config import Settings
 from stubbot.services.admin_courses import COURSE_SPEC
 from stubbot.services.admin_dictionaries import SPECS, DictField, DictKind, FieldKind, parse_field
 from stubbot.tg import admin_views, keyboards, texts
+from stubbot.tg.callbacks import DictAction, DictCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.utils.documents import file_to_html
 from stubbot.utils.slug import slugify
@@ -171,9 +172,20 @@ def test_docx_and_txt_to_html() -> None:
 
 
 def test_carousel_edit_button_only_for_admin() -> None:
-    def carousel(admin: bool) -> list[str]:
-        return _buttons(keyboards.course_carousel(0, 3, program_id=5, session_id=None, apply_text=None, notify=False,
-                                                  has_program_text=True, admin=admin))
+    def carousel(admin: bool):
+        return keyboards.course_carousel(0, 3, program_id=5, session_id=8, apply_text=None, notify=False,
+                                         has_program_text=True, admin=admin)
 
-    assert texts.BTN_COURSE_EDIT in carousel(True)
-    assert texts.BTN_COURSE_EDIT not in carousel(False)
+    assert texts.BTN_COURSE_EDIT not in _buttons(carousel(False))
+    edit = carousel(True).inline_keyboard[-1][0]
+    assert edit.text == texts.BTN_COURSE_EDIT
+    # Афиша — это проведения: «Править» ведёт в карточку проведения, а не курса.
+    assert edit.callback_data == DictCb(kind=DictKind.SESSIONS, action=DictAction.VIEW, item_id=8).pack()
+
+
+def test_admin_menu_has_archive_and_course_is_saved_not_published() -> None:
+    _, markup = admin_views.menu()
+    assert texts.BTN_ADMIN_ARCHIVE_MENU in _buttons(markup)
+    # Курс — запись библиотеки: в мастере «Сохранить»; «Опубликовать» — только у проведения (оно идёт в афишу).
+    assert _buttons(admin_views.publish_markup(DictKind.COURSES))[0] == texts.BTN_ADMIN_SAVE
+    assert _buttons(admin_views.publish_markup(DictKind.SESSIONS))[0] == texts.BTN_ADMIN_PUBLISH

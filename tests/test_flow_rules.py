@@ -34,27 +34,21 @@ def test_selection_button_must_match_current_step(raw_state: str | None, group: 
 
 
 class _FakeCatalog:
-    """Каталог, где поток #1 скрыли между запросом списка и запросом карточки."""
+    """Каталог, где проведение #1 убрали в архив между запросом списка и запросом карточки."""
 
     def __init__(self) -> None:
         self.visible = [1, 2]
-        self.hidden_after_listing = {1}
+        self.archived_after_listing = {1}
 
     async def upcoming_session_ids(self, today: date) -> list[int]:
         ids = list(self.visible)
-        self.visible = [sid for sid in self.visible if sid not in self.hidden_after_listing]
+        self.visible = [sid for sid in self.visible if sid not in self.archived_after_listing]
         return ids
-
-    async def programs_without_upcoming_ids(self, today: date) -> list[int]:
-        return []
 
     async def public_session(self, session_id: int, today: date) -> SimpleNamespace | None:
         if session_id not in self.visible:
             return None
         return SimpleNamespace(id=session_id, capacity=None, program=SimpleNamespace(id=10 + session_id))
-
-    async def published_program(self, program_id: int) -> None:
-        return None
 
 
 class _FakeDictionaries:
@@ -89,10 +83,18 @@ def test_selection_saves_only_active_items() -> None:
     assert service.clients.saved["positions"] == [5]
 
 
-def test_carousel_shows_neighbour_when_course_hidden_meanwhile() -> None:
+def test_carousel_shows_neighbour_when_session_archived_meanwhile() -> None:
     service = ScheduleService(None)
     service.catalog = _FakeCatalog()
     slide = asyncio.run(service.slide(TODAY, 0))
-    assert slide is not None, "вместо «курсы скоро появятся» — соседний курс"
+    assert slide is not None, "вместо «курсы скоро появятся» — соседнее проведение"
     assert slide.card.session.id == 2
     assert (slide.index, slide.total) == (0, 1)
+
+
+def test_carousel_is_empty_without_sessions() -> None:
+    """Афиша — только проведения: курс без проведения в неё сам не попадает (решение 16)."""
+    service = ScheduleService(None)
+    service.catalog = _FakeCatalog()
+    service.catalog.visible = []
+    assert asyncio.run(service.slide(TODAY, 0)) is None

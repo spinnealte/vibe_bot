@@ -48,7 +48,7 @@ class ApplyOutcome(StrEnum):
     CREATED = "created"
     WAITLIST = "waitlist"
     DUPLICATE = "duplicate"
-    CLOSED = "closed"  # поток не найден, скрыт, прошёл, запись закрыта или истёк дедлайн
+    CLOSED = "closed"  # поток не найден, в архиве, прошёл, запись закрыта или истёк дедлайн
     BAD_PRICE = "bad_price"
 
 

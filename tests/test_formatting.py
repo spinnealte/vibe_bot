@@ -5,7 +5,7 @@ import pytest
 
 from stubbot.db.enums import PriceUnit
 from stubbot.services.enrollments import fixed_group_seats, seat_choices
-from stubbot.tg.render import session_caption, split_html, visible_length
+from stubbot.tg.render import program_caption, session_caption, split_html, visible_length
 from stubbot.utils.dates import format_day, format_range, format_time_range
 from stubbot.utils.money import format_rub
 
@@ -105,6 +105,24 @@ def test_caption_dates_with_common_time_and_address() -> None:
     card = _card(None)
     card.session.days[1].end_time = time(17)  # дни с разным временем — время не пишем
     assert "<b>Даты:</b> 13–14 октября 2026\n" in session_caption(card, None)
+
+
+def test_caption_of_session_without_dates() -> None:
+    """Проведение без дат стоит в афише с пометкой «даты уточняются»; остальное — как у обычного."""
+    card = _card(None)
+    card.session.start_date = card.session.end_date = None
+    card.session.days = []
+    caption = session_caption(card, None)
+    assert "<b>Даты:</b> уточняются\n" in caption
+    assert "Невский пр., 1" in caption and "Полный курс" in caption and "Идёт набор" in caption
+    assert visible_length(caption) <= 1024
+
+
+def test_course_library_caption_has_no_dates_or_status() -> None:
+    """Карточка курса в админке — запись библиотеки: даты, цены и статус есть только у проведения."""
+    caption = program_caption(_card("Описание курса").program)
+    assert "Имплантация" in caption and "Лекторы" in caption and "Направления" in caption and "О курсе" in caption
+    assert "Даты" not in caption and "Статус" not in caption and "Стоимость" not in caption
 
 
 def test_caption_without_nmo_points() -> None:

@@ -146,17 +146,19 @@ async def create(session, today: date, tz: ZoneInfo) -> None:
     s1_start = today + timedelta(days=14)
     s1 = CourseSession(program_id=implant.id, status=SessionStatus.REGISTRATION_OPEN, format=DeliveryFormat.OFFLINE,
                        venue_id=venue.id, start_date=s1_start, end_date=s1_start + timedelta(days=1), capacity=3,
-                       registration_deadline=datetime.combine(s1_start - timedelta(days=2), time(18, 0), tz),
-                       is_visible=True)
+                       registration_deadline=datetime.combine(s1_start - timedelta(days=2), time(18, 0), tz))
     # 2) Анонс: запись ещё не открыта — кнопка «Сообщить о наборе».
     s2_start = today + timedelta(days=45)
     s2 = CourseSession(program_id=perio.id, status=SessionStatus.ANNOUNCED, format=DeliveryFormat.OFFLINE,
-                       venue_id=venue.id, start_date=s2_start, end_date=s2_start, is_visible=True)
+                       venue_id=venue.id, start_date=s2_start, end_date=s2_start)
     # 3) Мест нет — заявка уходит в лист ожидания.
     s3_start = today + timedelta(days=21)
     s3 = CourseSession(program_id=aligners.id, status=SessionStatus.FULL, format=DeliveryFormat.HYBRID,
-                       venue_id=venue.id, start_date=s3_start, end_date=s3_start, capacity=10, is_visible=True)
-    session.add_all([s1, s2, s3])
+                       venue_id=venue.id, start_date=s3_start, end_date=s3_start, capacity=10)
+    # 4) Без дат: в афише стоит с пометкой «даты уточняются» (решение 16).
+    s4 = CourseSession(program_id=endo.id, status=SessionStatus.ANNOUNCED, format=DeliveryFormat.OFFLINE,
+                       venue_id=venue.id)
+    session.add_all([s1, s2, s3, s4])
     await session.flush()
 
     session.add_all([
@@ -178,7 +180,7 @@ async def create(session, today: date, tz: ZoneInfo) -> None:
         {"program_id": endo.id, "lecturer_id": ivanov.id},
         {"program_id": aligners.id, "lecturer_id": smirnova.id},
     ])
-    print("Демо-данные созданы: 4 курса, 3 потока (набор / анонс / мест нет), площадка, 2 лектора.")
+    print("Демо-данные созданы: 4 курса, 4 проведения (набор / анонс / мест нет / без дат), площадка, 2 лектора.")
 
 
 async def remove(session) -> None:

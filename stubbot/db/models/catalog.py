@@ -92,8 +92,7 @@ class Program(TimestampMixin, Base):
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
     nmo_points: Mapped[int | None] = mapped_column(SmallInteger)
     is_published: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
-    # Показывать в афише без ближайших проведений («даты уточняются»). Новое проведение включает обратно.
-    show_without_dates: Mapped[bool] = mapped_column(Boolean, server_default=text("true"))
+    # Курс — запись библиотеки: сам в афишу не попадает, в афише только его проведения (решение 16).
     archived_at: Mapped[datetime | None]
     sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
@@ -109,6 +108,7 @@ class CourseSession(TimestampMixin, Base):
     __table_args__ = (
         Index("ix_sessions_status_start_date", "status", "start_date"),
         CheckConstraint("end_date >= start_date", name="dates_order"),
+        CheckConstraint("(start_date IS NULL) = (end_date IS NULL)", name="dates_together"),
         CheckConstraint("capacity > 0", name="capacity_positive"),
     )
 
@@ -121,13 +121,15 @@ class CourseSession(TimestampMixin, Base):
     venue_id: Mapped[int | None] = mapped_column(ForeignKey("venues.id", ondelete="RESTRICT"), index=True)
     online_url: Mapped[str | None] = mapped_column(String(512))
     # Кэш по session_days: первый и последний день, поддерживается сервисом при изменении дней.
-    start_date: Mapped[date]
-    end_date: Mapped[date]
+    # Оба NULL — проведение без дат: в афише оно стоит с пометкой «даты уточняются» (решение 16).
+    start_date: Mapped[date | None]
+    end_date: Mapped[date | None]
     registration_deadline: Mapped[datetime | None]
     capacity: Mapped[int | None] = mapped_column(Integer)
     title_override: Mapped[str | None] = mapped_column(String(256))
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
-    is_visible: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
+    # В афише — пока не в архиве и не прошло. Отдельного «скрыть» нет: убрать из афиши = отправить в архив.
+    archived_at: Mapped[datetime | None]
 
     program: Mapped[Program] = relationship(back_populates="sessions", lazy="raise")
     venue: Mapped[Venue | None] = relationship(lazy="raise")

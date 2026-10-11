@@ -1,12 +1,14 @@
-"""Проведения курса (потоки) в админке: мастер «Новое проведение», копирование, правка, статус, скрытие.
+"""Проведения курса (потоки) в админке: мастер «Новое проведение», копирование, правка, статус, архив, удаление.
 
 Курс — что за обучение (programs); проведение — когда, где и почём (sessions + session_days + price_options).
-Новое проведение публикуется сразу (is_visible) и включает курсу показ «без дат» (решение 14).
-Тарифы не удаляются: при замене старые выключаются (is_active=false) — на них могут ссылаться будущие заявки.
+Афиша состоит только из проведений (решение 16): новое проведение сразу в афише, с датами или без дат
+(«даты уточняются»). Убрать из афиши — отправить в архив; прошедшее по датам само уходит в «Прошедшие
+мероприятия». Удалить навсегда можно только из архива и из прошедших.
+Тарифы при замене не удаляются, а выключаются (is_active=false) — на них могут ссылаться будущие заявки.
 """
 
 from collections import Counter
-from datetime import date, datetime, time
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 from typing import Any
 
@@ -14,9 +16,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.db.enums import DeliveryFormat, PriceKind, PriceUnit, SessionStatus
 from stubbot.db.models import CourseSession, PriceOption, SessionDay
-from stubbot.repositories.admin_sessions import AdminSessionRepository
+from stubbot.repositories.admin_sessions import AdminSessionRepository, SessionScope, session_scope
 from stubbot.services.admin_dictionaries import (
     ENTITY_NAMES,
+    DeleteResult,
     DictField,
     DictionarySpec,
     DictKind,
@@ -40,13 +43,16 @@ ADMIN_STATUSES = (
 _FORMATS = tuple(fmt.value for fmt in DeliveryFormat)
 _WITH_VENUE = (DeliveryFormat.OFFLINE.value, DeliveryFormat.HYBRID.value)
 _WITH_LINK = (DeliveryFormat.ONLINE.value, DeliveryFormat.HYBRID.value)
+# «Месяц» проведений без дат в кнопках и листании (настоящие месяцы — ГГГГММ).
+NO_DATES = 0
 
 # Порядок — порядок шагов мастера (решения 02.10.2026).
 SESSION_SPEC = DictionarySpec(
     kind=DictKind.SESSIONS,
     fields=(
         DictField("program_id", FieldKind.REF, required=True, editable=False),
-        DictField("days", FieldKind.DAYS, required=True),
+        # Необязательно: без дней проведение стоит в афише с пометкой «даты уточняются».
+        DictField("days", FieldKind.DAYS, required=False),
         DictField("format", FieldKind.CHOICE, required=True, choices=_FORMATS),
         DictField("venue_id", FieldKind.REF, required=False, when=("format", _WITH_VENUE)),
         DictField("online_url", FieldKind.URL, required=False, max_length=512, when=("format", _WITH_LINK)),
@@ -84,46 +90,61 @@ class AdminSessionService:
         self.admin_telegram_id = admin_telegram_id
         self.today = today
 
-    async def items(self, parent_id: int | None = None) -> list[CourseSession]:
-        """Все проведения по дате начала. В админке они показываются по месяцам: months() и month_items()."""
-        return await self.repo.list_all(parent_id)
+    async def items(self) -> list[CourseSession]:
+        """Не используется: проведения показываются не списком, а по месяцам — months() и month_items()."""
+        return []
 
-    async def months(self, parent_id: int | None = None) -> list[tuple[int, int]]:
-        """Месяцы, в которых есть проведения (по дате начала): [(ГГГГММ, сколько проведений)] по порядку.
+    def scope(self, item: CourseSession) -> SessionScope:
+        """Где проведение лежит: в афише, в архиве (убрано вручную) или в прошедших."""
+        return session_scope(item.archived_at is not None, item.end_date, self.today)
+
+    async def count(self, scope: SessionScope) -> int:
+        return await self.repo.count(scope, self.today)
+
+    async def months(self, scope: SessionScope = SessionScope.ACTIVE) -> list[tuple[int, int]]:
+        """Месяцы раздела, в которых есть проведения (по дате начала): [(ГГГГММ, сколько)] по порядку;
+        проведения без дат — под ключом NO_DATES, в конце.
 
         В админке проведения не показываются одним длинным списком: сначала месяц, внутри — листание стрелками.
         """
-        counts = Counter(month_key(day) for day in await self.repo.start_dates(parent_id))
-        return sorted(counts.items())
+        counts = Counter(month_key(day) if day else NO_DATES for day in await self.repo.start_dates(scope, self.today))
+        without_dates = counts.pop(NO_DATES, 0)
+        return sorted(counts.items()) + ([(NO_DATES, without_dates)] if without_dates else [])
 
-    async def month_items(self, month: int, parent_id: int | None = None) -> list[CourseSession]:
-        """Проведения месяца ГГГГММ по порядку дат — их и листают стрелками. Скрытые и прошедшие тоже здесь."""
+    async def month_items(self, month: int, scope: SessionScope = SessionScope.ACTIVE) -> list[CourseSession]:
+        """Проведения раздела за месяц ГГГГММ по порядку дат (NO_DATES — без дат) — их и листают стрелками."""
+        if month == NO_DATES:
+            return await self.repo.list_without_dates(scope, self.today)
         bounds = month_bounds(month)
-        return await self.repo.list_between(*bounds, parent_id) if bounds else []
+        return await self.repo.list_between(scope, self.today, *bounds) if bounds else []
 
-    @property
-    def current_month(self) -> int:
-        return month_key(self.today)
+    def month_of(self, item: CourseSession) -> int:
+        return month_key(item.start_date) if item.start_date else NO_DATES
+
+    async def siblings(self, item: CourseSession) -> list[int]:
+        """Проведения, среди которых листается карточка: тот же раздел и тот же месяц (или все без дат)."""
+        return [s.id for s in await self.month_items(self.month_of(item), self.scope(item))]
 
     async def item(self, item_id: int) -> CourseSession | None:
         return await self.repo.get(item_id)
 
     def is_active(self, item: CourseSession) -> bool:
-        return item.is_visible
+        return item.archived_at is None
 
     def is_past(self, item: CourseSession) -> bool:
-        return item.end_date < self.today
+        return item.end_date is not None and item.end_date < self.today
 
     def title(self, item: CourseSession) -> str:
         """«13–14 октября · Имплантация…» — дата первой: в списке ищут по ней."""
-        return f"{format_range(item.start_date, item.end_date)} · {item.title_override or item.program.title}"
+        dates = format_range(item.start_date, item.end_date) if item.start_date else "без дат"
+        return f"{dates} · {item.title_override or item.program.title}"
 
     def field_value(self, item: CourseSession, field: DictField) -> Any:
         match field.name:
             case "days":
                 return [{"date": d.date.isoformat(),
                          "start": d.start_time.strftime("%H:%M") if d.start_time else None,
-                         "end": d.end_time.strftime("%H:%M") if d.end_time else None} for d in item.days]
+                         "end": d.end_time.strftime("%H:%M") if d.end_time else None} for d in item.days] or None
             case "prices":
                 return [{"kind": p.kind.value, "label": p.label, "amount": p.amount}
                         for p in item.price_options if p.is_active] or None
@@ -161,22 +182,21 @@ class AdminSessionService:
             return SaveResult.MISSING_REQUIRED, None
         program_id = values["program_id"]
         if program_id not in {pid for pid, _ in await self.options(self.spec.field("program_id"), [])}:
-            return SaveResult.BAD_VALUE, None
-        program = await self.repo.program(program_id)
+            return SaveResult.BAD_VALUE, None  # курса нет или он в архиве
         # Курс — только по id: связь program= через обратную ссылку program.sessions тронула бы незагруженный список.
-        item = CourseSession(program_id=program_id, is_visible=True, days=[], price_options=[])
+        item = CourseSession(program_id=program_id, days=[], price_options=[])
         for field in self.spec.fields:
             if field.name != "program_id" and not await self._apply(item, field, values.get(field.name)):
                 return SaveResult.BAD_VALUE, None
-        program.show_without_dates = True  # новое проведение — курс снова виден в афише (решение 14)
         await self.repo.add(item)
-        self._log("создано и опубликовано проведение #%s курса #%s", item.id, program_id)
+        self._log("создано проведение #%s курса #%s (%s) — в афише", item.id, program_id,
+                  "с датами" if item.start_date else "без дат")
         return SaveResult.OK, item
 
     async def update_field(self, item_id: int, field: DictField, value: Any) -> SaveResult:
         item = await self.repo.get(item_id)
-        if item is None:
-            return SaveResult.NOT_FOUND
+        if item is None or self.scope(item) is not SessionScope.ACTIVE:
+            return SaveResult.NOT_FOUND  # в архиве и в прошедших проведение не правится: карточка там — «как было»
         if not field.editable:
             return SaveResult.BAD_VALUE
         if field.required and not value:
@@ -188,19 +208,38 @@ class AdminSessionService:
 
     async def set_status(self, item_id: int, status: str) -> CourseSession | None:
         item = await self.repo.get(item_id)
-        if item is None or status not in ADMIN_STATUSES:
+        if item is None or status not in ADMIN_STATUSES or self.scope(item) is not SessionScope.ACTIVE:
             return None
         item.status = SessionStatus(status)
         self._log("#%s: статус %s", item_id, status)
         return item
 
     async def set_active(self, item_id: int, active: bool) -> CourseSession | None:
+        """В архив (убрать из афиши) / из архива. None — проведения нет или вернуть нельзя: его курс в архиве."""
+        item = await self.repo.get(item_id)
+        if item is None or (active and item.program.archived_at is not None):
+            return None
+        item.archived_at = None if active else datetime.now(UTC)
+        self._log("#%s %s", item_id, "возвращено из архива" if active else "в архиве (убрано из афиши)")
+        return item
+
+    async def can_delete(self, item_id: int) -> DeleteResult:
         item = await self.repo.get(item_id)
         if item is None:
-            return None
-        item.is_visible = active
-        self._log("#%s %s", item_id, "показано в афише" if active else "скрыто из афиши")
-        return item
+            return DeleteResult.NOT_FOUND
+        if self.scope(item) is SessionScope.ACTIVE:
+            return DeleteResult.NOT_IN_ARCHIVE
+        if await self.repo.has_enrollments([item_id]):
+            return DeleteResult.IN_USE
+        return DeleteResult.OK
+
+    async def delete(self, item_id: int) -> DeleteResult:
+        """Удалить проведение навсегда (с днями и тарифами) — только из архива или из прошедших."""
+        result = await self.can_delete(item_id)
+        if result is DeleteResult.OK:
+            await self.repo.delete([item_id])
+            self._log("#%s удалено навсегда", item_id)
+        return result
 
     async def preview(self, values: dict[str, Any]) -> SessionCard:
         """Проведение для предпросмотра «как в афише». Простой объект, а не ORM: он не должен попасть в БД
@@ -219,13 +258,13 @@ class AdminSessionService:
         """Записать значение поля в проведение. False — значение не подходит (подделанная кнопка и т. п.)."""
         match field.name:
             case "days":
-                if not value:
-                    return False
+                # Пусто — проведение без дат: «даты уточняются».
                 item.days = [SessionDay(date=date.fromisoformat(d["date"]),
                                         start_time=time.fromisoformat(d["start"]) if d.get("start") else None,
                                         end_time=time.fromisoformat(d["end"]) if d.get("end") else None)
-                             for d in value]
-                item.start_date, item.end_date = item.days[0].date, item.days[-1].date
+                             for d in value or []]
+                item.start_date = item.days[0].date if item.days else None
+                item.end_date = item.days[-1].date if item.days else None
             case "format":
                 if value not in _FORMATS:
                     return False

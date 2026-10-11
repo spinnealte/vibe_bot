@@ -92,7 +92,10 @@ def _meta_lines(program: Program, format_value: str) -> list[str]:
 
 
 def _dates_text(course_session: CourseSession) -> str:
-    """13–14 октября 2026, 10:00–18:00 — время добавляем, если во все дни одинаковое."""
+    """13–14 октября 2026, 10:00–18:00 — время добавляем, если во все дни одинаковое.
+    У проведения без дат — «даты уточняются»."""
+    if course_session.start_date is None:
+        return texts.DATES_TBD
     text = format_range_with_year(course_session.start_date, course_session.end_date)
     times = {format_time_range(day.start_time, day.end_time) for day in course_session.days}
     if len(times) == 1 and (time_text := times.pop()):
@@ -111,7 +114,7 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines.append("")
     lines += _lecturers_line(program)
-    lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)))
+    lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)) if s.start_date else texts.CAPTION_DATES_TBD)
     if s.venue:
         lines.append(texts.CAPTION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
     lines += _meta_lines(program, s.format.value)
@@ -134,12 +137,12 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
 
 
 def program_caption(program: Program) -> str:
-    """Подпись под фото курса, у которого пока нет дат (в конце карусели расписания)."""
+    """Подпись под фото курса в админке (раздел «Курсы» и архив курсов). Курс — запись библиотеки: дат,
+    площадки, цен и статуса у него нет — они у проведения, а в афише стоят только проведения."""
     lines = [texts.CAPTION_TITLE.format(title=safe(program.title))]
     if program.short_description:
         lines.append(f"<i>{safe(program.short_description)}</i>")
-    lines += ["", *_lecturers_line(program), texts.CAPTION_DATES_TBD, *_meta_lines(program, program.default_format.value),
-              "", texts.CAPTION_STATUS_TBD]
+    lines += ["", *_lecturers_line(program), *_meta_lines(program, program.default_format.value)]
     return _with_excerpt(lines, program)
 
 
@@ -154,11 +157,12 @@ def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str
     return pages
 
 
-def manager_draft(program: Program, card: SessionCard | None) -> str:
-    """Черновик сообщения менеджеру по курсу на слайде (простой текст, без HTML)."""
-    if card is None:
-        return texts.MANAGER_DRAFT_PROGRAM.format(title=program.title)
+def manager_draft(card: SessionCard) -> str:
+    """Черновик сообщения менеджеру по проведению на слайде (простой текст, без HTML).
+    У проведения без дат — вопрос «когда ближайший поток»."""
     s = card.session
+    if s.start_date is None:
+        return texts.MANAGER_DRAFT_PROGRAM.format(title=session_title(s))
     return texts.MANAGER_DRAFT_SESSION.format(title=session_title(s),
                                               dates=format_range_with_year(s.start_date, s.end_date))
 
@@ -166,7 +170,11 @@ def manager_draft(program: Program, card: SessionCard | None) -> str:
 def about_text(venues: list[Venue], with_manager: bool) -> str:
     """«О центре»: текст о центре, площадки из БД (с картой, если есть ссылка), подсказка про кнопку «Менеджер»."""
     parts = [texts.ABOUT]
-    if venues:
+    if not texts.ABOUT_VENUE:
+        # Шаблон строки площадки пуст (texts.ABOUT_VENUE) — адреса пока не показываем: остаётся один заголовок
+        # с пометкой «Уточняется». Чтобы вернуть список площадок, достаточно вернуть шаблон.
+        parts.append(texts.ABOUT_VENUES_TITLE)
+    elif venues:
         lines = [texts.ABOUT_VENUES_TITLE]
         for venue in venues:
             line = texts.ABOUT_VENUE.format(name=safe(venue.name), address=safe(venue.address))

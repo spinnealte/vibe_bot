@@ -41,10 +41,10 @@ class SessionCard:
 
 @dataclass(frozen=True)
 class CourseSlide:
-    """Слайд карусели расписания: поток с датами или курс, у которого дат пока нет (card=None)."""
+    """Слайд карусели расписания — проведение: с датами или без дат («даты уточняются»)."""
 
     program: Program
-    card: SessionCard | None
+    card: SessionCard
     index: int
     total: int
 
@@ -53,37 +53,28 @@ class ScheduleService:
     def __init__(self, session: AsyncSession) -> None:
         self.catalog = CatalogRepository(session)
 
-    async def _carousel(self, today: date) -> list[tuple[str, int]]:
-        """Порядок карусели: потоки по дате начала, затем курсы без дат. Курсов десятки — берём id целиком."""
-        sessions = [("s", sid) for sid in await self.catalog.upcoming_session_ids(today)]
-        programs = [("p", pid) for pid in await self.catalog.programs_without_upcoming_ids(today)]
-        return sessions + programs
+    async def carousel_ids(self, today: date) -> list[int]:
+        """Афиша по порядку: id проведений — с датами по дате начала, затем без дат. Их десятки — берём целиком."""
+        return await self.catalog.upcoming_session_ids(today)
 
     async def slide(self, today: date, index: int) -> CourseSlide | None:
-        """Слайд номер index (с поправкой на границы — список мог измениться). None — курсов нет совсем."""
-        # Между запросом списка и карточки курс могли скрыть — тогда список пересобирается, и на этом месте
-        # оказывается соседний курс. Попыток несколько: вдруг скрыли не один.
+        """Слайд номер index (с поправкой на границы — список мог измениться). None — афиша пуста."""
+        # Между запросом списка и карточки проведение могли убрать в архив — тогда список пересобирается, и на
+        # этом месте оказывается соседнее. Попыток несколько: вдруг убрали не одно.
         for _ in range(3):
-            items = await self._carousel(today)
-            if not items:
-                logger.debug("[DB] Карусель: курсов нет")
+            ids = await self.carousel_ids(today)
+            if not ids:
+                logger.debug("[DB] Карусель: проведений нет")
                 return None
-            index = min(max(index, 0), len(items) - 1)
-            kind, item_id = items[index]
-            logger.debug("[DB] Карусель: слайд %d из %d (%s #%s)", index + 1, len(items),
-                         "поток" if kind == "s" else "курс без дат", item_id)
-            if kind == "s":
-                card = await self.card(item_id, today)
-                if card is not None:
-                    return CourseSlide(card.program, card, index, len(items))
-            else:
-                program = await self.catalog.published_program(item_id)
-                if program is not None:
-                    return CourseSlide(program, None, index, len(items))
+            index = min(max(index, 0), len(ids) - 1)
+            logger.debug("[DB] Карусель: слайд %d из %d (проведение #%s)", index + 1, len(ids), ids[index])
+            card = await self.card(ids[index], today)
+            if card is not None:
+                return CourseSlide(card.program, card, index, len(ids))
         return None
 
     async def card(self, session_id: int, today: date) -> SessionCard | None:
-        """Карточка публичного потока. None — потока нет, скрыт или уже прошёл."""
+        """Карточка проведения из афиши. None — проведения нет, оно в архиве или уже прошло."""
         course_session = await self.catalog.public_session(session_id, today)
         if course_session is None:
             return None
