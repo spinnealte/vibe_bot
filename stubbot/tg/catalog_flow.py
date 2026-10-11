@@ -39,12 +39,18 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
                       in_place: bool = True) -> None:
     """Слайд карусели — проведение: с датами или без дат («даты уточняются»)."""
     slide = await ScheduleService(session).slide(today, index)
+    settings = get_settings()
     if slide is None:
-        await _screen(message, texts.SCHEDULE_EMPTY, in_place=in_place)
+        # Пустое расписание не должно быть тупиком: есть менеджер — предлагаем спросить у него.
+        if settings.manager_url:
+            url = with_draft_text(settings.manager_url, texts.MANAGER_DRAFT_SCHEDULE)
+            await _screen(message, texts.SCHEDULE_EMPTY + texts.SCHEDULE_EMPTY_MANAGER_HINT,
+                          keyboards.contact_manager(url, texts.BTN_MANAGER_COURSES), in_place=in_place)
+        else:
+            await _screen(message, texts.SCHEDULE_EMPTY, in_place=in_place)
         return
     program, card = slide.program, slide.card
     # MVP — афиша: без заявки, «Сообщить о наборе» и счётчика мест, пока заявки выключены в настройках.
-    settings = get_settings()
     applications = settings.applications_enabled
     markup = keyboards.course_carousel(
         index=slide.index,
@@ -64,14 +70,24 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
     await _screen(message, caption, markup, photo, in_place)
 
 
-async def show_program_page(message: Message, session: AsyncSession, program_id: int, index: int,
+async def show_program_page(message: Message, session: AsyncSession, today: date, program_id: int, index: int,
                             page: int) -> bool:
-    program = await ScheduleService(session).program(program_id)
+    """Программа курса постранично; index — карточка афиши, с которой её открыли (туда вернёт «Назад к курсу»)."""
+    service = ScheduleService(session)
+    program = await service.program(program_id)
     if program is None:
         return False
+    manager_url = get_settings().manager_url
+    if manager_url:
+        # Черновик — как под карточкой, с которой открыли программу: с датами этого проведения. Если карточку
+        # за это время убрали из афиши — общий вопрос про курс.
+        slide = await service.slide(today, index)
+        draft = (render.manager_draft(slide.card) if slide is not None and slide.program.id == program_id
+                 else texts.MANAGER_DRAFT_PROGRAM.format(title=program.title))
+        manager_url = with_draft_text(manager_url, draft)
     pages = render.program_pages(program)
     page = min(max(page, 0), len(pages) - 1)
-    await show_screen(message, pages[page], keyboards.program_pages(program_id, index, page, len(pages)))
+    await show_screen(message, pages[page], keyboards.program_pages(program_id, index, page, len(pages), manager_url))
     return True
 
 

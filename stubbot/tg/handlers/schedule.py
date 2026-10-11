@@ -42,9 +42,10 @@ async def on_close(callback: CallbackQuery, state: FSMContext) -> None:
 
 
 @router.callback_query(ScheduleCb.filter(F.action == ScheduleAction.PROGRAM))
-async def on_program(callback: CallbackQuery, callback_data: ScheduleCb, session: AsyncSession, client: Client) -> None:
-    if not await catalog_flow.show_program_page(callback.message, session, callback_data.item_id,
-                                                callback_data.index, callback_data.page):
+async def on_program(callback: CallbackQuery, callback_data: ScheduleCb, session: AsyncSession, client: Client,
+                     settings: Settings) -> None:
+    if not await catalog_flow.show_program_page(callback.message, session, local_today(settings.timezone),
+                                                callback_data.item_id, callback_data.index, callback_data.page):
         await callback.answer(texts.PROGRAM_TEXT_EMPTY)
         return
     await callback.answer()

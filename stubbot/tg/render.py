@@ -18,6 +18,7 @@ CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (сч�
 MIN_DESCRIPTION = 80  # если под описание остаётся меньше — не показываем обрывок
 EXCERPT_LIMIT = 400  # сколько программы/описания показывать в карточке; полная программа — по кнопке
 PROGRAM_PAGE_LIMIT = 900  # страница полной программы ≈ один экран телефона
+MAX_QUESTION_DRAFT = 200  # текст едет в ссылке кнопки: кириллица там в шесть раз длиннее, а ссылка не резиновая
 _TAG = re.compile(r"<[^>]+>")
 
 
@@ -165,6 +166,13 @@ def manager_draft(card: SessionCard) -> str:
         return texts.MANAGER_DRAFT_PROGRAM.format(title=session_title(s))
     return texts.MANAGER_DRAFT_SESSION.format(title=session_title(s),
                                               dates=format_range_with_year(s.start_date, s.end_date))
+
+
+def question_draft(text: str) -> str:
+    """Черновик менеджеру из того, что человек написал боту: короткий текст подставляем как есть — не придётся
+    набирать вопрос заново. Длинный не поместится в ссылку кнопки — тогда общий черновик."""
+    question = " ".join(text.split())
+    return question if 0 < len(question) <= MAX_QUESTION_DRAFT else texts.MANAGER_DRAFT_ABOUT
 
 
 def about_text(venues: list[Venue], with_manager: bool) -> str:

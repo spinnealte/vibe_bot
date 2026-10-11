@@ -43,6 +43,7 @@ class Settings(BaseSettings):
     applications_enabled: bool = False
 
     # Чат менеджера для записи: https://t.me/<username>. Пусто — кнопки «Менеджер» нет.
+    # Короткие записи «t.me/<username>» и «@<username>» тоже принимаются — приводятся к полной ссылке.
     manager_url: str | None = None
 
     @field_validator("admin_ids", mode="before")
@@ -60,6 +61,14 @@ class Settings(BaseSettings):
     def _check_manager_url(cls, value: object) -> object:
         if isinstance(value, str):
             value = value.strip() or None
+        if isinstance(value, str):
+            # Ссылку вписывают руками, и чаще всего — так, как её видят в Telegram: «t.me/name» или «@name».
+            if value.startswith("@"):
+                value = f"https://t.me/{value[1:]}"
+            elif value.startswith(("t.me/", "telegram.me/")):
+                value = f"https://{value}"
+            elif value.startswith(("http://t.me/", "http://telegram.me/")):
+                value = "https://" + value.removeprefix("http://")
         if value is not None and not str(value).startswith(("https://", "tg://")):
             raise ValueError("MANAGER_URL — ссылка вида https://t.me/<username>")
         return value

@@ -40,13 +40,21 @@ from stubbot.tg.callbacks import (
 
 
 def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
-    """Главное меню; админам (ADMIN_IDS / owner из .env) — ещё кнопка «⚙️ Админка». chat_id лички = id пользователя."""
+    """Главное меню. «💬 Менеджер» — когда задана ссылка на менеджера (MANAGER_URL); админам (ADMIN_IDS / owner
+    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя."""
+    settings = get_settings()
     keyboard = [
         [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
         [KeyboardButton(text=texts.BTN_ABOUT)],
     ]
-    if get_settings().is_admin(chat_id):
-        keyboard[1].append(KeyboardButton(text=texts.BTN_ADMIN))
+    if settings.manager_url:
+        keyboard[1].append(KeyboardButton(text=texts.BTN_MANAGER))
+    if settings.is_admin(chat_id):
+        admin = KeyboardButton(text=texts.BTN_ADMIN)
+        if len(keyboard[1]) < 2:
+            keyboard[1].append(admin)
+        else:
+            keyboard.append([admin])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
 
 
@@ -148,13 +156,13 @@ def _pager(index: int, total: int, prev_data: str, next_data: str) -> list[Inlin
     return row
 
 
-def manager_button(url: str) -> InlineKeyboardButton:
+def manager_button(url: str, label: str = texts.BTN_MANAGER) -> InlineKeyboardButton:
     """Кнопка-ссылка на чат менеджера. Telegram открывает чат сам, боту о нажатии не сообщает."""
-    return InlineKeyboardButton(text=texts.BTN_MANAGER, url=url)
+    return InlineKeyboardButton(text=label, url=url)
 
 
-def contact_manager(url: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[[manager_button(url)]])
+def contact_manager(url: str, label: str = texts.BTN_MANAGER) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[manager_button(url, label)]])
 
 
 def course_carousel(index: int, total: int, program_id: int, session_id: int, apply_text: str | None,
@@ -198,11 +206,15 @@ def to_schedule(index: int = 0) -> InlineKeyboardMarkup:
     ]])
 
 
-def program_pages(program_id: int, index: int, page: int, pages: int) -> InlineKeyboardMarkup:
+def program_pages(program_id: int, index: int, page: int, pages: int,
+                  manager_url: str | None = None) -> InlineKeyboardMarkup:
+    """Под программой курса: листание страниц, «Менеджер» (дочитал программу — момент решения), назад к курсу."""
     rows = []
     if pages > 1:
         rows.append(_pager(page, pages, _sch(ScheduleAction.PROGRAM, program_id, index, page - 1),
                            _sch(ScheduleAction.PROGRAM, program_id, index, page + 1)))
+    if manager_url:
+        rows.append([manager_button(manager_url)])
     rows.append([InlineKeyboardButton(text=texts.BTN_BACK_TO_COURSE,
                                       callback_data=_sch(ScheduleAction.SLIDE, index=index))])
     return InlineKeyboardMarkup(inline_keyboard=rows)
