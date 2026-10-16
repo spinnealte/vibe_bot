@@ -16,7 +16,7 @@ class Registration(StatesGroup):
     confirm_name = State()
     specialties = State()
     positions = State()
-    # Необязательные — после завершения регистрации, каждый можно пропустить.
+    # Необязательные - после завершения регистрации, каждый можно пропустить.
     city = State()
     workplace = State()
     experience = State()
@@ -30,7 +30,7 @@ class EditProfile(StatesGroup):
     phone = State()
     specialties = State()
     positions = State()
-    optional_value = State()  # город/клиника/опыт/email/дата рождения; какое поле — в data["field"]
+    optional_value = State()  # город/клиника/опыт/email/дата рождения; какое поле - в data["field"]
 
 
 class Application(StatesGroup):
@@ -74,5 +74,5 @@ FIELD_BY_STATE: dict[str, OptionalField] = {state.state: field for field, state 
 
 # Шаги, где ждём текст с клавиатуры.
 REGISTRATION_TEXT_STATES = (Registration.full_name, *OPTIONAL_STATES.values())
-# Шаги, где ответ — кнопки в сообщении.
+# Шаги, где ответ - кнопки в сообщении.
 REGISTRATION_BUTTON_STATES = (Registration.confirm_name, Registration.specialties, Registration.positions)

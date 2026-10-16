@@ -1,8 +1,8 @@
 """Курсы в админке: мастер «Новый курс», правка полей, архив. Тот же общий редактор, что у справочников.
 
-Курс — запись библиотеки: название, программа, лекторы, направления, обложка. Сам по себе курс в афишу не
+Курс - запись библиотеки: название, программа, лекторы, направления, обложка. Сам по себе курс в афишу не
 попадает и из раздела «Курсы» афиша не меняется (решение 16): в афише стоят проведения, с датами или без.
-«В архив» — archived_at; курс с проведениями в афише в архив не отправить. Удалить навсегда — только из архива.
+«В архив» - archived_at; курс с проведениями в афише в архив не отправить. Удалить навсегда - только из архива.
 """
 
 from datetime import UTC, date, datetime
@@ -27,7 +27,7 @@ from stubbot.services.admin_log import log_admin_action
 from stubbot.utils.names import short_name
 from stubbot.utils.slug import slugify
 
-# Порядок — порядок шагов мастера (решение 02.10.2026).
+# Порядок - порядок шагов мастера (решение 02.10.2026).
 COURSE_SPEC = DictionarySpec(
     kind=DictKind.COURSES,
     fields=(
@@ -57,7 +57,7 @@ class AdminCourseService:
         self.today = today
 
     async def items(self) -> list[Program]:
-        """Раздел «Курсы» — только действующие; архивные лежат в «Архиве» (archived_items)."""
+        """Раздел «Курсы» - только действующие; архивные лежат в «Архиве» (archived_items)."""
         return await self.repo.list_active()
 
     async def archived_items(self) -> list[Program]:
@@ -70,7 +70,7 @@ class AdminCourseService:
         return await self.repo.get(item_id)
 
     async def siblings(self, item: Program) -> list[int]:
-        """Курсы, среди которых листается карточка: действующие или архив — где лежит сам курс."""
+        """Курсы, среди которых листается карточка: действующие или архив - где лежит сам курс."""
         items = await self.items() if self.is_active(item) else await self.archived_items()
         return [course.id for course in items]
 
@@ -112,7 +112,7 @@ class AdminCourseService:
     async def update_field(self, item_id: int, field: DictField, value: Any) -> SaveResult:
         program = await self.repo.get(item_id)
         if program is None or program.archived_at is not None:
-            return SaveResult.NOT_FOUND  # в архиве курс не правится: карточка там — «как было»
+            return SaveResult.NOT_FOUND  # в архиве курс не правится: карточка там - «как было»
         if field.required and not value:
             return SaveResult.MISSING_REQUIRED
         if not await self._apply(program, field, value, current=self.field_value(program, field)):
@@ -122,11 +122,11 @@ class AdminCourseService:
 
     async def sessions_in_afisha(self, item_id: int) -> int:
         """Сколько проведений курса сейчас в афише. Пока они есть, курс в архив не отправить: из раздела
-        «Курсы» афиша не меняется — сначала в архив уходят сами проведения."""
+        «Курсы» афиша не меняется - сначала в архив уходят сами проведения."""
         return await self.sessions.active_count_for_program(item_id, self.today)
 
     async def set_active(self, item_id: int, active: bool) -> Program | None:
-        """В архив / из архива. None — курса нет или в архив нельзя: у него есть проведения в афише."""
+        """В архив / из архива. None - курса нет или в архив нельзя: у него есть проведения в афише."""
         program = await self.repo.get(item_id)
         if program is None or (not active and await self.sessions_in_afisha(item_id)):
             return None
@@ -135,7 +135,7 @@ class AdminCourseService:
         return program
 
     async def sessions_total(self, item_id: int) -> int:
-        """Сколько у курса проведений всего (в архиве и прошедших) — они удаляются вместе с курсом."""
+        """Сколько у курса проведений всего (в архиве и прошедших) - они удаляются вместе с курсом."""
         return len(await self.sessions.ids_for_program(item_id))
 
     async def can_delete(self, item_id: int) -> DeleteResult:
@@ -152,7 +152,7 @@ class AdminCourseService:
         return DeleteResult.OK
 
     async def delete(self, item_id: int) -> DeleteResult:
-        """Удалить курс навсегда — только из архива, вместе с его проведениями (они все в архиве или прошли)."""
+        """Удалить курс навсегда - только из архива, вместе с его проведениями (они все в архиве или прошли)."""
         result = await self.can_delete(item_id)
         if result is not DeleteResult.OK:
             return result
@@ -163,14 +163,14 @@ class AdminCourseService:
         return DeleteResult.OK
 
     async def preview(self, values: dict[str, Any]) -> Program:
-        """Несохранённый курс для предпросмотра карточки — в сессию не попадает."""
+        """Несохранённый курс для предпросмотра карточки - в сессию не попадает."""
         program = Program()
         for field in self.spec.fields:
             await self._apply(program, field, values.get(field.name), current=[])
         return program
 
     async def _apply(self, program: Program, field: DictField, value: Any, current: Any) -> bool:
-        """Записать значение поля в курс. False — значение не подходит (подделанная кнопка, не тот вариант)."""
+        """Записать значение поля в курс. False - значение не подходит (подделанная кнопка, не тот вариант)."""
         match field.kind:
             case FieldKind.MULTI:
                 ids = sorted(set(value or []))

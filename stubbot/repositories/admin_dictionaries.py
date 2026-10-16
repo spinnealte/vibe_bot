@@ -17,7 +17,7 @@ class AdminDictionaryRepository:
         self.title = getattr(model, title_field)
 
     async def list_all(self) -> list[DictionaryItem]:
-        """Действующие сначала, архив — в конце; внутри — по названию."""
+        """Действующие сначала, архив - в конце; внутри - по названию."""
         stmt = select(self.model).order_by(self.model.is_active.desc(), self.title)
         return list(await self.session.scalars(stmt))
 

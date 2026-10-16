@@ -23,21 +23,21 @@ class AcquisitionSource(TimestampMixin, Base):
 
 
 class ClientSourceTouch(CreatedAtMixin, Base):
-    """Каждый заход по диплинку, в том числе уже зарегистрированных. Строки не меняются — только created_at."""
+    """Каждый заход по диплинку, в том числе уже зарегистрированных. Строки не меняются - только created_at."""
 
     __tablename__ = "client_source_touches"
     __table_args__ = (Index("ix_client_source_touches_source_id_created_at", "source_id", "created_at"),)
 
     id: Mapped[IntPK]
     client_id: Mapped[int] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"), index=True)
-    # NULL — код не распознан (опечатка, удалённая кампания); сам payload сохраняется в raw_payload.
+    # NULL - код не распознан (опечатка, удалённая кампания); сам payload сохраняется в raw_payload.
     source_id: Mapped[int | None] = mapped_column(ForeignKey("acquisition_sources.id", ondelete="RESTRICT"))
     raw_payload: Mapped[str] = mapped_column(String(64))
     is_first: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 
 
 class ClientEvent(CreatedAtMixin, Base):
-    """Журнал действий для воронки. type — значения ClientEventType, без CHECK."""
+    """Журнал действий для воронки. type - значения ClientEventType, без CHECK."""
 
     __tablename__ = "client_events"
     __table_args__ = (

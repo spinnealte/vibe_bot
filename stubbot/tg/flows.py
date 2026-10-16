@@ -1,9 +1,9 @@
 """Экраны пользовательских сценариев: что отправить и в какое состояние перейти.
 
-Хендлеры решают «что произошло», flows — «что показать дальше». Так один экран вызывается из разных мест
+Хендлеры решают «что произошло», flows - «что показать дальше». Так один экран вызывается из разных мест
 (меню, после согласия, «Назад») без циклических импортов между роутерами.
 
-in_place=True — экран заменяет сообщение, в котором нажали inline-кнопку (tg/screen.py); False — новое сообщение
+in_place=True - экран заменяет сообщение, в котором нажали inline-кнопку (tg/screen.py); False - новое сообщение
 (ответ на текст пользователя или экран с reply-клавиатурой: её нельзя прикрепить правкой сообщения).
 """
 
@@ -35,7 +35,7 @@ from stubbot.utils.profile_fields import experience_years
 
 # Экран согласий при регистрации (FSM data): какие версии документов показали и какие галочки стоят.
 PD_DOCUMENT_KEY = "pd_document_id"
-ADS_DOCUMENT_KEY = "ads_document_id"  # None — текста о рекламе нет, второй галочки на экране нет
+ADS_DOCUMENT_KEY = "ads_document_id"  # None - текста о рекламе нет, второй галочки на экране нет
 PD_CHECKED_KEY = "pd_checked"
 ADS_CHECKED_KEY = "ads_checked"
 CONSENT_FORM_KEYS = (PD_DOCUMENT_KEY, ADS_DOCUMENT_KEY, PD_CHECKED_KEY, ADS_CHECKED_KEY)
@@ -67,9 +67,9 @@ async def enter_cabinet(message: Message, state: FSMContext, session: AsyncSessi
 
 async def show_consent_form(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                             in_place: bool = False, notice: str | None = None) -> None:
-    """Согласия при регистрации — тексты со ссылками на документы на сайте и две отдельные галочки:
-    1 — политика и обработка ПД (обязательна), 2 — рекламные рассылки (по желанию).
-    Тексты — у текущих версий документов (services/legal.py)."""
+    """Согласия при регистрации - тексты со ссылками на документы на сайте и две отдельные галочки:
+    1 - политика и обработка ПД (обязательна), 2 - рекламные рассылки (по желанию).
+    Тексты - у текущих версий документов (services/legal.py)."""
     service = ConsentService(session)
     pd_document = await service.current_document(ConsentType.PERSONAL_DATA)
     pd_text = document_text(pd_document) if pd_document else None
@@ -79,7 +79,7 @@ async def show_consent_form(message: Message, state: FSMContext, session: AsyncS
         return
     ads_document = await service.current_document(ConsentType.MARKETING)
     ads_text = document_text(ads_document) if ads_document else None
-    # Вторая галочка показывает то, что есть сейчас: соглашался на рассылки раньше — она уже стоит.
+    # Вторая галочка показывает то, что есть сейчас: соглашался на рассылки раньше - она уже стоит.
     ads = ads_text is not None and await service.has_any_consent(client.id, ConsentType.MARKETING)
     await state.set_state(Consent.personal_data)
     # Галочки ставит сам человек; согласия засчитываются на те версии документов, которые он видел.
@@ -97,7 +97,7 @@ async def show_consent_form(message: Message, state: FSMContext, session: AsyncS
 
 
 async def show_marketing_consent(message: Message, state: FSMContext, session: AsyncSession) -> None:
-    """Включение рекламных рассылок из кабинета: текст согласия и «Да / Нет» — в том же сообщении."""
+    """Включение рекламных рассылок из кабинета: текст согласия и «Да / Нет» - в том же сообщении."""
     document = await ConsentService(session).current_document(ConsentType.MARKETING)
     ads_text = document_text(document) if document else None
     if ads_text is None:
@@ -137,14 +137,14 @@ async def show_registration_step(message: Message, state: FSMContext, session: A
             just_completed = await service.complete(client)
             data = await state.get_data()
             if data.get(PENDING_APPLY_KEY):
-                # Регистрацию проходили ради заявки — сразу к ней; необязательные поля заполнят в кабинете.
+                # Регистрацию проходили ради заявки - сразу к ней; необязательные поля заполнят в кабинете.
                 await message.answer(texts.APPLY_PROFILE_READY, reply_markup=keyboards.main_menu(message.chat.id))
                 await catalog_flow.start_application(
                     message, state, session, client, local_today(get_settings().timezone), data[PENDING_APPLY_KEY],
                     index=data.get(catalog_flow.CAROUSEL_INDEX_KEY, 0), in_place=False,
                 )
             elif just_completed:
-                # Обязательная часть пройдена только что — предлагаем необязательные поля.
+                # Обязательная часть пройдена только что - предлагаем необязательные поля.
                 await message.answer(texts.REG_MANDATORY_DONE, reply_markup=keyboards.registration_nav())
                 await ask_optional(message, state, OPTIONAL_FIELDS_ORDER[0])
             else:
@@ -168,7 +168,7 @@ async def ask_confirm_name(message: Message, state: FSMContext, confirm_state: S
 
 
 async def ask_optional(message: Message, state: FSMContext, field: OptionalField, in_place: bool = False) -> None:
-    """Вопрос необязательного поля. По «Пропустить» — в том же сообщении; после ответа текстом — новым,
+    """Вопрос необязательного поля. По «Пропустить» - в том же сообщении; после ответа текстом - новым,
     а у прошлого вопроса убираем кнопку «Пропустить»."""
     if not in_place:
         await _strip_previous_prompt(message, state)

@@ -18,7 +18,7 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    """Хвост ссылки t.me/<bot>?start=<хвост> первого захода — текстом у клиента (решение 15). NULL — без ссылки."""
+    """Хвост ссылки t.me/<bot>?start=<хвост> первого захода - текстом у клиента (решение 15). NULL - без ссылки."""
     op.add_column('clients', sa.Column('start_param', sa.String(length=64), nullable=True))
 
 

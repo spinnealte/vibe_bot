@@ -16,7 +16,7 @@ from stubbot.repositories.consents import ConsentRepository
 from stubbot.services.admin_log import log_admin_action
 from stubbot.utils.csv_export import build_csv
 
-# Порядок колонок — как в client_row(). Первая колонка не «ID»: файл, который начинается с этих двух букв,
+# Порядок колонок - как в client_row(). Первая колонка не «ID»: файл, который начинается с этих двух букв,
 # Excel принимает за формат SYLK и открывает с ошибкой.
 HEADER = (
     "№", "Первый заход", "Последний визит", "Telegram ID", "Username", "Имя в Telegram",
@@ -47,7 +47,7 @@ def _yes_no(value: bool) -> str:
 
 
 def client_row(client: Any, pd_consent: bool, marketing: bool, tz: ZoneInfo) -> list[object]:
-    """Строка выгрузки. client — Client с загруженными specialties и positions."""
+    """Строка выгрузки. client - Client с загруженными specialties и positions."""
     return [
         client.id,
         _moment(client.created_at, tz),

@@ -8,8 +8,8 @@
 #   gunzip -c /opt/stubbot/backups/<файл>.sql.gz | runuser -u postgres -- psql -q stubbot
 #   systemctl start stubbot
 #
-# Копии лежат на том же сервере: от ошибки или неудачного обновления они спасут, от потери сервера — нет.
-# В файлах персональные данные клиентов — каталог закрыт для всех, кроме root.
+# Копии лежат на том же сервере: от ошибки или неудачного обновления они спасут, от потери сервера - нет.
+# В файлах персональные данные клиентов - каталог закрыт для всех, кроме root.
 
 set -euo pipefail
 # У cron короткий PATH (/usr/bin:/bin), а runuser лежит в /usr/sbin.
@@ -24,7 +24,7 @@ chmod 700 "$DIR"
 umask 077
 FILE="$DIR/stubbot-$(date +%Y%m%d-%H%M%S).sql.gz"
 
-# --no-owner: копию можно развернуть под любой ролью. Сначала во временный файл — оборванная копия не останется.
+# --no-owner: копию можно развернуть под любой ролью. Сначала во временный файл - оборванная копия не останется.
 runuser -u postgres -- pg_dump --no-owner "$DB_NAME" | gzip > "$FILE.tmp"
 mv "$FILE.tmp" "$FILE"
 find "$DIR" -name 'stubbot-*.sql.gz' -mtime +"$KEEP_DAYS" -delete

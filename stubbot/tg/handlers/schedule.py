@@ -1,5 +1,5 @@
 """Расписание-афиша: карусель курсов с фото. Все кнопки меняют то же сообщение (tg/screen.py).
-Кнопки заявки и «Сообщить о наборе» — в handlers/application.py."""
+Кнопки заявки и «Сообщить о наборе» - в handlers/application.py."""
 
 from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
@@ -27,7 +27,7 @@ async def on_counter(callback: CallbackQuery) -> None:
 async def on_slide(callback: CallbackQuery, callback_data: ScheduleCb, state: FSMContext, session: AsyncSession,
                    settings: Settings) -> None:
     await callback.answer()
-    await state.clear()  # «К расписанию» из заявки — выходим из её шагов
+    await state.clear()  # «К расписанию» из заявки - выходим из её шагов
     await catalog_flow.show_course(callback.message, session, local_today(settings.timezone), callback_data.index,
                                    settings.timezone)
 

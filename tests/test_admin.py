@@ -25,7 +25,7 @@ def _settings(**overrides: object) -> Settings:
 def test_admin_ids_from_env_string() -> None:
     settings = _settings(admin_ids="22, 33,")
     assert settings.admin_ids == [22, 33]
-    assert settings.is_admin(1)  # owner — всегда админ
+    assert settings.is_admin(1)  # owner - всегда админ
     assert settings.is_admin(33)
     assert not settings.is_admin(44)
     assert _settings(admin_ids="").admin_ids == []
@@ -63,7 +63,7 @@ def test_is_admin_filter() -> None:
         (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), " 16 ", 16),
         (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), "0", None),
         (DictField("x", FieldKind.NUMBER, False, min_value=1, max_value=500), "16 часов", None),
-        (DictField("x", FieldKind.CHOICE, False, choices=("a",)), "a", None),  # выбор — только кнопками
+        (DictField("x", FieldKind.CHOICE, False, choices=("a",)), "a", None),  # выбор - только кнопками
     ],
 )
 def test_parse_field(field: DictField, raw: str, expected: str | None) -> None:
@@ -75,7 +75,7 @@ def _buttons(markup) -> list[str]:
 
 
 def test_dict_list_pages_and_archive_mark() -> None:
-    spec = SPECS[DictKind.LECTURERS]  # длинные названия — по одной кнопке в ряд, 8 на странице
+    spec = SPECS[DictKind.LECTURERS]  # длинные названия - по одной кнопке в ряд, 8 на странице
     items = [(i, f"Лектор {i}", True) for i in range(1, 10)] + [(10, "Старый", False)]
     text, markup = admin_views.dict_list(spec, items, page=0)
     assert "Всего: <b>10</b>" in text and "в архиве: 1" in text
@@ -91,10 +91,10 @@ def test_dict_list_pages_and_archive_mark() -> None:
 
 @pytest.mark.parametrize("kind", [DictKind.SPECIALTIES, DictKind.POSITIONS])
 def test_short_dictionaries_listed_in_two_columns(kind: DictKind) -> None:
-    """Специальности (направления) и должности — кнопками в два столбца, как в пет-проекте: 16 на странице."""
+    """Специальности (направления) и должности - кнопками в два столбца, как в пет-проекте: 16 на странице."""
     items = [(i, f"Запись {i}", True) for i in range(1, 14)]
     _, markup = admin_views.dict_list(SPECS[kind], items, page=0)
-    assert [len(row) for row in markup.inline_keyboard[:7]] == [2, 2, 2, 2, 2, 2, 1]  # 13 записей — одна страница
+    assert [len(row) for row in markup.inline_keyboard[:7]] == [2, 2, 2, 2, 2, 2, 1]  # 13 записей - одна страница
     assert [b.text for b in markup.inline_keyboard[0]] == ["Запись 1", "Запись 2"]
     assert "1/1" not in _buttons(markup) and "▶️" not in _buttons(markup)
     _, markup = admin_views.dict_list(SPECS[kind], items + [(i, f"Запись {i}", True) for i in range(14, 20)], page=1)
@@ -106,8 +106,8 @@ def test_card_escapes_values_and_keeps_bio_html() -> None:
     values = {"full_name": "Иванов <Сергей>", "regalia": None, "bio_html": "<b>Хирург</b>"}
     text, markup = admin_views.card(spec, 5, values, active=False)
     assert "Иванов &lt;Сергей&gt;" in text
-    assert "<b>Регалии:</b> —" in text
-    assert "<b>Биография:</b> \n<b>Хирург</b>" in text  # HTML из Telegram — как есть
+    assert "<b>Регалии:</b> -" in text
+    assert "<b>Биография:</b> \n<b>Хирург</b>" in text  # HTML из Telegram - как есть
     assert texts.ADMIN_CARD_ARCHIVED in text
     buttons = _buttons(markup)
     assert "✏️ ФИО" in buttons and texts.BTN_ADMIN_RESTORE in buttons and texts.BTN_ADMIN_ARCHIVE not in buttons
@@ -119,7 +119,7 @@ def test_field_prompt_buttons() -> None:
     assert _buttons(admin_views.field_prompt(spec, required, "h", None)[1]) == [texts.BTN_ADMIN_CANCEL]
     assert _buttons(admin_views.field_prompt(spec, optional, "h", None)[1]) == [texts.BTN_ADMIN_SKIP,
                                                                                  texts.BTN_ADMIN_CANCEL]
-    # Правка: «Очистить» — только если сейчас что-то есть.
+    # Правка: «Очистить» - только если сейчас что-то есть.
     assert _buttons(admin_views.field_prompt(spec, optional, "h", "https://a.ru", item_id=3)[1]) == [
         texts.BTN_ADMIN_CLEAR, texts.BTN_ADMIN_CANCEL]
     assert _buttons(admin_views.field_prompt(spec, optional, "h", None, item_id=3)[1]) == [texts.BTN_ADMIN_CANCEL]
@@ -129,14 +129,14 @@ def test_course_choice_and_multi_prompts() -> None:
     spec = COURSE_SPEC
     text, markup = admin_views.field_prompt(spec, spec.field("default_format"), "h", "offline", item_id=7)
     assert "✅ 🏫 Очно" in _buttons(markup) and "💻 Онлайн" in _buttons(markup)
-    assert texts.BTN_ADMIN_CLEAR not in _buttons(markup)  # формат обязателен — очищать нельзя
+    assert texts.BTN_ADMIN_CLEAR not in _buttons(markup)  # формат обязателен - очищать нельзя
     _, markup = admin_views.field_prompt(spec, spec.field("level"), "h", None)
     assert texts.BTN_ADMIN_SKIP in _buttons(markup)  # уровень необязателен
     text, markup = admin_views.field_prompt(spec, spec.field("lecturers"), "h", None,
                                             options=[(1, "Иванов С. П."), (2, "Смирнова А. О.")], selected=[2])
     assert _buttons(markup) == ["Иванов С. П.", "✅ Смирнова А. О.", texts.BTN_ADMIN_DONE, texts.BTN_ADMIN_CANCEL]
     assert "Лекторы" in text and "необязательно" not in text
-    # У курса своя подсказка к «Названию» — не та, что у специальностей.
+    # У курса своя подсказка к «Названию» - не та, что у специальностей.
     title_hint = admin_views.field_prompt(spec, spec.field("title"), "h", None)[0]
     assert "в афише" in title_hint and "при регистрации" not in title_hint
 
@@ -146,7 +146,7 @@ def test_course_choice_and_multi_prompts() -> None:
     [
         ("Имплантация: от планирования до протезирования", "implantatsiya-ot-planirovaniya-do-protezirovaniya"),
         ("Эндодонтия под микроскопом!", "endodontiya-pod-mikroskopom"),
-        ("FP1 Concept — Digital", "fp1-concept-digital"),
+        ("FP1 Concept - Digital", "fp1-concept-digital"),
         ("«»!!!", "course"),
     ],
 )
@@ -179,13 +179,13 @@ def test_carousel_edit_button_only_for_admin() -> None:
     assert texts.BTN_COURSE_EDIT not in _buttons(carousel(False))
     edit = carousel(True).inline_keyboard[-1][0]
     assert edit.text == texts.BTN_COURSE_EDIT
-    # Афиша — это проведения: «Править» ведёт в карточку проведения, а не курса.
+    # Афиша - это проведения: «Править» ведёт в карточку проведения, а не курса.
     assert edit.callback_data == DictCb(kind=DictKind.SESSIONS, action=DictAction.VIEW, item_id=8).pack()
 
 
 def test_admin_menu_has_archive_and_course_is_saved_not_published() -> None:
     _, markup = admin_views.menu()
     assert texts.BTN_ADMIN_ARCHIVE_MENU in _buttons(markup)
-    # Курс — запись библиотеки: в мастере «Сохранить»; «Опубликовать» — только у проведения (оно идёт в афишу).
+    # Курс - запись библиотеки: в мастере «Сохранить»; «Опубликовать» - только у проведения (оно идёт в афишу).
     assert _buttons(admin_views.publish_markup(DictKind.COURSES))[0] == texts.BTN_ADMIN_SAVE
     assert _buttons(admin_views.publish_markup(DictKind.SESSIONS))[0] == texts.BTN_ADMIN_PUBLISH

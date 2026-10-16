@@ -1,4 +1,4 @@
-"""Этап 6: хвост ссылки /start у клиента и выгрузка клиентов в CSV — без БД и Telegram."""
+"""Этап 6: хвост ссылки /start у клиента и выгрузка клиентов в CSV - без БД и Telegram."""
 
 import asyncio
 import csv
@@ -37,9 +37,9 @@ def _new_client() -> SimpleNamespace:
     ("raw", "saved"),
     [
         ("src_flyer_mira", "src_flyer_mira"),  # источник (в справочнике его может и не быть)
-        ("site", "site"),  # любой хвост без префикса — тоже сохраняем как есть
+        ("site", "site"),  # любой хвост без префикса - тоже сохраняем как есть
         ("ref_n8LjNOyu", "ref_n8LjNOyu"),
-        ("привет =1+1", None),  # набрано руками после /start — из ссылки так прийти не может
+        ("привет =1+1", None),  # набрано руками после /start - из ссылки так прийти не может
         (None, None),  # обычный /start без ссылки
     ],
 )
@@ -52,7 +52,7 @@ def test_start_param_saved_on_first_start(raw: str | None, saved: str | None) ->
 def test_start_param_not_changed_on_later_starts() -> None:
     client = _new_client()
     asyncio.run(ClientService(_FakeSession()).process_start(client, False, parse_start_payload("src_vk")))
-    assert client.start_param is None  # клиент уже был: «откуда пришёл» — только про первый заход
+    assert client.start_param is None  # клиент уже был: «откуда пришёл» - только про первый заход
 
 
 @pytest.mark.parametrize(
@@ -61,7 +61,7 @@ def test_start_param_not_changed_on_later_starts() -> None:
         (None, ""),
         (15, "15"),
         ("Иванов Иван", "Иванов Иван"),
-        ("+79211234567", "+79211234567"),  # телефон — число со знаком, не формула
+        ("+79211234567", "+79211234567"),  # телефон - число со знаком, не формула
         ("-5", "-5"),
         ("=1+1", "'=1+1"),
         ("+7 (921) 123", "'+7 (921) 123"),
@@ -76,7 +76,7 @@ def test_safe_cell(value: object, cell: str) -> None:
 
 def test_build_csv_for_excel() -> None:
     content = build_csv(("ID", "ФИО"), [(1, "Иванов; Иван"), (2, '=HYPERLINK("http://x")'), (3, None)])
-    assert content.startswith(b"\xef\xbb\xbf")  # BOM — Excel поймёт, что это UTF-8
+    assert content.startswith(b"\xef\xbb\xbf")  # BOM - Excel поймёт, что это UTF-8
     text = content.decode("utf-8-sig")
     assert text.count("\r\n") == 4
     rows = list(csv.reader(io.StringIO(text, newline=""), delimiter=";"))
@@ -108,7 +108,7 @@ def test_client_row() -> None:
 
 
 def test_export_file_does_not_start_with_id() -> None:
-    """Файл, начинающийся с букв «ID», Excel принимает за формат SYLK — первая колонка называется иначе."""
+    """Файл, начинающийся с букв «ID», Excel принимает за формат SYLK - первая колонка называется иначе."""
     assert not build_csv(HEADER, []).decode("utf-8-sig").startswith("ID")
 
 

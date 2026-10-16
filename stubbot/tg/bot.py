@@ -28,6 +28,6 @@ def create_bot(settings: Settings) -> Bot:
 
 
 async def check_telegram(bot: Bot) -> None:
-    """Проверка связи при старте. В лог — только результат и @username, без токена и адресов."""
+    """Проверка связи при старте. В лог - только результат и @username, без токена и адресов."""
     me = await bot.me()
     logger.info("Связь с Telegram: OK, @%s", me.username)

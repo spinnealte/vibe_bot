@@ -100,15 +100,15 @@ def test_caption_shows_program_excerpt_about_400_chars() -> None:
 
 def test_caption_dates_with_common_time_and_address() -> None:
     caption = session_caption(_card(None), None)
-    assert "13–14 октября 2026, 10:00–18:00" in caption  # одинаковое время во все дни — показываем
+    assert "13–14 октября 2026, 10:00–18:00" in caption  # одинаковое время во все дни - показываем
     assert "Невский пр., 1" in caption
     card = _card(None)
-    card.session.days[1].end_time = time(17)  # дни с разным временем — время не пишем
+    card.session.days[1].end_time = time(17)  # дни с разным временем - время не пишем
     assert "<b>Даты:</b> 13–14 октября 2026\n" in session_caption(card, None)
 
 
 def test_caption_of_session_without_dates() -> None:
-    """Проведение без дат стоит в афише с пометкой «даты уточняются»; остальное — как у обычного."""
+    """Проведение без дат стоит в афише с пометкой «даты уточняются»; остальное - как у обычного."""
     card = _card(None)
     card.session.start_date = card.session.end_date = None
     card.session.days = []
@@ -119,21 +119,21 @@ def test_caption_of_session_without_dates() -> None:
 
 
 def test_course_library_caption_has_no_dates_or_status() -> None:
-    """Карточка курса в админке — запись библиотеки: даты, цены и статус есть только у проведения."""
+    """Карточка курса в админке - запись библиотеки: даты, цены и статус есть только у проведения."""
     caption = program_caption(_card("Описание курса").program)
     assert "Имплантация" in caption and "Лекторы" in caption and "Направления" in caption and "О курсе" in caption
     assert "Даты" not in caption and "Статус" not in caption and "Стоимость" not in caption
 
 
 def test_course_caption_keeps_wizard_intro_within_limit() -> None:
-    """Шаг «Курс» мастера проведения: вопрос над карточкой не пропадает и не выталкивает подпись за лимит —
+    """Шаг «Курс» мастера проведения: вопрос над карточкой не пропадает и не выталкивает подпись за лимит -
     место под него отнимается у отрывка программы."""
     intro = "➕ <b>Новое проведение</b> · шаг 1 из 11\n\n<b>Какой курс проводим?</b>\n" + "Листайте стрелками. " * 20
     program = _card("Описание", program_html="<b>День.</b> Тема дня: теория и практика на фантомах. " * 200).program
     caption = program_caption(program, intro)
     assert caption.startswith(intro + "\n\n") and "Имплантация" in caption and "Программа курса" in caption
     assert visible_length(caption) <= 1024
-    assert program_caption(program) == program_caption(program, None)  # без вступления — как в разделе «Курсы»
+    assert program_caption(program) == program_caption(program, None)  # без вступления - как в разделе «Курсы»
 
 
 def test_caption_without_nmo_points() -> None:
@@ -144,7 +144,7 @@ def test_caption_without_nmo_points() -> None:
 
 
 def test_caption_hides_seats_in_poster_mode() -> None:
-    """Режим афиши (заявки выключены): мест никто не занимает — счётчик не показываем, статус остаётся."""
+    """Режим афиши (заявки выключены): мест никто не занимает - счётчик не показываем, статус остаётся."""
     assert "свободных мест: 5" in session_caption(_card(None), None)
     poster = session_caption(_card(None), None, show_seats=False)
     assert "свободных мест" not in poster

@@ -1,10 +1,10 @@
 """Показ «экрана» в том же сообщении, где нажали inline-кнопку.
 
 Правила (как в старом боте):
-    фото → фото    — edit_media (фото + подпись + клавиатура)
-    текст → текст  — edit_text
-    фото ↔ текст   — старое сообщение удаляем, присылаем новое
-Если сообщение уже удалено пользователем или слишком старое для правки — присылаем новое.
+    фото → фото    - edit_media (фото + подпись + клавиатура)
+    текст → текст  - edit_text
+    фото ↔ текст   - старое сообщение удаляем, присылаем новое
+Если сообщение уже удалено пользователем или слишком старое для правки - присылаем новое.
 
 Курсы без фото показываются с заглушкой assets/default_cover.png: после первой загрузки её file_id кэшируется,
 и дальше Telegram берёт картинку со своих серверов.
@@ -22,7 +22,7 @@ DEFAULT_COVER_PATH = Path(__file__).resolve().parents[2] / "assets" / "default_c
 
 
 class _DefaultCover:
-    """Маркер: «фото курса не загружено — показать заглушку»."""
+    """Маркер: «фото курса не загружено - показать заглушку»."""
 
 
 DEFAULT_COVER = _DefaultCover()
@@ -45,7 +45,7 @@ async def show_screen(message: Message, text: str, markup: InlineKeyboardMarkup 
     except TelegramBadRequest as exc:
         if "message is not modified" in str(exc):
             return message
-        # Сообщение удалено, слишком старое или тип не подходит — ниже пришлём новое.
+        # Сообщение удалено, слишком старое или тип не подходит - ниже пришлём новое.
         logger.debug("Правка экрана не удалась: %s", exc.message)
 
     await delete_quietly(message)
@@ -62,7 +62,7 @@ async def send_screen(message: Message, text: str, markup: InlineKeyboardMarkup 
 
 
 async def delete_quietly(message: Message) -> None:
-    """Удалить сообщение бота; если нельзя (старше 48 ч или уже удалено) — хотя бы убрать кнопки."""
+    """Удалить сообщение бота; если нельзя (старше 48 ч или уже удалено) - хотя бы убрать кнопки."""
     try:
         await message.delete()
     except TelegramBadRequest:

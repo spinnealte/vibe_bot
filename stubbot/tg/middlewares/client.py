@@ -21,7 +21,7 @@ def telegram_profile(user: User) -> TelegramProfile:
 class ClientMiddleware(BaseMiddleware):
     """Находит или создаёт клиента по отправителю и кладёт в data: `client`, `client_created`.
 
-    Регистрируется outer на message и callback_query — после DbSessionMiddleware (нужна `session`).
+    Регистрируется outer на message и callback_query - после DbSessionMiddleware (нужна `session`).
     """
 
     async def __call__(

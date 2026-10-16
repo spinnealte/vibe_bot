@@ -1,10 +1,10 @@
 """Экраны админки: текст + клавиатура. Только inline-кнопки, все они меняют то же сообщение (tg/screen.py).
 
-Значения экранируются; поля FieldKind.HTML / DOCUMENT — это HTML, который собрал aiogram из форматирования
+Значения экранируются; поля FieldKind.HTML / DOCUMENT - это HTML, который собрал aiogram из форматирования
 сообщения админа (message.html_text) или utils/documents из файла, он уже безопасен.
 
 Курсы и проведения списком кнопок не показываются: карточки как в афише листаются стрелками. У проведений три
-раздела (SessionScope): афиша, архив и прошедшие — раздел едет в кнопках месяцев в поле value.
+раздела (SessionScope): афиша, архив и прошедшие - раздел едет в кнопках месяцев в поле value.
 """
 
 from collections.abc import Mapping
@@ -66,7 +66,7 @@ def menu() -> tuple[str, InlineKeyboardMarkup]:
 
 
 def archive_menu(courses: int, sessions: int, past: int) -> tuple[str, InlineKeyboardMarkup]:
-    """Раздел «Архив»: убранные курсы, убранные из афиши проведения и прошедшие мероприятия — с числом записей."""
+    """Раздел «Архив»: убранные курсы, убранные из афиши проведения и прошедшие мероприятия - с числом записей."""
     archived, gone = SessionScope.ARCHIVED.value, SessionScope.PAST.value
     rows = [
         [InlineKeyboardButton(text=texts.BTN_ADMIN_ARCHIVE_COURSES.format(count=courses),
@@ -82,7 +82,7 @@ def archive_menu(courses: int, sessions: int, past: int) -> tuple[str, InlineKey
 
 
 def archive_section_empty(title: str) -> tuple[str, InlineKeyboardMarkup]:
-    """Пустой раздел архива (например, курсов в архиве нет) — только путь назад."""
+    """Пустой раздел архива (например, курсов в архиве нет) - только путь назад."""
     return texts.ADMIN_ARCHIVE_SECTION_EMPTY.format(title=title), InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=texts.BTN_ADMIN_TO_ARCHIVE, callback_data=_admin(AdminAction.ARCHIVE)),
     ]])
@@ -92,11 +92,11 @@ def archive_section_empty(title: str) -> tuple[str, InlineKeyboardMarkup]:
 
 def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int) -> tuple[str, InlineKeyboardMarkup]:
     """Список записей справочника. Курсы и проведения показываются иначе: курсы листаются стрелками
-    (course_card_markup; сюда попадает только пустой раздел курсов), проведения — по месяцам (session_months)."""
+    (course_card_markup; сюда попадает только пустой раздел курсов), проведения - по месяцам (session_months)."""
     kind = spec.kind
     title = texts.ADMIN_DICT_TITLES[kind.value]
     columns = spec.list_columns
-    page_size = PAGE_SIZE * columns  # строк на странице столько же, кнопок — по числу столбцов
+    page_size = PAGE_SIZE * columns  # строк на странице столько же, кнопок - по числу столбцов
     pages = max((len(entries) + page_size - 1) // page_size, 1)
     page = min(max(page, 0), pages - 1)
     hidden = sum(1 for _, _, active in entries if not active)
@@ -123,8 +123,8 @@ def session_months(months: list[tuple[int, int]], scope: SessionScope = SessionS
     """Проведения раздела по месяцам: кнопки «Октябрь 2026 · 3» в два столбца, только месяцы, где проведения
     есть, и отдельная кнопка «⏳ Без дат · N».
 
-    months — [(ГГГГММ, сколько проведений)], без дат — под ключом NO_DATES. Раздел «Проведения» (афиша) —
-    месяцы по порядку и «➕ Добавить»; в архиве и прошедших свежие месяцы первыми, назад — «К архиву».
+    months - [(ГГГГММ, сколько проведений)], без дат - под ключом NO_DATES. Раздел «Проведения» (афиша) -
+    месяцы по порядку и «➕ Добавить»; в архиве и прошедших свежие месяцы первыми, назад - «К архиву».
     Внутри месяца проведения листаются стрелками, как афиша (session_card_markup).
     """
     kind = DictKind.SESSIONS
@@ -167,10 +167,10 @@ def session_months(months: list[tuple[int, int]], scope: SessionScope = SessionS
 def _value(field: DictField, value: Any, options: list[tuple[int, str]] | None = None) -> str:
     """Значение поля для карточки справочника и «Сейчас: …» при правке."""
     if value is None or value == "" or value == []:
-        return "—"
+        return "-"
     match field.kind:
         case FieldKind.HTML:
-            return f"\n{value}"  # многострочный текст — с новой строки
+            return f"\n{value}"  # многострочный текст - с новой строки
         case FieldKind.DOCUMENT:
             return f"\n{plain_excerpt(value, CURRENT_EXCERPT)}"
         case FieldKind.CHOICE:
@@ -184,7 +184,7 @@ def _value(field: DictField, value: Any, options: list[tuple[int, str]] | None =
         case FieldKind.DATETIME:
             return format_deadline(value, ZoneInfo(get_settings().timezone))
         case FieldKind.PRICES:
-            return "".join(f"\n• {safe(p['label'])} — {format_rub(p['amount'])}" for p in value)
+            return "".join(f"\n• {safe(p['label'])} - {format_rub(p['amount'])}" for p in value)
     return safe(value)
 
 
@@ -213,7 +213,7 @@ def _back_to_list(builder: InlineKeyboardBuilder, kind: DictKind, page: int) -> 
 
 
 def _archive_button(kind: DictKind, item_id: int, active: bool, page: int = 0) -> InlineKeyboardButton:
-    """«🗄 В архив» у действующей записи, «♻️ Вернуть из архива» — у архивной."""
+    """«🗄 В архив» у действующей записи, «♻️ Вернуть из архива» - у архивной."""
     action, label = ((DictAction.ARCHIVE, texts.BTN_ADMIN_ARCHIVE) if active
                      else (DictAction.RESTORE, texts.BTN_ADMIN_RESTORE))
     return InlineKeyboardButton(text=label, callback_data=_dict(kind, action, item_id, page=page))
@@ -237,9 +237,9 @@ def course_card_markup(spec: DictionarySpec, item_id: int, has_program: bool, in
     """Под карточкой курса (фото + подпись): ◀️ n/N ▶️ по курсам раздела и действия.
 
     Раздел «Курсы» (библиотека): «✏️» у каждого поля, программа, «В архив», «➕ Новый курс». Афиша отсюда не
-    меняется — проведений, дат и «показывать без дат» здесь нет. В архиве (archived) карточка «как была»:
-    без правки, только «Вернуть из архива» и «Удалить навсегда». index/total — место курса среди курсов
-    своего раздела, prev_id/next_id — соседи (0 — края).
+    меняется - проведений, дат и «показывать без дат» здесь нет. В архиве (archived) карточка «как была»:
+    без правки, только «Вернуть из архива» и «Удалить навсегда». index/total - место курса среди курсов
+    своего раздела, prev_id/next_id - соседи (0 - края).
     """
     builder = InlineKeyboardBuilder()
     builder.row(*_pager(index, total, _dict(spec.kind, DictAction.VIEW, prev_id),
@@ -265,10 +265,10 @@ def session_card_markup(spec: DictionarySpec, item_id: int, status: str,
                         prev_id: int = 0, next_id: int = 0) -> InlineKeyboardMarkup:
     """Под карточкой проведения (как в афише): ◀️ n/N ▶️ по проведениям того же месяца и раздела и действия.
 
-    В афише (ACTIVE): «✏️» полей, статус в одно нажатие, «Скопировать», «В архив» — это и есть «убрать из афиши».
+    В афише (ACTIVE): «✏️» полей, статус в одно нажатие, «Скопировать», «В архив» - это и есть «убрать из афиши».
     В архиве (ARCHIVED): «Вернуть из архива», «Скопировать», «Удалить навсегда». В прошедших (PAST) вернуть
-    нечего — только «Скопировать» (повторить с новыми датами) и «Удалить навсегда».
-    index/total — место проведения среди проведений месяца, prev_id/next_id — соседи (0 — края).
+    нечего - только «Скопировать» (повторить с новыми датами) и «Удалить навсегда».
+    index/total - место проведения среди проведений месяца, prev_id/next_id - соседи (0 - края).
     """
     kind = spec.kind
     builder = InlineKeyboardBuilder()
@@ -296,7 +296,7 @@ def session_card_markup(spec: DictionarySpec, item_id: int, status: str,
 
 
 def delete_confirm_markup(kind: DictKind, item_id: int) -> InlineKeyboardMarkup:
-    """«Удалить навсегда?» — да или назад к карточке."""
+    """«Удалить навсегда?» - да или назад к карточке."""
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text=texts.BTN_ADMIN_DELETE_YES, callback_data=_dict(kind, DictAction.PURGE, item_id))],
         [InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(kind, DictAction.VIEW, item_id))],
@@ -324,7 +324,7 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
                  selected: list[Any] | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """Вопрос в мастере новой записи (item_id=0: «Пропустить») или при правке поля (item_id: «Очистить»).
 
-    Выбор и запись справочника — кнопки вариантов (✅ у текущего); мультивыбор и категории тарифов —
+    Выбор и запись справочника - кнопки вариантов (✅ у текущего); мультивыбор и категории тарифов -
     кнопки с ✅ у selected и «Готово». Курс проведения спрашивается не здесь, а карточками: course_pick.
     """
     kind = spec.kind
@@ -379,8 +379,8 @@ def course_pick(spec: DictionarySpec, field: DictField, header: str, course_id: 
     """Шаг «Курс» мастера проведения. Курсы списком кнопок не показываем: карточка курса (фото + подпись, как
     в разделе «Курсы») листается стрелками ◀️ n/N ▶️, «✅ Выбрать этот курс» берёт показанный.
 
-    Возвращает вступление к подписи карточки и кнопки под ней. index/total — место курса среди курсов
-    библиотеки, prev_id/next_id — соседи (0 — края).
+    Возвращает вступление к подписи карточки и кнопки под ней. index/total - место курса среди курсов
+    библиотеки, prev_id/next_id - соседи (0 - края).
     """
     kind = spec.kind
     template = texts.ADMIN_COURSE_PICK if total > 1 else texts.ADMIN_COURSE_PICK_ONE
@@ -395,7 +395,7 @@ def course_pick(spec: DictionarySpec, field: DictField, header: str, course_id: 
 
 
 def course_pick_empty(spec: DictionarySpec, header: str) -> tuple[str, InlineKeyboardMarkup]:
-    """Шаг «Курс», когда в библиотеке нет ни одного курса: выбирать не из чего — только «Отмена»."""
+    """Шаг «Курс», когда в библиотеке нет ни одного курса: выбирать не из чего - только «Отмена»."""
     return texts.ADMIN_COURSE_PICK_EMPTY.format(header=header), InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(spec.kind, DictAction.CANCEL)),
     ]])
@@ -435,7 +435,7 @@ def preview(spec: DictionarySpec, values: Mapping[str, Any]) -> tuple[str, Inlin
 
 
 def publish_markup(kind: DictKind) -> InlineKeyboardMarkup:
-    """Под предпросмотром курса и проведения (черновиков нет). Проведение сразу встаёт в афишу — «Опубликовать»;
+    """Под предпросмотром курса и проведения (черновиков нет). Проведение сразу встаёт в афишу - «Опубликовать»;
     курс просто сохраняется в библиотеку."""
     label = texts.BTN_ADMIN_PUBLISH if kind is DictKind.SESSIONS else texts.BTN_ADMIN_SAVE
     return InlineKeyboardMarkup(inline_keyboard=[[

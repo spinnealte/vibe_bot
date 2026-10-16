@@ -36,7 +36,7 @@ class ClientService:
         self.consents = ConsentRepository(session)
 
     async def get_or_create(self, profile: TelegramProfile) -> tuple[Client, bool]:
-        """Клиент по telegram_id; создаётся при первом обращении. Второе значение — создан ли сейчас.
+        """Клиент по telegram_id; создаётся при первом обращении. Второе значение - создан ли сейчас.
 
         До согласия на обработку ПД из Telegram храним только id (без него бот не может ответить): имя,
         @username и язык запоминаем, когда человек поставит галочку согласия (remember_profile), и дальше
@@ -64,7 +64,7 @@ class ClientService:
             if client is not None:
                 logger.info("Новый клиент #%s", client.id)
                 return client, True
-            # Конфликт: либо параллельный /start уже создал клиента, либо совпал referral_code — пробуем ещё.
+            # Конфликт: либо параллельный /start уже создал клиента, либо совпал referral_code - пробуем ещё.
             client = await self.clients.get_by_telegram_id(profile.telegram_id)
             if client is not None:
                 return client, False
@@ -79,7 +79,7 @@ class ClientService:
             return
 
         if created and payload.from_link:
-            client.start_param = payload.raw  # хвост ссылки первого захода — как есть, с любым префиксом
+            client.start_param = payload.raw  # хвост ссылки первого захода - как есть, с любым префиксом
 
         source_id: int | None = None
         if payload.kind is PayloadKind.SOURCE:
@@ -93,7 +93,7 @@ class ClientService:
                 client.referred_by_client_id = referrer.id
 
         self.analytics.add_touch(client.id, source_id, payload.raw, is_first=created)
-        # Нераспознанный параметр — произвольный текст, в лог его не пишем.
+        # Нераспознанный параметр - произвольный текст, в лог его не пишем.
         shown = payload.raw if payload.kind is not PayloadKind.UNKNOWN else "<нераспознанный параметр>"
         logger.info("Клиент #%s: /start по ссылке %s%s", client.id, shown,
                     " (источник найден)" if source_id else "")
@@ -109,7 +109,7 @@ class ClientService:
 
     @staticmethod
     def remember_profile(client: Client, profile: TelegramProfile) -> None:
-        """Имя, @username и язык из Telegram — только для давших согласие на обработку ПД."""
+        """Имя, @username и язык из Telegram - только для давших согласие на обработку ПД."""
         client.tg_username = profile.username
         client.tg_first_name = profile.first_name
         client.tg_last_name = profile.last_name
@@ -118,7 +118,7 @@ class ClientService:
     @staticmethod
     def _refresh_activity(client: Client) -> None:
         if client.is_bot_blocked:
-            # Пишет нам — значит, разблокировал.
+            # Пишет нам - значит, разблокировал.
             client.is_bot_blocked = False
             client.bot_blocked_at = None
         now = datetime.now(UTC)

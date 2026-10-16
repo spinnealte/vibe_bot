@@ -33,7 +33,7 @@ program_specialties = Table(
     Index("ix_program_specialties_specialty_id", "specialty_id"),
 )
 
-# Лекторы — у курса, а не у потока: курс авторский, другой лектор его не читает (решение 30.09.2026).
+# Лекторы - у курса, а не у потока: курс авторский, другой лектор его не читает (решение 30.09.2026).
 program_lecturers = Table(
     "program_lecturers",
     Base.metadata,
@@ -45,7 +45,7 @@ program_lecturers = Table(
 
 
 class Venue(TimestampMixin, Base):
-    """Площадка. Город по умолчанию — Санкт-Петербург, отдельно не хранится."""
+    """Площадка. Город по умолчанию - Санкт-Петербург, отдельно не хранится."""
 
     __tablename__ = "venues"
 
@@ -61,7 +61,7 @@ class Lecturer(TimestampMixin, Base):
     __tablename__ = "lecturers"
 
     id: Mapped[IntPK]
-    full_name: Mapped[str] = mapped_column(String(300))  # «Фамилия Имя Отчество»; в карточке — «Фамилия И. О.»
+    full_name: Mapped[str] = mapped_column(String(300))  # «Фамилия Имя Отчество»; в карточке - «Фамилия И. О.»
     regalia: Mapped[str | None] = mapped_column(Text)
     bio_html: Mapped[str | None] = mapped_column(Text)
     photo_file_id: Mapped[str | None] = mapped_column(String(256))
@@ -70,7 +70,7 @@ class Lecturer(TimestampMixin, Base):
 
 
 class Program(TimestampMixin, Base):
-    """Курс как продукт. Конкретные проведения — CourseSession."""
+    """Курс как продукт. Конкретные проведения - CourseSession."""
 
     __tablename__ = "programs"
     __table_args__ = (
@@ -92,7 +92,7 @@ class Program(TimestampMixin, Base):
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
     nmo_points: Mapped[int | None] = mapped_column(SmallInteger)
     is_published: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
-    # Курс — запись библиотеки: сам в афишу не попадает, в афише только его проведения (решение 16).
+    # Курс - запись библиотеки: сам в афишу не попадает, в афише только его проведения (решение 16).
     archived_at: Mapped[datetime | None]
     sort_order: Mapped[int] = mapped_column(Integer, server_default=text("0"))
 
@@ -102,7 +102,7 @@ class Program(TimestampMixin, Base):
 
 
 class CourseSession(TimestampMixin, Base):
-    """Поток — конкретное проведение курса. Класс не называется Session, чтобы не путать с сессией SQLAlchemy."""
+    """Поток - конкретное проведение курса. Класс не называется Session, чтобы не путать с сессией SQLAlchemy."""
 
     __tablename__ = "sessions"
     __table_args__ = (
@@ -121,14 +121,14 @@ class CourseSession(TimestampMixin, Base):
     venue_id: Mapped[int | None] = mapped_column(ForeignKey("venues.id", ondelete="RESTRICT"), index=True)
     online_url: Mapped[str | None] = mapped_column(String(512))
     # Кэш по session_days: первый и последний день, поддерживается сервисом при изменении дней.
-    # Оба NULL — проведение без дат: в афише оно стоит с пометкой «даты уточняются» (решение 16).
+    # Оба NULL - проведение без дат: в афише оно стоит с пометкой «даты уточняются» (решение 16).
     start_date: Mapped[date | None]
     end_date: Mapped[date | None]
     registration_deadline: Mapped[datetime | None]
     capacity: Mapped[int | None] = mapped_column(Integer)
     title_override: Mapped[str | None] = mapped_column(String(256))
     cover_file_id: Mapped[str | None] = mapped_column(String(256))
-    # В афише — пока не в архиве и не прошло. Отдельного «скрыть» нет: убрать из афиши = отправить в архив.
+    # В афише - пока не в архиве и не прошло. Отдельного «скрыть» нет: убрать из афиши = отправить в архив.
     archived_at: Mapped[datetime | None]
 
     program: Mapped[Program] = relationship(back_populates="sessions", lazy="raise")
@@ -161,7 +161,7 @@ class SessionDay(TimestampMixin, Base):
     start_time: Mapped[time | None]
     end_time: Mapped[time | None]
     topic: Mapped[str | None] = mapped_column(String(256))
-    # NULL — та же площадка, что у потока.
+    # NULL - та же площадка, что у потока.
     venue_id: Mapped[int | None] = mapped_column(ForeignKey("venues.id", ondelete="RESTRICT"), index=True)
 
     session: Mapped[CourseSession] = relationship(back_populates="days", lazy="raise")

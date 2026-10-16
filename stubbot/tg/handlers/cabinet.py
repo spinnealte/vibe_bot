@@ -1,8 +1,8 @@
-"""Личный кабинет: редактирование профиля, рассылки. «Мои заявки» — в handlers/application.py.
+"""Личный кабинет: редактирование профиля, рассылки. «Мои заявки» - в handlers/application.py.
 
 Кнопки меняют то же сообщение: кабинет → меню полей → вопрос → снова кабинет с отметкой «Сохранено».
 Если ответ приходит текстом, кабинет присылается новым сообщением, а у вопроса убираются кнопки.
-Телефон — исключение: нужна reply-кнопка «Поделиться номером», её правкой сообщения не прикрепить.
+Телефон - исключение: нужна reply-кнопка «Поделиться номером», её правкой сообщения не прикрепить.
 
 Один общий редактор на все простые поля (город, клиника, опыт, email, дата рождения): те же проверки, что при
 регистрации.
@@ -74,7 +74,7 @@ async def toggle_marketing(callback: CallbackQuery, state: FSMContext, session: 
         await flows.show_cabinet(callback.message, session, client, settings, bot,
                                  notice=texts.MARKETING_TURNED_OFF, in_place=True)
         return
-    # Включение — это новое согласие: показываем текст документа вместо кабинета, после ответа — кабинет обратно.
+    # Включение - это новое согласие: показываем текст документа вместо кабинета, после ответа - кабинет обратно.
     await state.clear()
     await state.update_data(return_to=RETURN_TO_CABINET)
     await flows.show_marketing_consent(callback.message, state, session)
@@ -276,7 +276,7 @@ async def _strip_prompt(message: Message, state: FSMContext) -> None:
 
 async def _saved_after_text(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                             settings: Settings, bot: Bot) -> None:
-    """Ответ пришёл текстом: у вопроса убираем кнопки, обновлённый кабинет — новым сообщением под ответом."""
+    """Ответ пришёл текстом: у вопроса убираем кнопки, обновлённый кабинет - новым сообщением под ответом."""
     await _strip_prompt(message, state)
     await state.clear()
     await flows.show_cabinet(message, session, client, settings, bot, notice=texts.EDIT_SAVED)

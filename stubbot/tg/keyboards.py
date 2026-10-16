@@ -42,12 +42,12 @@ from stubbot.tg.callbacks import (
 
 
 def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
-    """Главное меню. «💬 Менеджер» — когда задана ссылка на менеджера (MANAGER_URL); админам (ADMIN_IDS / owner
-    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя.
+    """Главное меню. «💬 Менеджер» - когда задана ссылка на менеджера (MANAGER_URL); админам (ADMIN_IDS / owner
+    из .env) - ещё «⚙️ Админка»: вторым рядом, а если он занят - отдельным. chat_id лички = id пользователя.
 
     Панель на виду, но не «всегда» (без is_persistent): человек может свернуть её значком рядом с полем ввода
     и тем же значком развернуть. Сам бот её не сворачивает: в режиме one_time_keyboard Telegram на iPhone после
-    нажатия убирает и значок — панель не вернуть, пока бот не пришлёт её заново (проверено пользователем 14.10.2026)."""
+    нажатия убирает и значок - панель не вернуть, пока бот не пришлёт её заново (проверено пользователем 14.10.2026)."""
     settings = get_settings()
     keyboard = [
         [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
@@ -84,9 +84,9 @@ def share_phone() -> ReplyKeyboardMarkup:
 
 
 def consent_form(pd: bool, ads: bool, with_ads: bool = True) -> InlineKeyboardMarkup:
-    """Согласия при регистрации — две отдельные галочки (нажатие ставит и снимает): 1 — политика и обработка ПД,
-    обязательна; 2 — рекламные рассылки, по желанию. «Продолжить» без первой дальше не пускает
-    (handlers/consent.py). Кнопки «Не согласен» нет: не поставил галочку — не согласился."""
+    """Согласия при регистрации - две отдельные галочки (нажатие ставит и снимает): 1 - политика и обработка ПД,
+    обязательна; 2 - рекламные рассылки, по желанию. «Продолжить» без первой дальше не пускает
+    (handlers/consent.py). Кнопки «Не согласен» нет: не поставил галочку - не согласился."""
 
     def box(checked: bool, label: str, action: ConsentFormAction) -> list[InlineKeyboardButton]:
         mark = texts.CONSENT_MARK_ON if checked else texts.CONSENT_MARK_OFF
@@ -167,7 +167,7 @@ def _sch(action: ScheduleAction, item_id: int = 0, index: int = 0, page: int = 0
 
 
 def _pager(index: int, total: int, prev_data: str, next_data: str) -> list[InlineKeyboardButton]:
-    """◀️ 2/5 ▶️ — стрелка на краю списка скрывается."""
+    """◀️ 2/5 ▶️ - стрелка на краю списка скрывается."""
     row = []
     if index > 0:
         row.append(InlineKeyboardButton(text=texts.BTN_PREV_PAGE, callback_data=prev_data))
@@ -229,7 +229,7 @@ def to_schedule(index: int = 0) -> InlineKeyboardMarkup:
 
 def program_pages(program_id: int, index: int, page: int, pages: int,
                   manager_url: str | None = None) -> InlineKeyboardMarkup:
-    """Под программой курса: листание страниц, «Менеджер» (дочитал программу — момент решения), назад к курсу."""
+    """Под программой курса: листание страниц, «Менеджер» (дочитал программу - момент решения), назад к курсу."""
     rows = []
     if pages > 1:
         rows.append(_pager(page, pages, _sch(ScheduleAction.PROGRAM, program_id, index, page - 1),

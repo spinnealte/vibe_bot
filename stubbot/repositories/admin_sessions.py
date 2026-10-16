@@ -11,7 +11,7 @@ from stubbot.db.models import CourseSession, Enrollment, PriceOption, Program, S
 class SessionScope(StrEnum):
     """Где проведение лежит в админке. Значение едет в кнопках (DictCb.value)."""
 
-    ACTIVE = ""  # раздел «Проведения»: не в архиве и не прошло — то, что стоит в афише
+    ACTIVE = ""  # раздел «Проведения»: не в архиве и не прошло - то, что стоит в афише
     ARCHIVED = "a"  # «Архив → Проведения»: убрано в архив вручную
     PAST = "p"  # «Архив → Прошедшие мероприятия»: прошло по датам (само, без нажатий)
 
@@ -42,7 +42,7 @@ class AdminSessionRepository:
         self.session = session
 
     async def start_dates(self, scope: SessionScope, today: date) -> list[date | None]:
-        """Даты начала проведений раздела (None — без дат) — чтобы показать, в каких месяцах они есть."""
+        """Даты начала проведений раздела (None - без дат) - чтобы показать, в каких месяцах они есть."""
         return list(await self.session.scalars(select(CourseSession.start_date).where(*_in_scope(scope, today))))
 
     async def count(self, scope: SessionScope, today: date) -> int:
@@ -60,7 +60,7 @@ class AdminSessionRepository:
         return list(await self.session.scalars(stmt))
 
     async def list_without_dates(self, scope: SessionScope, today: date) -> list[CourseSession]:
-        """Проведения раздела без дат («даты уточняются») — в порядке создания."""
+        """Проведения раздела без дат («даты уточняются») - в порядке создания."""
         stmt = (
             select(CourseSession)
             .where(*_in_scope(scope, today), CourseSession.start_date.is_(None))
@@ -116,7 +116,7 @@ class AdminSessionRepository:
         return list(await self.session.scalars(select(CourseSession.id).where(CourseSession.program_id == program_id)))
 
     async def has_enrollments(self, session_ids: list[int]) -> bool:
-        """Есть ли заявки хоть на одно из проведений — такие удалять нельзя (заявки — данные клиентов)."""
+        """Есть ли заявки хоть на одно из проведений - такие удалять нельзя (заявки - данные клиентов)."""
         if not session_ids:
             return False
         stmt = select(Enrollment.id).where(Enrollment.session_id.in_(session_ids)).limit(1)

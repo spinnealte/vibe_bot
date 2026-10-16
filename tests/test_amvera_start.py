@@ -1,4 +1,4 @@
-"""Стартовый скрипт для Amvera: порядок шагов и «справочники — только на пустую базу». Без БД и Telegram."""
+"""Стартовый скрипт для Amvera: порядок шагов и «справочники - только на пустую базу». Без БД и Telegram."""
 
 import importlib
 import os
@@ -34,7 +34,7 @@ def _trace(starter, monkeypatch: pytest.MonkeyPatch, empty: bool) -> list[str]:
 
 
 def test_storage_paths_default_to_persistent_data(starter) -> None:
-    assert os.environ["LOG_DIR"] == "/data/logs"  # не задано — в постоянное хранилище
+    assert os.environ["LOG_DIR"] == "/data/logs"  # не задано - в постоянное хранилище
 
 
 def test_log_dir_from_project_settings_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -42,7 +42,7 @@ def test_log_dir_from_project_settings_is_kept(monkeypatch: pytest.MonkeyPatch) 
     import amvera_start
 
     importlib.reload(amvera_start)
-    assert os.environ["LOG_DIR"] == "/custom/logs"  # задано в переменных проекта — не трогаем
+    assert os.environ["LOG_DIR"] == "/custom/logs"  # задано в переменных проекта - не трогаем
 
 
 def test_fresh_database_gets_migrations_and_seed(starter, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -55,7 +55,7 @@ def test_existing_database_is_not_reseeded(starter, monkeypatch: pytest.MonkeyPa
 
 
 def test_failed_migration_stops_start(starter, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Миграции не прошли — бота не запускаем: Amvera перезапустит контейнер, в логе будет причина."""
+    """Миграции не прошли - бота не запускаем: Amvera перезапустит контейнер, в логе будет причина."""
     started: list[str] = []
 
     def broken() -> None:

@@ -54,7 +54,7 @@ if [ "$DIRECT_COUNTRY" = "RU" ]; then
 elif [ -z "$DIRECT_COUNTRY" ]; then
     bad "не удалось определить страну прямого выхода"
 else
-    bad "прямой выход: $DIRECT_COUNTRY — похоже, весь трафик сервера ушёл в туннель"
+    bad "прямой выход: $DIRECT_COUNTRY - похоже, весь трафик сервера ушёл в туннель"
 fi
 # ipinfo.io не Telegram, поэтому через прокси тоже должен идти напрямую (правило final: direct).
 info "через прокси для не-Telegram адресов: ${PROXY_COUNTRY:-?} (ожидается RU)"

@@ -1,8 +1,8 @@
 """Демо-данные для проверки расписания, пока нет админки. Только для разработки!
 
 Запуск из корня stubBot:
-    python -m scripts.seed_demo            — создать (повторный запуск ничего не дублирует)
-    python -m scripts.seed_demo --remove   — удалить демо-курсы и всё, что к ним привязано (в т.ч. заявки на них)
+    python -m scripts.seed_demo            - создать (повторный запуск ничего не дублирует)
+    python -m scripts.seed_demo --remove   - удалить демо-курсы и всё, что к ним привязано (в т.ч. заявки на них)
 
 Даты считаются от сегодняшнего дня, так что расписание всегда «ближайшее».
 """
@@ -46,7 +46,7 @@ IMPLANT_PROGRAM = """<b>День 1. Планирование</b>
 • Формирование мягких тканей
 • Разбор клинических случаев участников"""
 
-# Длинная программа на несколько экранов — на ней проверяется листание полной программы.
+# Длинная программа на несколько экранов - на ней проверяется листание полной программы.
 ENDO_PROGRAM = """<b>Модуль 1. Микроскоп в эндодонтии</b>
 • Эргономика: положение врача, ассистента и пациента
 • Увеличение и освещение на разных этапах лечения
@@ -65,7 +65,7 @@ ENDO_PROGRAM = """<b>Модуль 1. Микроскоп в эндодонтии<
 <b>Модуль 4. Механическая обработка</b>
 • Никель-титановые системы: ротация и реципрокация
 • Изогнутые и S-образные каналы
-• Как не сломать инструмент — и что делать, если сломали
+• Как не сломать инструмент - и что делать, если сломали
 
 <b>Модуль 5. Ирригация</b>
 • Гипохлорит, ЭДТА, хлоргексидин: концентрации и порядок
@@ -142,16 +142,16 @@ async def create(session, today: date, tz: ZoneInfo) -> None:
         if ids:
             await session.execute(program_specialties.insert(), [{"program_id": program.id, "specialty_id": i} for i in ids])
 
-    # 1) Открыт набор, мало мест (3) — удобно проверять лист ожидания; два тарифа, дедлайн записи.
+    # 1) Открыт набор, мало мест (3) - удобно проверять лист ожидания; два тарифа, дедлайн записи.
     s1_start = today + timedelta(days=14)
     s1 = CourseSession(program_id=implant.id, status=SessionStatus.REGISTRATION_OPEN, format=DeliveryFormat.OFFLINE,
                        venue_id=venue.id, start_date=s1_start, end_date=s1_start + timedelta(days=1), capacity=3,
                        registration_deadline=datetime.combine(s1_start - timedelta(days=2), time(18, 0), tz))
-    # 2) Анонс: запись ещё не открыта — кнопка «Сообщить о наборе».
+    # 2) Анонс: запись ещё не открыта - кнопка «Сообщить о наборе».
     s2_start = today + timedelta(days=45)
     s2 = CourseSession(program_id=perio.id, status=SessionStatus.ANNOUNCED, format=DeliveryFormat.OFFLINE,
                        venue_id=venue.id, start_date=s2_start, end_date=s2_start)
-    # 3) Мест нет — заявка уходит в лист ожидания.
+    # 3) Мест нет - заявка уходит в лист ожидания.
     s3_start = today + timedelta(days=21)
     s3 = CourseSession(program_id=aligners.id, status=SessionStatus.FULL, format=DeliveryFormat.HYBRID,
                        venue_id=venue.id, start_date=s3_start, end_date=s3_start, capacity=10)
@@ -189,8 +189,8 @@ async def remove(session) -> None:
     await session.execute(delete(Enrollment).where(Enrollment.session_id.in_(session_ids)))
     await session.execute(delete(ProgramInterest).where(ProgramInterest.program_id.in_(program_ids)))
     await session.execute(delete(PriceOption).where(PriceOption.session_id.in_(session_ids)))
-    await session.execute(delete(CourseSession).where(CourseSession.id.in_(session_ids)))  # дни — CASCADE
-    await session.execute(delete(Program).where(Program.id.in_(program_ids)))  # специальности, лекторы — CASCADE
+    await session.execute(delete(CourseSession).where(CourseSession.id.in_(session_ids)))  # дни - CASCADE
+    await session.execute(delete(Program).where(Program.id.in_(program_ids)))  # специальности, лекторы - CASCADE
     await session.execute(delete(Lecturer).where(Lecturer.bio_html == DEMO_MARK))
     await session.execute(delete(Venue).where(Venue.directions_text == DEMO_MARK))
     print(f"Демо-данные удалены: курсов {len(program_ids)}, потоков {len(session_ids)}.")

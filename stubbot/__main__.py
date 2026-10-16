@@ -25,7 +25,7 @@ async def main() -> int:
     dp = create_dispatcher(settings, session_factory)
     try:
         try:
-            # Тексты согласий — в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
+            # Тексты согласий - в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
             async with session_factory() as session, session.begin():
                 await publish_documents(session, datetime.now(UTC))
         except LegalTextChanged as exc:
@@ -39,7 +39,7 @@ async def main() -> int:
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         return 0
     except asyncio.CancelledError:
-        # Ctrl+C: asyncio.run отменяет main(), polling прерывается. Ниже — штатное закрытие соединений.
+        # Ctrl+C: asyncio.run отменяет main(), polling прерывается. Ниже - штатное закрытие соединений.
         logger.info("Получена команда остановки (Ctrl+C)")
         raise
     finally:

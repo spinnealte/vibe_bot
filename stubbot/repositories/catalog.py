@@ -38,7 +38,7 @@ class CatalogRepository:
         self.session = session
 
     def _public_sessions(self, today: date) -> Select[tuple[CourseSession]]:
-        """Афиша — только проведения: не в архиве и не прошедшие (без дат — «даты уточняются» — тоже здесь).
+        """Афиша - только проведения: не в архиве и не прошедшие (без дат - «даты уточняются» - тоже здесь).
         Сам по себе курс в афишу не попадает (решение 16)."""
         return (
             select(CourseSession)
@@ -52,8 +52,8 @@ class CatalogRepository:
         )
 
     async def upcoming_session_ids(self, today: date) -> list[int]:
-        """Порядок карусели расписания: по дате начала, проведения без дат — в конце.
-        Потоков десятки — список id дешевле, чем offset-запросы."""
+        """Порядок карусели расписания: по дате начала, проведения без дат - в конце.
+        Потоков десятки - список id дешевле, чем offset-запросы."""
         stmt = self._public_sessions(today).with_only_columns(CourseSession.id).order_by(
             CourseSession.start_date.asc().nulls_last(), CourseSession.id
         )

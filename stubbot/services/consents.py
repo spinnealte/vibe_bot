@@ -27,7 +27,7 @@ class ConsentService:
     async def has_current_consent(self, client_id: int, consent_type: ConsentType) -> bool:
         """Есть действующее согласие именно на текущую версию документа.
 
-        Вышла новая версия — старое согласие не считается, бот попросит согласиться заново.
+        Вышла новая версия - старое согласие не считается, бот попросит согласиться заново.
         """
         document = await self.current_document(consent_type)
         if document is None:

@@ -41,7 +41,7 @@ def test_pd_consent_is_customer_wording_with_links_to_site() -> None:
     assert f'<a href="{POLICY_URL}">Политикой обработки персональных данных</a>' in PD_CONSENT.html
     assert f'<a href="{CONSENT_URL}">согласие на обработку моих персональных данных</a>' in PD_CONSENT.html
     assert POLICY_URL == "https://akvastom-group.ru/privacy/" and CONSENT_URL == "https://akvastom-group.ru/privacy/consent/"
-    # Рекламные рассылки — отдельное согласие со своей ссылкой (вторая часть той же страницы).
+    # Рекламные рассылки - отдельное согласие со своей ссылкой (вторая часть той же страницы).
     assert f'<a href="{CONSENT_URL}">рекламные рассылки</a>' in MARKETING_CONSENT.html
 
 
@@ -52,7 +52,7 @@ def test_consent_screen_and_popup_fit_telegram_limits() -> None:
     # Согласованный текст: вступление, пункты 1 и 2 подряд, подсказка про кнопки.
     assert screen == (f"{texts.CONSENT_PD_INTRO}\n\n1. {PD_CONSENT.html}\n2. {MARKETING_CONSENT.html}\n\n"
                       f"{texts.CONSENT_FORM_HINT}")
-    assert "(пункт 1)" in texts.CONSENT_PD_INTRO and "(пункт 2) — по желанию" in texts.CONSENT_PD_INTRO
+    assert "(пункт 1)" in texts.CONSENT_PD_INTRO and "(пункт 2) - по желанию" in texts.CONSENT_PD_INTRO
     assert _plain(MARKETING_CONSENT.html) == (
         "Я согласен получать рекламные рассылки: анонсы новых курсов, специальные предложения и приглашения "
         "на мероприятия учебного центра.\nОтключить можно в любой момент в личном кабинете."
@@ -63,7 +63,7 @@ def test_consent_screen_and_popup_fit_telegram_limits() -> None:
 
 
 def test_two_separate_checkboxes_and_continue() -> None:
-    """Отдельные галочки: 1 — политика и обработка ПД, 2 — реклама; «Продолжить» — третьей кнопкой."""
+    """Отдельные галочки: 1 - политика и обработка ПД, 2 - реклама; «Продолжить» - третьей кнопкой."""
     rows = lambda markup: [[b.text for b in row] for row in markup.inline_keyboard]  # noqa: E731
     on, off = texts.CONSENT_MARK_ON, texts.CONSENT_MARK_OFF
     pd, ads, go = texts.CONSENT_FORM_PD, texts.CONSENT_FORM_ADS, texts.CONSENT_FORM_CONTINUE
@@ -71,7 +71,7 @@ def test_two_separate_checkboxes_and_continue() -> None:
     assert rows(keyboards.consent_form(pd=True, ads=False)) == [[on + pd], [off + ads], [go]]
     assert rows(keyboards.consent_form(pd=False, ads=True)) == [[off + pd], [on + ads], [go]]
     assert rows(keyboards.consent_form(pd=True, ads=False, with_ads=False)) == [[on + pd], [go]]
-    # «Не согласен» нет: не поставил галочку — значит, не согласился.
+    # «Не согласен» нет: не поставил галочку - значит, не согласился.
     markup = keyboards.consent_form(pd=False, ads=False)
     assert [row[0].callback_data for row in markup.inline_keyboard] == [
         ConsentFormCb(action=action).pack()
@@ -82,7 +82,7 @@ def test_document_text_by_version() -> None:
     assert {d.type for d in DOCUMENTS} == {LegalDocumentType.PRIVACY_POLICY, LegalDocumentType.PD_CONSENT,
                                            LegalDocumentType.MARKETING_CONSENT}
     assert document_text(SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="1")) == PD_CONSENT.html
-    # Черновик «0» (или версия, которой нет в коде) — показывать нечего, согласие не собираем.
+    # Черновик «0» (или версия, которой нет в коде) - показывать нечего, согласие не собираем.
     assert document_text(SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="0")) is None
     assert PD_CONSENT.text_hash == hashlib.sha256(PD_CONSENT.html.encode("utf-8")).hexdigest()
 
@@ -122,7 +122,7 @@ def test_publish_replaces_placeholder_and_is_idempotent(monkeypatch: pytest.Monk
     published = _publish(monkeypatch, rows)
     assert sorted(published) == [f"marketing_consent v{MARKETING_CONSENT.version}", "pd_consent v1",
                                  "privacy_policy v1"]
-    assert "0" not in _current(rows).values()  # черновики «0» больше не текущие — согласия на них не в счёт
+    assert "0" not in _current(rows).values()  # черновики «0» больше не текущие - согласия на них не в счёт
     new = next(r for r in rows if r.type is LegalDocumentType.PD_CONSENT and r.version == "1")
     assert (new.url, new.text_hash, new.published_at) == (CONSENT_URL, PD_CONSENT.text_hash, NOW)
     # Повторный запуск (каждый старт бота) ничего не выпускает и не меняет.
@@ -144,7 +144,7 @@ def test_publish_makes_existing_version_current_again(monkeypatch: pytest.Monkey
     assert _current(rows)[LegalDocumentType.PD_CONSENT] == "1"
 
 
-# --- Данные из Telegram — только после согласия ------------------------------------------------------------------
+# --- Данные из Telegram - только после согласия ------------------------------------------------------------------
 
 PROFILE = TelegramProfile(telegram_id=77, username="ivanov", first_name="Иван", last_name="Иванов",
                           language_code="ru")
@@ -192,8 +192,8 @@ def test_new_client_is_saved_without_telegram_name() -> None:
 def test_telegram_name_is_kept_only_after_consent() -> None:
     client = _client()
     asyncio.run(_service(client, consent=False).get_or_create(PROFILE))
-    assert (client.tg_username, client.tg_first_name) == (None, None)  # согласия нет — не запоминаем
-    assert client.last_seen_at is not None  # а время визита — техническое, его ведём всегда
+    assert (client.tg_username, client.tg_first_name) == (None, None)  # согласия нет - не запоминаем
+    assert client.last_seen_at is not None  # а время визита - техническое, его ведём всегда
     asyncio.run(_service(client, consent=True).get_or_create(PROFILE))
     assert (client.tg_username, client.tg_first_name, client.tg_last_name) == ("ivanov", "Иван", "Иванов")
 

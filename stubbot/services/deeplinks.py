@@ -13,7 +13,7 @@ _LINK_PARAM = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 class PayloadKind(StrEnum):
     SOURCE = "src"
     REFERRAL = "ref"
-    INVITE = "inv"  # приглашение от клиники — полный бот
+    INVITE = "inv"  # приглашение от клиники - полный бот
     UNKNOWN = "unknown"
 
 
@@ -28,12 +28,12 @@ class StartPayload:
 
     @property
     def from_link(self) -> bool:
-        """Параметр мог прийти из ссылки t.me/<bot>?start=… — такой хвост сохраняем у клиента (clients.start_param)."""
+        """Параметр мог прийти из ссылки t.me/<bot>?start=… - такой хвост сохраняем у клиента (clients.start_param)."""
         return bool(_LINK_PARAM.match(self.raw))
 
 
 def parse_start_payload(raw: str | None) -> StartPayload | None:
-    """None — обычный /start без параметра. Нераспознанный параметр — UNKNOWN (сохраняется как есть для аналитики)."""
+    """None - обычный /start без параметра. Нераспознанный параметр - UNKNOWN (сохраняется как есть для аналитики)."""
     if not raw or not raw.strip():
         return None
     raw = raw.strip()[:MAX_PAYLOAD_LENGTH]

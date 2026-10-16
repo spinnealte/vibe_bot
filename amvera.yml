@@ -1,4 +1,4 @@
-# Сборка и запуск на Amvera (https://docs.amvera.ru). Пошаговая инструкция — deploy/AMVERA.md.
+# Сборка и запуск на Amvera (https://docs.amvera.ru). Пошаговая инструкция - deploy/AMVERA.md.
 meta:
   environment: python
   toolchain:
@@ -9,9 +9,9 @@ build:
   requirementsPath: requirements.lock
 
 run:
-  # Пауза, миграции, справочники на пустой базе и сам бот — см. amvera_start.py.
+  # Пауза, миграции, справочники на пустой базе и сам бот - см. amvera_start.py.
   scriptName: amvera_start.py
-  # Бот сам опрашивает Telegram и входящих подключений не ждёт — порт ему не нужен, значение формальное.
+  # Бот сам опрашивает Telegram и входящих подключений не ждёт - порт ему не нужен, значение формальное.
   containerPort: 80
   # Постоянное хранилище: логи и тексты согласий. Папка с кодом при каждом обновлении сбрасывается.
   persistenceMount: /data

@@ -1,7 +1,7 @@
 """Экраны расписания и заявки. Не импортирует flows.py (flows вызывает отсюда start_application).
 
-Расписание — карусель: одно сообщение с фото курса и подробностями в подписи; ◀️ ▶️, «Программа»,
-шаги заявки — всё меняет то же сообщение (tg/screen.py). in_place=False — прислать новое (например, после текста,
+Расписание - карусель: одно сообщение с фото курса и подробностями в подписи; ◀️ ▶️, «Программа»,
+шаги заявки - всё меняет то же сообщение (tg/screen.py). in_place=False - прислать новое (например, после текста,
 который написал пользователь, или из главного меню).
 """
 
@@ -37,11 +37,11 @@ async def _screen(message: Message, text: str, markup: InlineKeyboardMarkup | No
 
 async def show_course(message: Message, session: AsyncSession, today: date, index: int, timezone: str,
                       in_place: bool = True) -> None:
-    """Слайд карусели — проведение: с датами или без дат («даты уточняются»)."""
+    """Слайд карусели - проведение: с датами или без дат («даты уточняются»)."""
     slide = await ScheduleService(session).slide(today, index)
     settings = get_settings()
     if slide is None:
-        # Пустое расписание не должно быть тупиком: есть менеджер — предлагаем спросить у него.
+        # Пустое расписание не должно быть тупиком: есть менеджер - предлагаем спросить у него.
         if settings.manager_url:
             url = with_draft_text(settings.manager_url, texts.MANAGER_DRAFT_SCHEDULE)
             await _screen(message, texts.SCHEDULE_EMPTY + texts.SCHEDULE_EMPTY_MANAGER_HINT,
@@ -50,7 +50,7 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
             await _screen(message, texts.SCHEDULE_EMPTY, in_place=in_place)
         return
     program, card = slide.program, slide.card
-    # MVP — афиша: без заявки, «Сообщить о наборе» и счётчика мест, пока заявки выключены в настройках.
+    # MVP - афиша: без заявки, «Сообщить о наборе» и счётчика мест, пока заявки выключены в настройках.
     applications = settings.applications_enabled
     markup = keyboards.course_carousel(
         index=slide.index,
@@ -60,7 +60,7 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         apply_text=_apply_button(card) if applications else None,
         notify=card.session.status is SessionStatus.ANNOUNCED and applications,
         has_program_text=bool(program.program_html),
-        # Запись в MVP — через менеджера: чат откроется с готовым черновиком про этот курс.
+        # Запись в MVP - через менеджера: чат откроется с готовым черновиком про этот курс.
         manager_url=with_draft_text(settings.manager_url, render.manager_draft(card))
         if settings.manager_url else None,
         admin=settings.is_admin(message.chat.id),  # в личке chat.id = id пользователя
@@ -72,15 +72,15 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
 
 async def show_program_page(message: Message, session: AsyncSession, today: date, program_id: int, index: int,
                             page: int) -> bool:
-    """Программа курса постранично; index — карточка афиши, с которой её открыли (туда вернёт «Назад к курсу»)."""
+    """Программа курса постранично; index - карточка афиши, с которой её открыли (туда вернёт «Назад к курсу»)."""
     service = ScheduleService(session)
     program = await service.program(program_id)
     if program is None:
         return False
     manager_url = get_settings().manager_url
     if manager_url:
-        # Черновик — как под карточкой, с которой открыли программу: с датами этого проведения. Если карточку
-        # за это время убрали из афиши — общий вопрос про курс.
+        # Черновик - как под карточкой, с которой открыли программу: с датами этого проведения. Если карточку
+        # за это время убрали из афиши - общий вопрос про курс.
         slide = await service.slide(today, index)
         draft = (render.manager_draft(slide.card) if slide is not None and slide.program.id == program_id
                  else texts.MANAGER_DRAFT_PROGRAM.format(title=program.title))
@@ -146,7 +146,7 @@ async def ask_seats(message: Message, state: FSMContext, price: PriceOption | No
 async def ask_comment(message: Message, state: FSMContext, in_place: bool = True) -> None:
     await state.set_state(Application.comment)
     prompt = await _screen(message, texts.APPLY_ASK_COMMENT, keyboards.apply_comment(), in_place=in_place)
-    # Ответ придёт текстом ниже — тогда у этого сообщения уберём кнопки (иначе висят «Без комментария»/«Отменить»).
+    # Ответ придёт текстом ниже - тогда у этого сообщения уберём кнопки (иначе висят «Без комментария»/«Отменить»).
     await state.update_data({PROMPT_MESSAGE_KEY: prompt.message_id})
 
 

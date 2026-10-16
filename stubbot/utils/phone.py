@@ -4,7 +4,7 @@ _NON_DIGITS = re.compile(r"\D")
 
 
 def normalize_phone(raw: str) -> str | None:
-    """Номер в E.164 (+7XXXXXXXXXX). None — номер не распознан.
+    """Номер в E.164 (+7XXXXXXXXXX). None - номер не распознан.
 
     Telegram присылает контакт как «79211234567» или «+79211234567»; российский «8…» приводим к «+7…».
     """
