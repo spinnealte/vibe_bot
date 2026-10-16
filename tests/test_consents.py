@@ -42,15 +42,23 @@ def test_pd_consent_is_customer_wording_with_links_to_site() -> None:
     assert f'<a href="{CONSENT_URL}">согласие на обработку моих персональных данных</a>' in PD_CONSENT.html
     assert POLICY_URL == "https://akvastom-group.ru/privacy/" and CONSENT_URL == "https://akvastom-group.ru/privacy/consent/"
     # Рекламные рассылки — отдельное согласие со своей ссылкой (вторая часть той же страницы).
-    assert f'<a href="{CONSENT_URL}">согласие на получение рекламных рассылок</a>' in MARKETING_CONSENT.html
+    assert f'<a href="{CONSENT_URL}">рекламные рассылки</a>' in MARKETING_CONSENT.html
 
 
 def test_consent_screen_and_popup_fit_telegram_limits() -> None:
     screen = texts.CONSENT_FORM.format(intro=texts.CONSENT_PD_INTRO, pd=PD_CONSENT.html, ads=MARKETING_CONSENT.html,
                                        hint=texts.CONSENT_FORM_HINT)
-    assert PD_CONSENT.html in screen and MARKETING_CONSENT.html in screen and visible_length(screen) < 4096
-    assert screen.index("Обязательно") < screen.index(PD_CONSENT.html) < screen.index("По желанию") \
-        < screen.index(MARKETING_CONSENT.html)
+    assert visible_length(screen) < 4096
+    # Согласованный текст: вступление, пункты 1 и 2 подряд, подсказка про кнопки.
+    assert screen == (f"{texts.CONSENT_PD_INTRO}\n\n1. {PD_CONSENT.html}\n2. {MARKETING_CONSENT.html}\n\n"
+                      f"{texts.CONSENT_FORM_HINT}")
+    assert "(пункт 1)" in texts.CONSENT_PD_INTRO and "(пункт 2) — по желанию" in texts.CONSENT_PD_INTRO
+    assert _plain(MARKETING_CONSENT.html) == (
+        "Я согласен получать рекламные рассылки: анонсы новых курсов, специальные предложения и приглашения "
+        "на мероприятия учебного центра.\nОтключить можно в любой момент в личном кабинете."
+    )
+    only_pd = texts.CONSENT_FORM_PD_ONLY.format(pd=PD_CONSENT.html, hint=texts.CONSENT_FORM_HINT)
+    assert "пункт 2" not in only_pd and PD_CONSENT.html in only_pd
     assert len(texts.CONSENT_PD_CHECK_REQUIRED) <= 200 and "<" not in texts.CONSENT_PD_CHECK_REQUIRED
 
 
@@ -112,7 +120,8 @@ def test_publish_replaces_placeholder_and_is_idempotent(monkeypatch: pytest.Monk
             for t in (LegalDocumentType.PD_CONSENT, LegalDocumentType.MARKETING_CONSENT,
                       LegalDocumentType.PRIVACY_POLICY)]
     published = _publish(monkeypatch, rows)
-    assert sorted(published) == ["marketing_consent v2", "pd_consent v1", "privacy_policy v1"]
+    assert sorted(published) == [f"marketing_consent v{MARKETING_CONSENT.version}", "pd_consent v1",
+                                 "privacy_policy v1"]
     assert "0" not in _current(rows).values()  # черновики «0» больше не текущие — согласия на них не в счёт
     new = next(r for r in rows if r.type is LegalDocumentType.PD_CONSENT and r.version == "1")
     assert (new.url, new.text_hash, new.published_at) == (CONSENT_URL, PD_CONSENT.text_hash, NOW)

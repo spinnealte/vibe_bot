@@ -89,9 +89,9 @@ async def show_consent_form(message: Message, state: FSMContext, session: AsyncS
         PD_CHECKED_KEY: False,
         ADS_CHECKED_KEY: ads,
     })
-    intro, hint = texts.CONSENT_PD_INTRO, texts.CONSENT_FORM_HINT
-    text = (texts.CONSENT_FORM.format(intro=intro, pd=pd_text, ads=ads_text, hint=hint) if ads_text is not None
-            else texts.CONSENT_FORM_PD_ONLY.format(intro=intro, pd=pd_text, hint=hint))
+    hint = texts.CONSENT_FORM_HINT
+    text = (texts.CONSENT_FORM.format(intro=texts.CONSENT_PD_INTRO, pd=pd_text, ads=ads_text, hint=hint)
+            if ads_text is not None else texts.CONSENT_FORM_PD_ONLY.format(pd=pd_text, hint=hint))
     markup = keyboards.consent_form(pd=False, ads=ads, with_ads=ads_text is not None)
     await _screen(message, with_notice(notice, text), markup, in_place)
 
