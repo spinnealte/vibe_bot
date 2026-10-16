@@ -7,8 +7,6 @@ in_place=True — экран заменяет сообщение, в котор�
 (ответ на текст пользователя или экран с reply-клавиатурой: её нельзя прикрепить правкой сообщения).
 """
 
-from html import escape
-
 from aiogram import Bot
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State
@@ -20,7 +18,7 @@ from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.clients import ClientService
 from stubbot.services.consents import ConsentService
-from stubbot.services.legal import read_document_text
+from stubbot.services.legal import document_text
 from stubbot.services.registration import (
     OPTIONAL_FIELDS_ORDER,
     OptionalField,
@@ -35,8 +33,9 @@ from stubbot.tg.states import FULL_NAME_KEY, OPTIONAL_STATES, PENDING_APPLY_KEY,
 from stubbot.utils.dates import local_today
 from stubbot.utils.profile_fields import experience_years
 
-# Лимит текста сообщения Telegram — 4096; оставляем запас под вступление.
-MAX_DOCUMENT_TEXT = 3600
+# Шаг согласия на ПД (FSM data): какую версию документа показали и стоит ли галочка «Я согласен».
+PD_DOCUMENT_KEY = "pd_document_id"
+PD_CHECKED_KEY = "pd_checked"
 # id сообщения с вопросом, у которого надо убрать кнопки, когда ответ придёт текстом.
 PROMPT_MESSAGE_KEY = "prompt_message_id"
 
@@ -54,7 +53,7 @@ async def enter_cabinet(message: Message, state: FSMContext, session: AsyncSessi
     """Вход в «Личный кабинет»: согласие → регистрация → кабинет, с того места, где человек остановился."""
     await state.clear()
     if not await ConsentService(session).has_current_consent(client.id, ConsentType.PERSONAL_DATA):
-        await show_consent(message, state, session, settings, ConsentKind.PD)
+        await show_consent(message, state, session, ConsentKind.PD)
         return
     step = await RegistrationService(session).next_step(client)
     if step is not RegistrationStep.DONE:
@@ -63,25 +62,28 @@ async def enter_cabinet(message: Message, state: FSMContext, session: AsyncSessi
     await show_cabinet(message, session, client, settings, bot)
 
 
-async def show_consent(message: Message, state: FSMContext, session: AsyncSession, settings: Settings,
-                       kind: ConsentKind, in_place: bool = False, notice: str | None = None) -> None:
+async def show_consent(message: Message, state: FSMContext, session: AsyncSession, kind: ConsentKind,
+                       in_place: bool = False, notice: str | None = None) -> None:
+    """Согласие на ПД — текст со ссылками на документы на сайте и галочка «Я согласен» (обязательна);
+    на рекламные рассылки — вопрос «Да / Нет». Текст — у текущей версии документа (services/legal.py)."""
     consent_type = ConsentType.PERSONAL_DATA if kind is ConsentKind.PD else ConsentType.MARKETING
     document = await ConsentService(session).current_document(consent_type)
-    text = read_document_text(settings.legal_docs_dir, document) if document else None
-    if text is None:
+    statement = document_text(document) if document else None
+    if statement is None:
         await state.clear()
         await _screen(message, texts.DOCUMENT_UNAVAILABLE, None, in_place)
         return
-    if len(text) > MAX_DOCUMENT_TEXT:
-        # Полные юридические тексты длиннее лимита сообщения: показываем начало, ссылка на полный текст — в url.
-        tail = f'\n\n<a href="{escape(document.url)}">Полный текст документа</a>' if document.url else ""
-        text = text[:MAX_DOCUMENT_TEXT].rsplit("\n", 1)[0] + "\n…" + tail
     if kind is ConsentKind.PD:
-        text = f"{texts.CONSENT_PD_INTRO}\n\n{text}"
         await state.set_state(Consent.personal_data)
+        # Галочку ставит сам человек; согласие засчитывается на ту версию, которую он видел.
+        await state.update_data({PD_DOCUMENT_KEY: document.id, PD_CHECKED_KEY: False})
+        text = texts.CONSENT_PD_SCREEN.format(intro=texts.CONSENT_PD_INTRO, statement=statement,
+                                              hint=texts.CONSENT_PD_HINT)
+        markup = keyboards.pd_consent(checked=False)
     else:
         await state.set_state(Consent.marketing)
-    await _screen(message, with_notice(notice, text), keyboards.consent(kind), in_place)
+        text, markup = statement, keyboards.marketing_consent()
+    await _screen(message, with_notice(notice, text), markup, in_place)
 
 
 async def show_registration_step(message: Message, state: FSMContext, session: AsyncSession, client: Client,

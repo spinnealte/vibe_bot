@@ -13,8 +13,19 @@ class ConsentKind(StrEnum):
 
 
 class ConsentCb(CallbackData, prefix="consent"):
+    """«Да / Нет» на вопрос про рекламные рассылки (kind — MARKETING). Согласие на ПД — галочкой (PdConsentCb)."""
+
     kind: ConsentKind
     accept: bool
+
+
+class PdConsentAction(StrEnum):
+    TOGGLE = "tgl"  # поставить / снять галочку «Я согласен»
+    CONTINUE = "go"  # «Продолжить» — пускает дальше только с галочкой
+
+
+class PdConsentCb(CallbackData, prefix="pdc"):
+    action: PdConsentAction
 
 
 class NameAction(StrEnum):

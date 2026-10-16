@@ -3,10 +3,12 @@
 import asyncio
 import logging
 import sys
+from datetime import UTC, datetime
 
 from stubbot.config import get_settings
 from stubbot.db.session import create_engine, create_session_factory
 from stubbot.logging_setup import setup_logging
+from stubbot.services.legal import LegalTextChanged, publish_documents
 from stubbot.tg.bot import check_telegram, create_bot
 from stubbot.tg.dispatcher import create_dispatcher
 
@@ -18,9 +20,17 @@ async def main() -> int:
     setup_logging(settings.log_level, settings.log_dir)
 
     engine = create_engine(settings.database_url)
+    session_factory = create_session_factory(engine)
     bot = create_bot(settings)
-    dp = create_dispatcher(settings, create_session_factory(engine))
+    dp = create_dispatcher(settings, session_factory)
     try:
+        try:
+            # Тексты согласий — в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
+            async with session_factory() as session, session.begin():
+                await publish_documents(session, datetime.now(UTC))
+        except LegalTextChanged as exc:
+            logger.error("%s", exc)
+            return 1
         try:
             await check_telegram(bot)
         except Exception as exc:

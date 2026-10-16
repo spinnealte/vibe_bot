@@ -8,7 +8,8 @@ from stubbot.db.enums import ConsentSource, ConsentType, LegalDocumentType
 
 
 class LegalDocument(TimestampMixin, Base):
-    """Версия юридического документа. Текст лежит в LEGAL_DOCS_DIR как <type>_v<version>.html."""
+    """Версия юридического документа. Текст, который показывает бот, — в коде (services/legal.py),
+    полный документ — по url на сайте учебного центра."""
 
     __tablename__ = "legal_documents"
     __table_args__ = (
@@ -21,7 +22,7 @@ class LegalDocument(TimestampMixin, Base):
     type: Mapped[LegalDocumentType] = mapped_column(str_enum(LegalDocumentType, "legal_document_type"))
     version: Mapped[str] = mapped_column(String(32))
     url: Mapped[str | None] = mapped_column(String(512))
-    text_hash: Mapped[str] = mapped_column(String(64))  # sha256 файла: доказывает, какой именно текст видел клиент
+    text_hash: Mapped[str] = mapped_column(String(64))  # sha256 текста из бота: доказывает, что именно видел клиент
     published_at: Mapped[datetime]
     is_current: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))
 

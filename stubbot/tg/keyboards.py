@@ -32,6 +32,8 @@ from stubbot.tg.callbacks import (
     ConsentKind,
     NameAction,
     NameCb,
+    PdConsentAction,
+    PdConsentCb,
     SelectDoneCb,
     SelectGroup,
     SkipOptionalCb,
@@ -81,17 +83,26 @@ def share_phone() -> ReplyKeyboardMarkup:
     )
 
 
-def consent(kind: ConsentKind) -> InlineKeyboardMarkup:
-    accept, decline = (
-        (texts.CONSENT_ACCEPT, texts.CONSENT_DECLINE)
-        if kind is ConsentKind.PD
-        else (texts.CONSENT_MARKETING_YES, texts.CONSENT_MARKETING_NO)
-    )
+def pd_consent(checked: bool) -> InlineKeyboardMarkup:
+    """Согласие на ПД: галочка «Я согласен» (нажатие ставит и снимает) и «Продолжить» — без галочки дальше
+    не пускает (handlers/consent.py). Отдельной кнопки «Не согласен» нет: не поставил галочку — не согласился."""
+    mark = texts.CONSENT_PD_CHECKED if checked else texts.CONSENT_PD_UNCHECKED
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=mark, callback_data=PdConsentCb(action=PdConsentAction.TOGGLE).pack())],
+        [InlineKeyboardButton(text=texts.CONSENT_PD_CONTINUE,
+                              callback_data=PdConsentCb(action=PdConsentAction.CONTINUE).pack())],
+    ])
+
+
+def marketing_consent() -> InlineKeyboardMarkup:
+    kind = ConsentKind.MARKETING
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=accept, callback_data=ConsentCb(kind=kind, accept=True).pack()),
-                InlineKeyboardButton(text=decline, callback_data=ConsentCb(kind=kind, accept=False).pack()),
+                InlineKeyboardButton(text=texts.CONSENT_MARKETING_YES,
+                                     callback_data=ConsentCb(kind=kind, accept=True).pack()),
+                InlineKeyboardButton(text=texts.CONSENT_MARKETING_NO,
+                                     callback_data=ConsentCb(kind=kind, accept=False).pack()),
             ]
         ]
     )
