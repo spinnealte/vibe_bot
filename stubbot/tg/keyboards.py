@@ -41,7 +41,11 @@ from stubbot.tg.callbacks import (
 
 def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
     """Главное меню. «💬 Менеджер» — когда задана ссылка на менеджера (MANAGER_URL); админам (ADMIN_IDS / owner
-    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя."""
+    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя.
+
+    Панель на виду, но не «всегда» (без is_persistent): человек может свернуть её значком рядом с полем ввода
+    и тем же значком развернуть. Сам бот её не сворачивает: в режиме one_time_keyboard Telegram на iPhone после
+    нажатия убирает и значок — панель не вернуть, пока бот не пришлёт её заново (проверено пользователем 14.10.2026)."""
     settings = get_settings()
     keyboard = [
         [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
@@ -55,7 +59,7 @@ def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
             keyboard[1].append(admin)
         else:
             keyboard.append([admin])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 def registration_nav() -> ReplyKeyboardMarkup:

@@ -49,7 +49,8 @@ class FieldKind(StrEnum):
     NUMBER = "number"  # целое число в [min_value, max_value]
     CHOICE = "choice"  # один вариант из choices — кнопками
     MULTI = "multi"  # несколько записей справочника — кнопками с ✅; значение — список id
-    REF = "ref"  # одна запись справочника (курс, площадка) — кнопками; значение — id
+    REF = "ref"  # одна запись справочника (площадка) — кнопками; значение — id
+    COURSE = "course"  # курс из библиотеки: карточки курсов листаются стрелками ◀️ n/N ▶️; значение — id
     PHOTO = "photo"  # фото сообщением; значение — file_id
     DOCUMENT = "document"  # длинный текст: сообщением с форматированием или файлом .docx / .txt
     DAYS = "days"  # дни проведения: «13.10 10:00-18:00» построчно; значение — список {date, start, end}
@@ -58,7 +59,7 @@ class FieldKind(StrEnum):
 
 
 # Поля, которые заполняются кнопками, а не текстом.
-BUTTON_KINDS = (FieldKind.CHOICE, FieldKind.MULTI, FieldKind.REF)
+BUTTON_KINDS = (FieldKind.CHOICE, FieldKind.MULTI, FieldKind.REF, FieldKind.COURSE)
 
 
 @dataclass(frozen=True)

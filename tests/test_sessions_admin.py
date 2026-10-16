@@ -413,6 +413,28 @@ def test_course_card_in_archive() -> None:
     assert texts.BTN_ADMIN_PROGRAM not in _buttons(no_program)
 
 
+def test_session_wizard_picks_course_with_arrows() -> None:
+    """Шаг «Курс» в мастере проведения — не кнопка на каждый курс, а карточки курсов со стрелками ◀️ n/N ▶️."""
+    field = SESSION_SPEC.field("program_id")
+    assert field.kind is FieldKind.COURSE
+    assert "course" in texts.ADMIN_FIELD_ERRORS  # ответ на текст вместо кнопки
+    intro, markup = admin_views.course_pick(SESSION_SPEC, field, "ШАГ 1", 5, index=1, total=4, prev_id=2, next_id=9)
+    assert _rows(markup) == [["◀️", "2/4", "▶️"], [texts.BTN_ADMIN_PICK_COURSE], [texts.BTN_ADMIN_CANCEL]]
+    pager = markup.inline_keyboard[0]
+    assert pager[0].callback_data == _ses(DictAction.BROWSE, field="program_id", value="2")
+    assert pager[2].callback_data == _ses(DictAction.BROWSE, field="program_id", value="9")
+    # «Выбрать» берёт показанный курс — тем же действием, что и остальные поля-выборы мастера.
+    assert markup.inline_keyboard[1][0].callback_data == _ses(DictAction.PICK, field="program_id", value="5")
+    assert markup.inline_keyboard[2][0].callback_data == _ses(DictAction.CANCEL)
+    assert intro.startswith("ШАГ 1") and texts.ADMIN_FIELD_HINTS["program_id"] in intro and "◀️ ▶️" in intro
+    # Один курс в библиотеке — стрелок нет, и текст про них не говорит.
+    intro, markup = admin_views.course_pick(SESSION_SPEC, field, "ШАГ 1", 5, index=0, total=1, prev_id=0, next_id=0)
+    assert _rows(markup)[0] == ["1/1"] and "◀️" not in intro
+    # Курсов нет совсем — выбирать не из чего: подсказка, куда идти, и только «Отмена».
+    text, markup = admin_views.course_pick_empty(SESSION_SPEC, "ШАГ 1")
+    assert "Курсы" in text and _rows(markup) == [[texts.BTN_ADMIN_CANCEL]]
+
+
 def test_delete_confirm_and_popup_limits() -> None:
     markup = admin_views.delete_confirm_markup(DictKind.SESSIONS, 7)
     assert _rows(markup) == [[texts.BTN_ADMIN_DELETE_YES], [texts.BTN_ADMIN_CANCEL]]

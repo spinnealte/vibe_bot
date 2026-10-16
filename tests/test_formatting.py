@@ -125,6 +125,17 @@ def test_course_library_caption_has_no_dates_or_status() -> None:
     assert "Даты" not in caption and "Статус" not in caption and "Стоимость" not in caption
 
 
+def test_course_caption_keeps_wizard_intro_within_limit() -> None:
+    """Шаг «Курс» мастера проведения: вопрос над карточкой не пропадает и не выталкивает подпись за лимит —
+    место под него отнимается у отрывка программы."""
+    intro = "➕ <b>Новое проведение</b> · шаг 1 из 11\n\n<b>Какой курс проводим?</b>\n" + "Листайте стрелками. " * 20
+    program = _card("Описание", program_html="<b>День.</b> Тема дня: теория и практика на фантомах. " * 200).program
+    caption = program_caption(program, intro)
+    assert caption.startswith(intro + "\n\n") and "Имплантация" in caption and "Программа курса" in caption
+    assert visible_length(caption) <= 1024
+    assert program_caption(program) == program_caption(program, None)  # без вступления — как в разделе «Курсы»
+
+
 def test_caption_without_nmo_points() -> None:
     """Баллы НМО не показываем (решение 02.10.2026), даже если в БД они есть."""
     caption = session_caption(_card(None), None)

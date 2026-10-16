@@ -81,6 +81,17 @@ def test_main_menu_has_manager_button_when_link_is_set(monkeypatch: pytest.Monke
     assert rows(22) == [MENU_TOP, [texts.BTN_ABOUT, texts.BTN_ADMIN]]
 
 
+def test_main_menu_can_be_collapsed_and_reopened_by_person(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Главное меню человек сворачивает и разворачивает сам значком у поля ввода (не «всегда на виду»).
+    Само оно не сворачивается: в режиме one_time на iPhone пропадает и значок. Клавиатуры шагов регистрации —
+    всегда на виду."""
+    monkeypatch.setattr(keyboards, "get_settings", lambda: _settings())
+    menu = keyboards.main_menu(99)
+    assert not menu.one_time_keyboard and not menu.is_persistent
+    assert keyboards.registration_nav().is_persistent and not keyboards.registration_nav().one_time_keyboard
+    assert keyboards.share_phone().is_persistent and not keyboards.share_phone().one_time_keyboard
+
+
 def test_manager_button_under_program_and_empty_schedule() -> None:
     link = with_draft_text(MANAGER, "Вопрос")
     markup = keyboards.program_pages(5, 2, 0, 3, manager_url=link)

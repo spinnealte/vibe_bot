@@ -325,7 +325,7 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
     """Вопрос в мастере новой записи (item_id=0: «Пропустить») или при правке поля (item_id: «Очистить»).
 
     Выбор и запись справочника — кнопки вариантов (✅ у текущего); мультивыбор и категории тарифов —
-    кнопки с ✅ у selected и «Готово».
+    кнопки с ✅ у selected и «Готово». Курс проведения спрашивается не здесь, а карточками: course_pick.
     """
     kind = spec.kind
     shows_current = current not in (None, "", []) and field.kind is not FieldKind.MULTI
@@ -372,6 +372,33 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
                                          callback_data=_dict(kind, DictAction.CANCEL, item_id, page=page)))
     builder.row(*controls)
     return text, builder.as_markup()
+
+
+def course_pick(spec: DictionarySpec, field: DictField, header: str, course_id: int, index: int, total: int,
+                prev_id: int, next_id: int) -> tuple[str, InlineKeyboardMarkup]:
+    """Шаг «Курс» мастера проведения. Курсы списком кнопок не показываем: карточка курса (фото + подпись, как
+    в разделе «Курсы») листается стрелками ◀️ n/N ▶️, «✅ Выбрать этот курс» берёт показанный.
+
+    Возвращает вступление к подписи карточки и кнопки под ней. index/total — место курса среди курсов
+    библиотеки, prev_id/next_id — соседи (0 — края).
+    """
+    kind = spec.kind
+    template = texts.ADMIN_COURSE_PICK if total > 1 else texts.ADMIN_COURSE_PICK_ONE
+    rows = [
+        _pager(index, total, _dict(kind, DictAction.BROWSE, field=field.name, value=str(prev_id)),
+               _dict(kind, DictAction.BROWSE, field=field.name, value=str(next_id))),
+        [InlineKeyboardButton(text=texts.BTN_ADMIN_PICK_COURSE,
+                              callback_data=_dict(kind, DictAction.PICK, field=field.name, value=str(course_id)))],
+        [InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(kind, DictAction.CANCEL))],
+    ]
+    return template.format(header=header, hint=_hint(spec, field)), InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def course_pick_empty(spec: DictionarySpec, header: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Шаг «Курс», когда в библиотеке нет ни одного курса: выбирать не из чего — только «Отмена»."""
+    return texts.ADMIN_COURSE_PICK_EMPTY.format(header=header), InlineKeyboardMarkup(inline_keyboard=[[
+        InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_dict(spec.kind, DictAction.CANCEL)),
+    ]])
 
 
 def price_label_prompt(spec: DictionarySpec, header: str, n: int, total: int, price_kind: str,
