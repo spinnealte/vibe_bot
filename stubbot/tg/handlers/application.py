@@ -26,7 +26,6 @@ from stubbot.tg.callbacks import (
     ApplySeatsCb,
     CabinetAction,
     CabinetCb,
-    ConsentKind,
     MyApplicationAction,
     MyApplicationCb,
     ScheduleAction,
@@ -165,7 +164,7 @@ async def on_apply(callback: CallbackQuery, callback_data: ScheduleCb, state: FS
     await state.update_data({PENDING_APPLY_KEY: callback_data.item_id, catalog_flow.CAROUSEL_INDEX_KEY: callback_data.index})
     await message.answer(texts.APPLY_NEEDS_PROFILE)
     if not has_consent:
-        await flows.show_consent(message, state, session, settings, ConsentKind.PD)
+        await flows.show_consent_form(message, state, session, client)
     else:
         await flows.show_registration_step(message, state, session, client, step)
 

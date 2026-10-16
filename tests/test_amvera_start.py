@@ -8,9 +8,8 @@ import pytest
 
 @pytest.fixture
 def starter(monkeypatch: pytest.MonkeyPatch):
-    # Модуль при импорте задаёт LOG_DIR и LEGAL_DOCS_DIR, если их нет.
+    # Модуль при импорте задаёт LOG_DIR, если его нет.
     monkeypatch.delenv("LOG_DIR", raising=False)
-    monkeypatch.setenv("LEGAL_DOCS_DIR", "/custom/legal")
     monkeypatch.setenv("START_DELAY", "0")
     import amvera_start
 
@@ -36,7 +35,14 @@ def _trace(starter, monkeypatch: pytest.MonkeyPatch, empty: bool) -> list[str]:
 
 def test_storage_paths_default_to_persistent_data(starter) -> None:
     assert os.environ["LOG_DIR"] == "/data/logs"  # не задано — в постоянное хранилище
-    assert os.environ["LEGAL_DOCS_DIR"] == "/custom/legal"  # задано в переменных проекта — не трогаем
+
+
+def test_log_dir_from_project_settings_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("LOG_DIR", "/custom/logs")
+    import amvera_start
+
+    importlib.reload(amvera_start)
+    assert os.environ["LOG_DIR"] == "/custom/logs"  # задано в переменных проекта — не трогаем
 
 
 def test_fresh_database_gets_migrations_and_seed(starter, monkeypatch: pytest.MonkeyPatch) -> None:

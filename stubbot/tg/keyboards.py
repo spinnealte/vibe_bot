@@ -32,6 +32,8 @@ from stubbot.tg.callbacks import (
     ConsentKind,
     NameAction,
     NameCb,
+    ConsentFormAction,
+    ConsentFormCb,
     SelectDoneCb,
     SelectGroup,
     SkipOptionalCb,
@@ -41,7 +43,11 @@ from stubbot.tg.callbacks import (
 
 def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
     """Главное меню. «💬 Менеджер» — когда задана ссылка на менеджера (MANAGER_URL); админам (ADMIN_IDS / owner
-    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя."""
+    из .env) — ещё «⚙️ Админка»: вторым рядом, а если он занят — отдельным. chat_id лички = id пользователя.
+
+    Панель на виду, но не «всегда» (без is_persistent): человек может свернуть её значком рядом с полем ввода
+    и тем же значком развернуть. Сам бот её не сворачивает: в режиме one_time_keyboard Telegram на iPhone после
+    нажатия убирает и значок — панель не вернуть, пока бот не пришлёт её заново (проверено пользователем 14.10.2026)."""
     settings = get_settings()
     keyboard = [
         [KeyboardButton(text=texts.BTN_SCHEDULE), KeyboardButton(text=texts.BTN_CABINET)],
@@ -55,7 +61,7 @@ def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
             keyboard[1].append(admin)
         else:
             keyboard.append([admin])
-    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True, is_persistent=True)
+    return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
 def registration_nav() -> ReplyKeyboardMarkup:
@@ -77,17 +83,32 @@ def share_phone() -> ReplyKeyboardMarkup:
     )
 
 
-def consent(kind: ConsentKind) -> InlineKeyboardMarkup:
-    accept, decline = (
-        (texts.CONSENT_ACCEPT, texts.CONSENT_DECLINE)
-        if kind is ConsentKind.PD
-        else (texts.CONSENT_MARKETING_YES, texts.CONSENT_MARKETING_NO)
-    )
+def consent_form(pd: bool, ads: bool, with_ads: bool = True) -> InlineKeyboardMarkup:
+    """Согласия при регистрации — две отдельные галочки (нажатие ставит и снимает): 1 — политика и обработка ПД,
+    обязательна; 2 — рекламные рассылки, по желанию. «Продолжить» без первой дальше не пускает
+    (handlers/consent.py). Кнопки «Не согласен» нет: не поставил галочку — не согласился."""
+
+    def box(checked: bool, label: str, action: ConsentFormAction) -> list[InlineKeyboardButton]:
+        mark = texts.CONSENT_MARK_ON if checked else texts.CONSENT_MARK_OFF
+        return [InlineKeyboardButton(text=mark + label, callback_data=ConsentFormCb(action=action).pack())]
+
+    rows = [box(pd, texts.CONSENT_FORM_PD, ConsentFormAction.PD)]
+    if with_ads:
+        rows.append(box(ads, texts.CONSENT_FORM_ADS, ConsentFormAction.ADS))
+    rows.append([InlineKeyboardButton(text=texts.CONSENT_FORM_CONTINUE,
+                                      callback_data=ConsentFormCb(action=ConsentFormAction.CONTINUE).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def marketing_consent() -> InlineKeyboardMarkup:
+    kind = ConsentKind.MARKETING
     return InlineKeyboardMarkup(
         inline_keyboard=[
             [
-                InlineKeyboardButton(text=accept, callback_data=ConsentCb(kind=kind, accept=True).pack()),
-                InlineKeyboardButton(text=decline, callback_data=ConsentCb(kind=kind, accept=False).pack()),
+                InlineKeyboardButton(text=texts.CONSENT_MARKETING_YES,
+                                     callback_data=ConsentCb(kind=kind, accept=True).pack()),
+                InlineKeyboardButton(text=texts.CONSENT_MARKETING_NO,
+                                     callback_data=ConsentCb(kind=kind, accept=False).pack()),
             ]
         ]
     )

@@ -6,6 +6,8 @@ logs/
 .pytest_cache/
 .ruff_cache/
 
-# Тексты документов живут только на сервере
+# В legal/ в git — README и копии документов с сайта (legal/site/). Остальное — старые локальные черновики
+# согласий (версия 0); тексты, которые показывает бот, теперь в коде (stubbot/services/legal.py).
 legal/*
 !legal/README.md
+!legal/site/

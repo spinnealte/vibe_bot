@@ -137,10 +137,15 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
     return _with_excerpt(lines, program)
 
 
-def program_caption(program: Program) -> str:
+def program_caption(program: Program, intro: str | None = None) -> str:
     """Подпись под фото курса в админке (раздел «Курсы» и архив курсов). Курс — запись библиотеки: дат,
-    площадки, цен и статуса у него нет — они у проведения, а в афише стоят только проведения."""
-    lines = [texts.CAPTION_TITLE.format(title=safe(program.title))]
+    площадки, цен и статуса у него нет — они у проведения, а в афише стоят только проведения.
+
+    intro — строки над карточкой (вопрос мастера «Какой курс проводим?»): место под них отнимается у
+    отрывка программы, поэтому они не пропадут и подпись не вылезет за лимит.
+    """
+    lines = [intro, ""] if intro else []
+    lines.append(texts.CAPTION_TITLE.format(title=safe(program.title)))
     if program.short_description:
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines += ["", *_lecturers_line(program), *_meta_lines(program, program.default_format.value)]

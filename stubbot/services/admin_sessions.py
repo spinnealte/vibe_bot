@@ -50,7 +50,7 @@ NO_DATES = 0
 SESSION_SPEC = DictionarySpec(
     kind=DictKind.SESSIONS,
     fields=(
-        DictField("program_id", FieldKind.REF, required=True, editable=False),
+        DictField("program_id", FieldKind.COURSE, required=True, editable=False),
         # Необязательно: без дней проведение стоит в афише с пометкой «даты уточняются».
         DictField("days", FieldKind.DAYS, required=False),
         DictField("format", FieldKind.CHOICE, required=True, choices=_FORMATS),

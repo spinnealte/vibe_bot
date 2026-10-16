@@ -13,8 +13,21 @@ class ConsentKind(StrEnum):
 
 
 class ConsentCb(CallbackData, prefix="consent"):
+    """«Да / Нет» на включение рекламных рассылок из кабинета (kind — MARKETING). При регистрации согласия
+    даются галочками (ConsentFormCb)."""
+
     kind: ConsentKind
     accept: bool
+
+
+class ConsentFormAction(StrEnum):
+    PD = "pd"  # галочка 1 — политика и обработка ПД (обязательна)
+    ADS = "ads"  # галочка 2 — рекламные рассылки (по желанию)
+    CONTINUE = "go"  # «Продолжить» — пускает дальше только с первой галочкой
+
+
+class ConsentFormCb(CallbackData, prefix="cform"):
+    action: ConsentFormAction
 
 
 class NameAction(StrEnum):
@@ -158,6 +171,7 @@ class DictAction(StrEnum):
     SKIP = "skip"  # «Пропустить» необязательное поле в мастере
     CLEAR = "clr"  # «Очистить» необязательное поле при правке
     PICK = "pick"  # выбрать вариант value в поле-выборе
+    BROWSE = "br"  # ◀️ ▶️ на шаге «Курс» мастера проведения: показать карточку курса value
     TOGGLE = "tgl"  # отметить/снять запись value в поле-мультивыборе
     DONE = "done"  # «Готово» в мультивыборе
     SAVE = "save"  # сохранить новую запись после предпросмотра

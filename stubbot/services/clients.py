@@ -5,10 +5,11 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.db.enums import ClientEventType
+from stubbot.db.enums import ClientEventType, ConsentType
 from stubbot.db.models import Client
 from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.clients import ClientRepository
+from stubbot.repositories.consents import ConsentRepository
 from stubbot.services.deeplinks import PayloadKind, StartPayload
 
 logger = logging.getLogger(__name__)
@@ -32,23 +33,30 @@ class ClientService:
     def __init__(self, session: AsyncSession) -> None:
         self.clients = ClientRepository(session)
         self.analytics = AnalyticsRepository(session)
+        self.consents = ConsentRepository(session)
 
     async def get_or_create(self, profile: TelegramProfile) -> tuple[Client, bool]:
-        """Клиент по telegram_id; создаётся при первом обращении. Второе значение — создан ли сейчас."""
+        """Клиент по telegram_id; создаётся при первом обращении. Второе значение — создан ли сейчас.
+
+        До согласия на обработку ПД из Telegram храним только id (без него бот не может ответить): имя,
+        @username и язык запоминаем, когда человек поставит галочку согласия (remember_profile), и дальше
+        обновляем при визитах.
+        """
         client = await self.clients.get_by_telegram_id(profile.telegram_id)
         if client is not None:
             logger.debug("[DB] Найден клиент #%s", client.id)
-            self._refresh_snapshot(client, profile)
+            self._refresh_activity(client)
+            # Согласие проверяем, только если в Telegram что-то поменялось: лишний запрос на каждое нажатие ни к чему.
+            if _snapshot(client) != _profile_fields(profile) and await self.consents.active_consent(
+                client.id, ConsentType.PERSONAL_DATA
+            ):
+                self.remember_profile(client, profile)
             return client, False
 
         for _ in range(3):
             client = await self.clients.insert_if_absent(
                 {
                     "telegram_id": profile.telegram_id,
-                    "tg_username": profile.username,
-                    "tg_first_name": profile.first_name,
-                    "tg_last_name": profile.last_name,
-                    "tg_language_code": profile.language_code,
                     "referral_code": secrets.token_urlsafe(REFERRAL_CODE_BYTES),
                     "last_seen_at": datetime.now(UTC),
                 }
@@ -100,11 +108,15 @@ class ClientService:
             logger.info("Клиент #%s заблокировал бота", client_id)
 
     @staticmethod
-    def _refresh_snapshot(client: Client, profile: TelegramProfile) -> None:
+    def remember_profile(client: Client, profile: TelegramProfile) -> None:
+        """Имя, @username и язык из Telegram — только для давших согласие на обработку ПД."""
         client.tg_username = profile.username
         client.tg_first_name = profile.first_name
         client.tg_last_name = profile.last_name
         client.tg_language_code = profile.language_code
+
+    @staticmethod
+    def _refresh_activity(client: Client) -> None:
         if client.is_bot_blocked:
             # Пишет нам — значит, разблокировал.
             client.is_bot_blocked = False
@@ -112,3 +124,11 @@ class ClientService:
         now = datetime.now(UTC)
         if client.last_seen_at is None or now - client.last_seen_at > LAST_SEEN_THROTTLE:
             client.last_seen_at = now
+
+
+def _snapshot(client: Client) -> tuple[str | None, ...]:
+    return client.tg_username, client.tg_first_name, client.tg_last_name, client.tg_language_code
+
+
+def _profile_fields(profile: TelegramProfile) -> tuple[str | None, ...]:
+    return profile.username, profile.first_name, profile.last_name, profile.language_code

@@ -8,6 +8,16 @@ from aiogram.types import Chat, TelegramObject, User
 from stubbot.services.clients import ClientService, TelegramProfile
 
 
+def telegram_profile(user: User) -> TelegramProfile:
+    return TelegramProfile(
+        telegram_id=user.id,
+        username=user.username,
+        first_name=user.first_name,
+        last_name=user.last_name,
+        language_code=user.language_code,
+    )
+
+
 class ClientMiddleware(BaseMiddleware):
     """Находит или создаёт клиента по отправителю и кладёт в data: `client`, `client_created`.
 
@@ -25,14 +35,7 @@ class ClientMiddleware(BaseMiddleware):
         # Бот работает только в личных чатах (см. handlers/__init__.py): в группах клиентов не заводим.
         if user is None or user.is_bot or chat is None or chat.type != ChatType.PRIVATE:
             return await handler(event, data)
-        profile = TelegramProfile(
-            telegram_id=user.id,
-            username=user.username,
-            first_name=user.first_name,
-            last_name=user.last_name,
-            language_code=user.language_code,
-        )
-        client, created = await ClientService(data["session"]).get_or_create(profile)
+        client, created = await ClientService(data["session"]).get_or_create(telegram_profile(user))
         data["client"] = client
         data["client_created"] = created
         return await handler(event, data)

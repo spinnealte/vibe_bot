@@ -4,7 +4,8 @@
 Один общий редактор для курсов, проведений и справочников (services/admin_registry.py): список → карточка →
 правка поля / архив; «➕ Добавить» — мастер по полям с предпросмотром. Ответ сообщением — новым экраном, у вопроса
 убираем кнопки; ответ кнопкой — в том же сообщении. Курсы и проведения списком кнопок не показываются: карточки
-как в афише листаются стрелками ◀️ n/N ▶️ (курсы — все подряд, проведения — внутри выбранного месяца).
+как в афише листаются стрелками ◀️ n/N ▶️ (курсы — все подряд, проведения — внутри выбранного месяца). Так же,
+карточками со стрелками, выбирают курс на первом шаге мастера «Новое проведение».
 
 Три раздела (решение 16): «Курсы» — библиотека, афишу не меняет; «Проведения» — это и есть афиша (с датами или
 без дат), убрать из неё — отправить в архив; «Архив» — убранные курсы и проведения и прошедшие мероприятия,
@@ -430,7 +431,7 @@ async def on_pick(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
         return
     if field.kind is FieldKind.CHOICE and callback_data.value in field.choices:
         value: Any = callback_data.value
-    elif field.kind is FieldKind.REF and callback_data.value.isdigit():
+    elif field.kind in (FieldKind.REF, FieldKind.COURSE) and callback_data.value.isdigit():
         value = int(callback_data.value)
         options = await _service(session, callback_data.kind, client).options(field, data.get("selected", []))
         if value not in {option_id for option_id, _ in options}:
@@ -440,6 +441,18 @@ async def on_pick(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
         await callback.answer(texts.UNKNOWN_CALLBACK)
         return
     await _answer_result(callback, await _accept(callback.message, state, session, client, value, in_place=True))
+
+
+@router.callback_query(AdminDict.value, DictCb.filter(F.action == DictAction.BROWSE))
+async def on_browse(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
+                    client: Client) -> None:
+    """◀️ ▶️ на шаге «Курс» мастера проведения: соседняя карточка курса в том же сообщении."""
+    field = _matching_field(await state.get_data(), callback_data)
+    if field is None or field.kind is not FieldKind.COURSE or not callback_data.value.isdigit():
+        await callback.answer(texts.UNKNOWN_CALLBACK)  # кнопка от прошлого вопроса или подделанная
+        return
+    await callback.answer()
+    await _ask_course(callback.message, state, session, client, int(callback_data.value), in_place=True)
 
 
 @router.callback_query(AdminDict.value, DictCb.filter(F.action == DictAction.TOGGLE))
@@ -697,6 +710,9 @@ async def _ask_field(message: Message, state: FSMContext, session: AsyncSession,
     spec = ADMIN_SPECS[DictKind(data["kind"])]
     service = _service(session, spec.kind, client)
     field = _current_field(data)
+    if field.kind is FieldKind.COURSE:
+        await _ask_course(message, state, session, client, course_id=0, in_place=in_place)
+        return
     header = await _header(spec, data, session, client)
     if data["mode"] == "add":
         current, item_id = None, 0
@@ -721,6 +737,30 @@ async def _ask_field(message: Message, state: FSMContext, session: AsyncSession,
                                             options, selected)
     prompt = await _screen(message, text, markup, in_place)
     await state.update_data({"selected": selected, PROMPT_KEY: prompt.message_id})
+
+
+async def _ask_course(message: Message, state: FSMContext, session: AsyncSession, client: Client, course_id: int,
+                      in_place: bool) -> None:
+    """Шаг «Курс» мастера проведения: карточка курса из библиотеки, как в разделе «Курсы», со стрелками
+    ◀️ n/N ▶️ и «✅ Выбрать этот курс». course_id — какой курс показать; 0 или курса уже нет в библиотеке — первый."""
+    data = await state.get_data()
+    spec = ADMIN_SPECS[DictKind(data["kind"])]
+    header = await _header(spec, data, session, client)
+    courses = _courses(session, client)
+    ids = [course.id for course in await courses.items()]
+    if not ids:
+        prompt = await _screen(message, *admin_views.course_pick_empty(spec, header), in_place)
+    else:
+        index = ids.index(course_id) if course_id in ids else 0
+        course = await courses.item(ids[index])
+        intro, markup = admin_views.course_pick(
+            spec, _current_field(data), header, course.id, index, len(ids),
+            prev_id=ids[index - 1] if index > 0 else 0,
+            next_id=ids[index + 1] if index + 1 < len(ids) else 0,
+        )
+        prompt = await _screen(message, render.program_caption(course, intro), markup, in_place,
+                               photo=course.cover_file_id or DEFAULT_COVER)
+    await state.update_data({"selected": [], PROMPT_KEY: prompt.message_id})
 
 
 async def _accept(message: Message, state: FSMContext, session: AsyncSession, client: Client, value: Any,

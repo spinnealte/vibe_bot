@@ -16,6 +16,21 @@ class ConsentRepository:
             select(LegalDocument).where(LegalDocument.type == doc_type, LegalDocument.is_current)
         )
 
+    async def document(self, doc_type: LegalDocumentType, version: str) -> LegalDocument | None:
+        return await self.session.scalar(
+            select(LegalDocument).where(LegalDocument.type == doc_type, LegalDocument.version == version)
+        )
+
+    async def unset_current(self, doc_type: LegalDocumentType) -> None:
+        await self.session.execute(
+            update(LegalDocument)
+            .where(LegalDocument.type == doc_type, LegalDocument.is_current)
+            .values(is_current=False)
+        )
+
+    def add_document(self, document: LegalDocument) -> None:
+        self.session.add(document)
+
     async def active_consent(self, client_id: int, consent_type: ConsentType) -> ClientConsent | None:
         return await self.session.scalar(
             select(ClientConsent).where(

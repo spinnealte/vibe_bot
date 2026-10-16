@@ -32,7 +32,6 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
     log_dir: Path = Path("logs")
-    legal_docs_dir: Path = Path("legal")
     timezone: str = "Europe/Moscow"
 
     # Защита от флуда: не больше flood_limit обращений от одного человека за flood_window секунд. 0 — выключить.
