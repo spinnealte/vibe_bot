@@ -177,21 +177,31 @@ ABOUT_MANAGER_HINT = "💬 Записаться на курс или задат�
 CONSENT_PD_INTRO = (
     "📋 <b>Давайте заполним Ваш профиль!</b>\n\n"
     "Это займёт пару минут и понадобится для записи на курсы и выдачи сертификатов.\n\n"
-    "Сначала — согласие на обработку персональных данных:"
+    "Сначала — согласия:"
 )
-# Между вступлением и подсказкой — текст согласия со ссылками на документы (services/legal.py).
-CONSENT_PD_SCREEN = "{intro}\n\n<blockquote>{statement}</blockquote>\n\n{hint}"
-CONSENT_PD_HINT = "Поставьте галочку и нажмите <b>«Продолжить»</b> 👇"
-CONSENT_PD_UNCHECKED = "⬜ Я согласен"
-CONSENT_PD_CHECKED = "✅ Я согласен"
-CONSENT_PD_CONTINUE = "Продолжить ➡️"
-# Всплывающее окно (без HTML, до 200 символов): «Продолжить» без галочки.
+# Экран согласий: тексты обоих согласий со ссылками на документы (services/legal.py) и галочки под ними.
+CONSENT_FORM = (
+    "{intro}\n\n"
+    "1️⃣ <b>Обязательно</b>\n<blockquote>{pd}</blockquote>\n\n"
+    "2️⃣ <b>По желанию</b>\n<blockquote>{ads}</blockquote>\n\n"
+    "{hint}"
+)
+CONSENT_FORM_PD_ONLY = "{intro}\n\n<blockquote>{pd}</blockquote>\n\n{hint}"  # если текста о рекламе нет
+CONSENT_FORM_HINT = "Отметьте галочками и нажмите <b>«Продолжить»</b> 👇"
+CONSENT_MARK_ON = "✅ "
+CONSENT_MARK_OFF = "⬜ "
+CONSENT_FORM_PD = "1. Политика и обработка данных"
+CONSENT_FORM_ADS = "2. Реклама и анонсы курсов"
+CONSENT_FORM_CONTINUE = "Продолжить ➡️"
+# Всплывающее окно (без HTML, до 200 символов): «Продолжить» без первой галочки.
 CONSENT_PD_CHECK_REQUIRED = (
-    "Поставьте галочку «Я согласен» — без согласия мы не можем сохранить Ваши данные. "
+    "Отметьте «1. Политика и обработка данных» — без этого согласия мы не можем сохранить Ваши данные. "
     "Расписание доступно и без регистрации."
 )
 CONSENT_PD_UPDATED = "ℹ️ Документы обновились — посмотрите, пожалуйста, ещё раз."
 CONSENT_PD_ACCEPTED = "✅ <b>Спасибо!</b> Согласие на обработку персональных данных принято."
+# Включение рассылок из кабинета: текст согласия и «Да / Нет».
+CONSENT_MARKETING_SCREEN = "🔔 <b>Анонсы новых курсов</b>\n\n<blockquote>{ads}</blockquote>\n\nВключить рассылки?"
 CONSENT_MARKETING_YES = "🔔 Да, присылать"
 CONSENT_MARKETING_NO = "Нет, спасибо"
 CONSENT_MARKETING_ACCEPTED = (

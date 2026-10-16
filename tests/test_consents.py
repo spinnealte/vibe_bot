@@ -23,7 +23,7 @@ from stubbot.services.legal import (
     publish_documents,
 )
 from stubbot.tg import keyboards, texts
-from stubbot.tg.callbacks import PdConsentAction, PdConsentCb
+from stubbot.tg.callbacks import ConsentFormAction, ConsentFormCb
 from stubbot.tg.render import visible_length
 
 NOW = datetime(2026, 10, 16, 12, 0, tzinfo=UTC)
@@ -41,25 +41,33 @@ def test_pd_consent_is_customer_wording_with_links_to_site() -> None:
     assert f'<a href="{POLICY_URL}">Политикой обработки персональных данных</a>' in PD_CONSENT.html
     assert f'<a href="{CONSENT_URL}">согласие на обработку моих персональных данных</a>' in PD_CONSENT.html
     assert POLICY_URL == "https://akvastom-group.ru/privacy/" and CONSENT_URL == "https://akvastom-group.ru/privacy/consent/"
-    # Рекламные рассылки — отдельное согласие со своей ссылкой; кнопка в тексте та же, что под ним.
-    assert f'href="{CONSENT_URL}"' in MARKETING_CONSENT.html and texts.CONSENT_MARKETING_YES in MARKETING_CONSENT.html
+    # Рекламные рассылки — отдельное согласие со своей ссылкой (вторая часть той же страницы).
+    assert f'<a href="{CONSENT_URL}">согласие на получение рекламных рассылок</a>' in MARKETING_CONSENT.html
 
 
 def test_consent_screen_and_popup_fit_telegram_limits() -> None:
-    screen = texts.CONSENT_PD_SCREEN.format(intro=texts.CONSENT_PD_INTRO, statement=PD_CONSENT.html,
-                                            hint=texts.CONSENT_PD_HINT)
-    assert PD_CONSENT.html in screen and visible_length(screen) < 4096
+    screen = texts.CONSENT_FORM.format(intro=texts.CONSENT_PD_INTRO, pd=PD_CONSENT.html, ads=MARKETING_CONSENT.html,
+                                       hint=texts.CONSENT_FORM_HINT)
+    assert PD_CONSENT.html in screen and MARKETING_CONSENT.html in screen and visible_length(screen) < 4096
+    assert screen.index("Обязательно") < screen.index(PD_CONSENT.html) < screen.index("По желанию") \
+        < screen.index(MARKETING_CONSENT.html)
     assert len(texts.CONSENT_PD_CHECK_REQUIRED) <= 200 and "<" not in texts.CONSENT_PD_CHECK_REQUIRED
 
 
-def test_checkbox_and_continue_buttons() -> None:
+def test_two_separate_checkboxes_and_continue() -> None:
+    """Отдельные галочки: 1 — политика и обработка ПД, 2 — реклама; «Продолжить» — третьей кнопкой."""
     rows = lambda markup: [[b.text for b in row] for row in markup.inline_keyboard]  # noqa: E731
-    unchecked, checked = keyboards.pd_consent(checked=False), keyboards.pd_consent(checked=True)
-    assert rows(unchecked) == [[texts.CONSENT_PD_UNCHECKED], [texts.CONSENT_PD_CONTINUE]]
-    assert rows(checked) == [[texts.CONSENT_PD_CHECKED], [texts.CONSENT_PD_CONTINUE]]
+    on, off = texts.CONSENT_MARK_ON, texts.CONSENT_MARK_OFF
+    pd, ads, go = texts.CONSENT_FORM_PD, texts.CONSENT_FORM_ADS, texts.CONSENT_FORM_CONTINUE
+    assert rows(keyboards.consent_form(pd=False, ads=False)) == [[off + pd], [off + ads], [go]]
+    assert rows(keyboards.consent_form(pd=True, ads=False)) == [[on + pd], [off + ads], [go]]
+    assert rows(keyboards.consent_form(pd=False, ads=True)) == [[off + pd], [on + ads], [go]]
+    assert rows(keyboards.consent_form(pd=True, ads=False, with_ads=False)) == [[on + pd], [go]]
     # «Не согласен» нет: не поставил галочку — значит, не согласился.
-    assert unchecked.inline_keyboard[0][0].callback_data == PdConsentCb(action=PdConsentAction.TOGGLE).pack()
-    assert unchecked.inline_keyboard[1][0].callback_data == PdConsentCb(action=PdConsentAction.CONTINUE).pack()
+    markup = keyboards.consent_form(pd=False, ads=False)
+    assert [row[0].callback_data for row in markup.inline_keyboard] == [
+        ConsentFormCb(action=action).pack()
+        for action in (ConsentFormAction.PD, ConsentFormAction.ADS, ConsentFormAction.CONTINUE)]
 
 
 def test_document_text_by_version() -> None:
@@ -104,8 +112,8 @@ def test_publish_replaces_placeholder_and_is_idempotent(monkeypatch: pytest.Monk
             for t in (LegalDocumentType.PD_CONSENT, LegalDocumentType.MARKETING_CONSENT,
                       LegalDocumentType.PRIVACY_POLICY)]
     published = _publish(monkeypatch, rows)
-    assert sorted(published) == ["marketing_consent v1", "pd_consent v1", "privacy_policy v1"]
-    assert set(_current(rows).values()) == {"1"}  # черновики «0» больше не текущие — согласия на них не в счёт
+    assert sorted(published) == ["marketing_consent v2", "pd_consent v1", "privacy_policy v1"]
+    assert "0" not in _current(rows).values()  # черновики «0» больше не текущие — согласия на них не в счёт
     new = next(r for r in rows if r.type is LegalDocumentType.PD_CONSENT and r.version == "1")
     assert (new.url, new.text_hash, new.published_at) == (CONSENT_URL, PD_CONSENT.text_hash, NOW)
     # Повторный запуск (каждый старт бота) ничего не выпускает и не меняет.

@@ -26,16 +26,19 @@ from stubbot.services.registration import (
     RegistrationStep,
 )
 from stubbot.tg import catalog_flow, keyboards, texts
-from stubbot.tg.callbacks import ConsentKind, SelectGroup
+from stubbot.tg.callbacks import SelectGroup
 from stubbot.tg.formatting import safe, safe_join
 from stubbot.tg.screen import send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import FULL_NAME_KEY, OPTIONAL_STATES, PENDING_APPLY_KEY, Consent, Registration
 from stubbot.utils.dates import local_today
 from stubbot.utils.profile_fields import experience_years
 
-# Шаг согласия на ПД (FSM data): какую версию документа показали и стоит ли галочка «Я согласен».
+# Экран согласий при регистрации (FSM data): какие версии документов показали и какие галочки стоят.
 PD_DOCUMENT_KEY = "pd_document_id"
+ADS_DOCUMENT_KEY = "ads_document_id"  # None — текста о рекламе нет, второй галочки на экране нет
 PD_CHECKED_KEY = "pd_checked"
+ADS_CHECKED_KEY = "ads_checked"
+CONSENT_FORM_KEYS = (PD_DOCUMENT_KEY, ADS_DOCUMENT_KEY, PD_CHECKED_KEY, ADS_CHECKED_KEY)
 # id сообщения с вопросом, у которого надо убрать кнопки, когда ответ придёт текстом.
 PROMPT_MESSAGE_KEY = "prompt_message_id"
 
@@ -53,7 +56,7 @@ async def enter_cabinet(message: Message, state: FSMContext, session: AsyncSessi
     """Вход в «Личный кабинет»: согласие → регистрация → кабинет, с того места, где человек остановился."""
     await state.clear()
     if not await ConsentService(session).has_current_consent(client.id, ConsentType.PERSONAL_DATA):
-        await show_consent(message, state, session, ConsentKind.PD)
+        await show_consent_form(message, state, session, client)
         return
     step = await RegistrationService(session).next_step(client)
     if step is not RegistrationStep.DONE:
@@ -62,28 +65,48 @@ async def enter_cabinet(message: Message, state: FSMContext, session: AsyncSessi
     await show_cabinet(message, session, client, settings, bot)
 
 
-async def show_consent(message: Message, state: FSMContext, session: AsyncSession, kind: ConsentKind,
-                       in_place: bool = False, notice: str | None = None) -> None:
-    """Согласие на ПД — текст со ссылками на документы на сайте и галочка «Я согласен» (обязательна);
-    на рекламные рассылки — вопрос «Да / Нет». Текст — у текущей версии документа (services/legal.py)."""
-    consent_type = ConsentType.PERSONAL_DATA if kind is ConsentKind.PD else ConsentType.MARKETING
-    document = await ConsentService(session).current_document(consent_type)
-    statement = document_text(document) if document else None
-    if statement is None:
+async def show_consent_form(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                            in_place: bool = False, notice: str | None = None) -> None:
+    """Согласия при регистрации — тексты со ссылками на документы на сайте и две отдельные галочки:
+    1 — политика и обработка ПД (обязательна), 2 — рекламные рассылки (по желанию).
+    Тексты — у текущих версий документов (services/legal.py)."""
+    service = ConsentService(session)
+    pd_document = await service.current_document(ConsentType.PERSONAL_DATA)
+    pd_text = document_text(pd_document) if pd_document else None
+    if pd_text is None:
         await state.clear()
         await _screen(message, texts.DOCUMENT_UNAVAILABLE, None, in_place)
         return
-    if kind is ConsentKind.PD:
-        await state.set_state(Consent.personal_data)
-        # Галочку ставит сам человек; согласие засчитывается на ту версию, которую он видел.
-        await state.update_data({PD_DOCUMENT_KEY: document.id, PD_CHECKED_KEY: False})
-        text = texts.CONSENT_PD_SCREEN.format(intro=texts.CONSENT_PD_INTRO, statement=statement,
-                                              hint=texts.CONSENT_PD_HINT)
-        markup = keyboards.pd_consent(checked=False)
-    else:
-        await state.set_state(Consent.marketing)
-        text, markup = statement, keyboards.marketing_consent()
+    ads_document = await service.current_document(ConsentType.MARKETING)
+    ads_text = document_text(ads_document) if ads_document else None
+    # Вторая галочка показывает то, что есть сейчас: соглашался на рассылки раньше — она уже стоит.
+    ads = ads_text is not None and await service.has_any_consent(client.id, ConsentType.MARKETING)
+    await state.set_state(Consent.personal_data)
+    # Галочки ставит сам человек; согласия засчитываются на те версии документов, которые он видел.
+    await state.update_data({
+        PD_DOCUMENT_KEY: pd_document.id,
+        ADS_DOCUMENT_KEY: ads_document.id if ads_text is not None else None,
+        PD_CHECKED_KEY: False,
+        ADS_CHECKED_KEY: ads,
+    })
+    intro, hint = texts.CONSENT_PD_INTRO, texts.CONSENT_FORM_HINT
+    text = (texts.CONSENT_FORM.format(intro=intro, pd=pd_text, ads=ads_text, hint=hint) if ads_text is not None
+            else texts.CONSENT_FORM_PD_ONLY.format(intro=intro, pd=pd_text, hint=hint))
+    markup = keyboards.consent_form(pd=False, ads=ads, with_ads=ads_text is not None)
     await _screen(message, with_notice(notice, text), markup, in_place)
+
+
+async def show_marketing_consent(message: Message, state: FSMContext, session: AsyncSession) -> None:
+    """Включение рекламных рассылок из кабинета: текст согласия и «Да / Нет» — в том же сообщении."""
+    document = await ConsentService(session).current_document(ConsentType.MARKETING)
+    ads_text = document_text(document) if document else None
+    if ads_text is None:
+        await state.clear()
+        await _screen(message, texts.DOCUMENT_UNAVAILABLE, None, in_place=True)
+        return
+    await state.set_state(Consent.marketing)
+    await _screen(message, texts.CONSENT_MARKETING_SCREEN.format(ads=ads_text), keyboards.marketing_consent(),
+                  in_place=True)
 
 
 async def show_registration_step(message: Message, state: FSMContext, session: AsyncSession, client: Client,

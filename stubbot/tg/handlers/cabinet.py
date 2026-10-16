@@ -25,7 +25,6 @@ from stubbot.tg import flows, keyboards, texts
 from stubbot.tg.callbacks import (
     CabinetAction,
     CabinetCb,
-    ConsentKind,
     EditControl,
     EditControlCb,
     EditField,
@@ -78,7 +77,7 @@ async def toggle_marketing(callback: CallbackQuery, state: FSMContext, session: 
     # Включение — это новое согласие: показываем текст документа вместо кабинета, после ответа — кабинет обратно.
     await state.clear()
     await state.update_data(return_to=RETURN_TO_CABINET)
-    await flows.show_consent(callback.message, state, session, ConsentKind.MARKETING, in_place=True)
+    await flows.show_marketing_consent(callback.message, state, session)
 
 
 # --- Выбор поля ------------------------------------------------------------------------------------------------

@@ -32,8 +32,8 @@ from stubbot.tg.callbacks import (
     ConsentKind,
     NameAction,
     NameCb,
-    PdConsentAction,
-    PdConsentCb,
+    ConsentFormAction,
+    ConsentFormCb,
     SelectDoneCb,
     SelectGroup,
     SkipOptionalCb,
@@ -83,15 +83,21 @@ def share_phone() -> ReplyKeyboardMarkup:
     )
 
 
-def pd_consent(checked: bool) -> InlineKeyboardMarkup:
-    """Согласие на ПД: галочка «Я согласен» (нажатие ставит и снимает) и «Продолжить» — без галочки дальше
-    не пускает (handlers/consent.py). Отдельной кнопки «Не согласен» нет: не поставил галочку — не согласился."""
-    mark = texts.CONSENT_PD_CHECKED if checked else texts.CONSENT_PD_UNCHECKED
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=mark, callback_data=PdConsentCb(action=PdConsentAction.TOGGLE).pack())],
-        [InlineKeyboardButton(text=texts.CONSENT_PD_CONTINUE,
-                              callback_data=PdConsentCb(action=PdConsentAction.CONTINUE).pack())],
-    ])
+def consent_form(pd: bool, ads: bool, with_ads: bool = True) -> InlineKeyboardMarkup:
+    """Согласия при регистрации — две отдельные галочки (нажатие ставит и снимает): 1 — политика и обработка ПД,
+    обязательна; 2 — рекламные рассылки, по желанию. «Продолжить» без первой дальше не пускает
+    (handlers/consent.py). Кнопки «Не согласен» нет: не поставил галочку — не согласился."""
+
+    def box(checked: bool, label: str, action: ConsentFormAction) -> list[InlineKeyboardButton]:
+        mark = texts.CONSENT_MARK_ON if checked else texts.CONSENT_MARK_OFF
+        return [InlineKeyboardButton(text=mark + label, callback_data=ConsentFormCb(action=action).pack())]
+
+    rows = [box(pd, texts.CONSENT_FORM_PD, ConsentFormAction.PD)]
+    if with_ads:
+        rows.append(box(ads, texts.CONSENT_FORM_ADS, ConsentFormAction.ADS))
+    rows.append([InlineKeyboardButton(text=texts.CONSENT_FORM_CONTINUE,
+                                      callback_data=ConsentFormCb(action=ConsentFormAction.CONTINUE).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def marketing_consent() -> InlineKeyboardMarkup:
