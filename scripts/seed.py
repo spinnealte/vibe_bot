@@ -65,7 +65,7 @@ async def seed() -> None:
                 .values(telegram_id=settings.owner_telegram_id, name="Owner", role=AdminRole.OWNER)
                 .on_conflict_do_nothing(index_elements=["telegram_id"])
             )
-            # То же делает бот при каждом запуске; здесь — чтобы база была готова и до первого запуска.
+            # То же делает бот при каждом запуске; здесь - чтобы база была готова и до первого запуска.
             published = await publish_documents(session, datetime.now(UTC))
     finally:
         await engine.dispose()

@@ -78,7 +78,7 @@ class _NoDb:
 
 @pytest.fixture(scope="module")
 def dp() -> Dispatcher:
-    # Диспетчер в процессе один: роутеры — объекты модулей и подключаются к корневому один раз.
+    # Диспетчер в процессе один: роутеры - объекты модулей и подключаются к корневому один раз.
     settings = Settings(_env_file=None, db_user="u", db_password="p", db_name="n", owner_telegram_id=OWNER_ID)
     return create_dispatcher(settings, _NoDb(), storage=MemoryStorage())
 
@@ -112,7 +112,7 @@ def test_bot_leaves_group_when_added(dp: Dispatcher) -> None:
 
 
 def test_leave_handler_ignores_removal() -> None:
-    """Бота убрали из группы — выходить уже неоткуда."""
+    """Бота убрали из группы - выходить уже неоткуда."""
     left: list[int] = []
 
     class _FakeBot:
@@ -138,14 +138,14 @@ def test_client_is_not_created_in_group() -> None:
 def test_throttle_registered_for_messages_and_buttons(dp: Dispatcher) -> None:
     for observer in (dp.message, dp.callback_query):
         first = observer.outer_middleware[0]
-        assert isinstance(first, ThrottlingMiddleware)  # раньше остальных — до работы с БД
+        assert isinstance(first, ThrottlingMiddleware)  # раньше остальных - до работы с БД
         assert (first.limit, first.window) == (20, 5.0)
     assert dp.message.outer_middleware[0] is dp.callback_query.outer_middleware[0]  # счёт общий
 
 
 def test_one_persons_updates_are_handled_in_turn(dp: Dispatcher) -> None:
     """Два быстрых нажатия одного человека не обрабатываются одновременно (иначе «Сохранить» создаёт две записи):
-    второе ждёт первое. Проверено сценарием на БД; здесь — что очередь включена и у разных людей она своя."""
+    второе ждёт первое. Проверено сценарием на БД; здесь - что очередь включена и у разных людей она своя."""
     isolation = dp.fsm.events_isolation
     assert isinstance(isolation, SimpleEventIsolation)
     order: list[str] = []
@@ -207,12 +207,12 @@ def test_throttle_twenty_per_five_seconds() -> None:
         assert _hit(middleware, button=bool(_ % 2)) == "ok"
     assert _hit(middleware) is None and _WARNINGS == [("message", texts.FLOOD_WAIT)]
     assert _hit(middleware, button=True) is None and _hit(middleware) is None
-    assert len(_WARNINGS) == 1  # просьба подождать — один раз за окно, а не на каждое лишнее обращение
+    assert len(_WARNINGS) == 1  # просьба подождать - один раз за окно, а не на каждое лишнее обращение
     assert _hit(middleware, user_id=6) == "ok"  # другого человека это не касается
 
     clock.now += 3.0  # часть окна прошла, но первые обращения ещё в нём
     assert _hit(middleware) is None
-    clock.now += 2.1  # с первого обращения прошло больше 5 секунд — место освободилось
+    clock.now += 2.1  # с первого обращения прошло больше 5 секунд - место освободилось
     assert _hit(middleware) == "ok"
 
     clock.now += 10.0  # человек успокоился и снова разогнался: предупреждение приходит заново, теперь на кнопку

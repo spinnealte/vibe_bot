@@ -17,7 +17,7 @@ APPLY_STATUSES = (SessionStatus.REGISTRATION_OPEN, SessionStatus.WAITLIST, Sessi
 @dataclass(frozen=True)
 class SessionCard:
     session: CourseSession
-    seats_left: int | None  # None — число мест не ограничено
+    seats_left: int | None  # None - число мест не ограничено
 
     @property
     def program(self) -> Program:
@@ -41,7 +41,7 @@ class SessionCard:
 
 @dataclass(frozen=True)
 class CourseSlide:
-    """Слайд карусели расписания — проведение: с датами или без дат («даты уточняются»)."""
+    """Слайд карусели расписания - проведение: с датами или без дат («даты уточняются»)."""
 
     program: Program
     card: SessionCard
@@ -54,12 +54,12 @@ class ScheduleService:
         self.catalog = CatalogRepository(session)
 
     async def carousel_ids(self, today: date) -> list[int]:
-        """Афиша по порядку: id проведений — с датами по дате начала, затем без дат. Их десятки — берём целиком."""
+        """Афиша по порядку: id проведений - с датами по дате начала, затем без дат. Их десятки - берём целиком."""
         return await self.catalog.upcoming_session_ids(today)
 
     async def slide(self, today: date, index: int) -> CourseSlide | None:
-        """Слайд номер index (с поправкой на границы — список мог измениться). None — афиша пуста."""
-        # Между запросом списка и карточки проведение могли убрать в архив — тогда список пересобирается, и на
+        """Слайд номер index (с поправкой на границы - список мог измениться). None - афиша пуста."""
+        # Между запросом списка и карточки проведение могли убрать в архив - тогда список пересобирается, и на
         # этом месте оказывается соседнее. Попыток несколько: вдруг убрали не одно.
         for _ in range(3):
             ids = await self.carousel_ids(today)
@@ -74,7 +74,7 @@ class ScheduleService:
         return None
 
     async def card(self, session_id: int, today: date) -> SessionCard | None:
-        """Карточка проведения из афиши. None — проведения нет, оно в архиве или уже прошло."""
+        """Карточка проведения из афиши. None - проведения нет, оно в архиве или уже прошло."""
         course_session = await self.catalog.public_session(session_id, today)
         if course_session is None:
             return None
@@ -87,5 +87,5 @@ class ScheduleService:
         return await self.catalog.published_program(program_id)
 
     async def venues(self) -> list[Venue]:
-        """Площадки центра для «О центре» — действующие."""
+        """Площадки центра для «О центре» - действующие."""
         return await self.catalog.active_venues()

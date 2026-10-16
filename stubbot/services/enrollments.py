@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 MAX_COMMENT_LENGTH = 1000
 MAX_SEATS = 10
-DEFAULT_MAX_SEATS = 5  # если тариф не ограничивает состав: «я + до 4 коллег», больше — через комментарий
-# Клиент может сам отменить только ещё не подтверждённую заявку; подтверждённую — через менеджера.
+DEFAULT_MAX_SEATS = 5  # если тариф не ограничивает состав: «я + до 4 коллег», больше - через комментарий
+# Клиент может сам отменить только ещё не подтверждённую заявку; подтверждённую - через менеджера.
 CLIENT_CANCELLABLE = (EnrollmentStatus.APPLICATION, EnrollmentStatus.WAITLIST)
 # Не показываем в «Моих заявках».
 HIDDEN_FROM_CLIENT = (EnrollmentStatus.CANCELLED_BY_CLIENT,)
@@ -79,7 +79,7 @@ class EnrollmentService:
         self.schedule = ScheduleService(session)
 
     async def availability(self, client: Client, session_id: int, today: date) -> tuple[SessionCard | None, Enrollment | None]:
-        """Карточка потока (None — подать нельзя) и уже существующая активная заявка клиента."""
+        """Карточка потока (None - подать нельзя) и уже существующая активная заявка клиента."""
         card = await self.schedule.card(session_id, today)
         if card is None or not card.accepts_applications or self._deadline_passed(card.session):
             return None, None
@@ -113,7 +113,7 @@ class EnrollmentService:
             client_comment=(comment or None) and comment[:MAX_COMMENT_LENGTH],
         )
         try:
-            # Savepoint: параллельная заявка (двойное нажатие) упрётся в частичный UNIQUE — не роняем транзакцию.
+            # Savepoint: параллельная заявка (двойное нажатие) упрётся в частичный UNIQUE - не роняем транзакцию.
             async with self.db.begin_nested():
                 self.enrollments.add(enrollment)
         except IntegrityError:
@@ -125,17 +125,17 @@ class EnrollmentService:
             ClientEventType.APPLICATION_CREATED,
             {"session_id": session_id, "status": enrollment.status.value, "seats": seats},
         )
-        logger.info("Клиент #%s: заявка #%s на поток #%s — %s, мест %s", client.id, enrollment.id, session_id,
+        logger.info("Клиент #%s: заявка #%s на поток #%s - %s, мест %s", client.id, enrollment.id, session_id,
                     enrollment.status.value, seats)
         return ApplyResult(ApplyOutcome.WAITLIST if waitlist else ApplyOutcome.CREATED, enrollment)
 
     async def my_applications(self, client_id: int) -> list[MyApplication]:
-        """Заявки для «Мои заявки». Отменённые самим клиентом не показываем — он их уже убрал."""
+        """Заявки для «Мои заявки». Отменённые самим клиентом не показываем - он их уже убрал."""
         rows = await self.enrollments.list_for_client(client_id, exclude_statuses=HIDDEN_FROM_CLIENT)
         return [MyApplication(*row) for row in rows]
 
     async def cancel(self, client_id: int, enrollment_id: int) -> Enrollment | None:
-        """None — не своя заявка или её уже нельзя отменить самому."""
+        """None - не своя заявка или её уже нельзя отменить самому."""
         enrollment = await self.enrollments.get_for_client(enrollment_id, client_id)
         if enrollment is None or enrollment.status not in CLIENT_CANCELLABLE:
             return None

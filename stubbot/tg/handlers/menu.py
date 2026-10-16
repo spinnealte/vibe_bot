@@ -38,7 +38,7 @@ async def open_about(message: Message, state: FSMContext, session: AsyncSession,
     venues = await ScheduleService(session).venues()
     manager_url = settings.manager_url
     text = render.about_text(venues, with_manager=manager_url is not None)
-    # Есть менеджер — под текстом его кнопка; иначе возвращаем клавиатуру меню (могли прийти из сценария).
+    # Есть менеджер - под текстом его кнопка; иначе возвращаем клавиатуру меню (могли прийти из сценария).
     markup = (keyboards.contact_manager(with_draft_text(manager_url, texts.MANAGER_DRAFT_ABOUT))
               if manager_url else keyboards.main_menu(message.chat.id))
     await message.answer(text, reply_markup=markup)
@@ -47,10 +47,10 @@ async def open_about(message: Message, state: FSMContext, session: AsyncSession,
 @router.message(F.text == texts.BTN_MANAGER)
 async def open_manager(message: Message, state: FSMContext, settings: Settings) -> None:
     """«💬 Менеджер» в главном меню. Кнопка нижнего меню не умеет открывать ссылки, поэтому отвечаем сообщением
-    с кнопкой-ссылкой: одно нажатие — и открыт чат с менеджером с готовым черновиком."""
+    с кнопкой-ссылкой: одно нажатие - и открыт чат с менеджером с готовым черновиком."""
     await state.clear()
     if not settings.manager_url:
-        # Ссылку убрали из настроек, а кнопка осталась на старой клавиатуре — заодно обновляем меню.
+        # Ссылку убрали из настроек, а кнопка осталась на старой клавиатуре - заодно обновляем меню.
         await message.answer(texts.MANAGER_UNAVAILABLE, reply_markup=keyboards.main_menu(message.chat.id))
         return
     url = with_draft_text(settings.manager_url, texts.MANAGER_DRAFT_ABOUT)

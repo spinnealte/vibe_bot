@@ -1,18 +1,18 @@
-"""Админка: вход кнопкой «⚙️ Админка» в главном меню (видна только owner и ADMIN_IDS), дальше — только inline-кнопки.
+"""Админка: вход кнопкой «⚙️ Админка» в главном меню (видна только owner и ADMIN_IDS), дальше - только inline-кнопки.
 
 Фильтр IsAdmin стоит на весь роутер (message и callback_query): чужие нажатия и текст уходят в fallback.
 Один общий редактор для курсов, проведений и справочников (services/admin_registry.py): список → карточка →
-правка поля / архив; «➕ Добавить» — мастер по полям с предпросмотром. Ответ сообщением — новым экраном, у вопроса
-убираем кнопки; ответ кнопкой — в том же сообщении. Курсы и проведения списком кнопок не показываются: карточки
-как в афише листаются стрелками ◀️ n/N ▶️ (курсы — все подряд, проведения — внутри выбранного месяца). Так же,
+правка поля / архив; «➕ Добавить» - мастер по полям с предпросмотром. Ответ сообщением - новым экраном, у вопроса
+убираем кнопки; ответ кнопкой - в том же сообщении. Курсы и проведения списком кнопок не показываются: карточки
+как в афише листаются стрелками ◀️ n/N ▶️ (курсы - все подряд, проведения - внутри выбранного месяца). Так же,
 карточками со стрелками, выбирают курс на первом шаге мастера «Новое проведение».
 
-Три раздела (решение 16): «Курсы» — библиотека, афишу не меняет; «Проведения» — это и есть афиша (с датами или
-без дат), убрать из неё — отправить в архив; «Архив» — убранные курсы и проведения и прошедшие мероприятия,
+Три раздела (решение 16): «Курсы» - библиотека, афишу не меняет; «Проведения» - это и есть афиша (с датами или
+без дат), убрать из неё - отправить в архив; «Архив» - убранные курсы и проведения и прошедшие мероприятия,
 только там есть «Удалить навсегда».
 
-Состояние мастера в FSM: kind, mode (add/edit), ask (какие поля спрашивать), step, values; при правке — item_id,
-field. Тарифы проведения — вложенный мини-мастер: категории кнопками → для каждой подпись → цена.
+Состояние мастера в FSM: kind, mode (add/edit), ask (какие поля спрашивать), step, values; при правке - item_id,
+field. Тарифы проведения - вложенный мини-мастер: категории кнопками → для каждой подпись → цена.
 """
 
 from datetime import UTC, datetime
@@ -76,22 +76,22 @@ _SAVE_ERRORS = {
 
 
 def _service(session: AsyncSession, kind: DictKind, client: Client) -> AdminEntityService:
-    # Telegram ID админа — для журнала действий (logs/admin.log).
+    # Telegram ID админа - для журнала действий (logs/admin.log).
     return admin_service(session, kind, client.telegram_id)
 
 
 def _courses(session: AsyncSession, client: Client) -> AdminCourseService:
-    """Сервис курсов — когда нужны его особые действия (предпросмотр, архив, удаление)."""
+    """Сервис курсов - когда нужны его особые действия (предпросмотр, архив, удаление)."""
     return AdminCourseService(session, client.telegram_id, local_today(get_settings().timezone))
 
 
 def _sessions(session: AsyncSession, client: Client) -> AdminSessionService:
-    """Сервис проведений — когда нужны его особые действия (статус, копия, предпросмотр, разделы)."""
+    """Сервис проведений - когда нужны его особые действия (статус, копия, предпросмотр, разделы)."""
     return AdminSessionService(session, client.telegram_id, local_today(get_settings().timezone))
 
 
 def _scope(value: str) -> SessionScope:
-    """Раздел из кнопки: афиша, архив или прошедшие. Непонятное значение (подделанная кнопка) — афиша."""
+    """Раздел из кнопки: афиша, архив или прошедшие. Непонятное значение (подделанная кнопка) - афиша."""
     try:
         return SessionScope(value)
     except ValueError:
@@ -138,7 +138,7 @@ async def on_counter(callback: CallbackQuery) -> None:
 
 @router.callback_query(AdminCb.filter(F.action == AdminAction.EXPORT))
 async def export_clients(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
-    """Все клиенты одним CSV-файлом. Файл остаётся в чате, меню присылаем заново под ним — оно снова внизу."""
+    """Все клиенты одним CSV-файлом. Файл остаётся в чате, меню присылаем заново под ним - оно снова внизу."""
     await callback.answer(texts.ADMIN_EXPORT_WAIT)
     await state.clear()
     tz = ZoneInfo(get_settings().timezone)
@@ -174,12 +174,12 @@ async def show_list(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
 @router.callback_query(DictCb.filter((F.action == DictAction.MONTH) & (F.kind == DictKind.SESSIONS)))
 async def show_month(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """Проведения месяца (page — ГГГГММ, 0 — без дат; value — раздел): открываем первое, дальше — стрелками."""
+    """Проведения месяца (page - ГГГГММ, 0 - без дат; value - раздел): открываем первое, дальше - стрелками."""
     await state.clear()
     scope = _scope(callback_data.value)
     items = await _sessions(session, client).month_items(callback_data.page, scope)
     if not items:
-        # Проведения месяца перенесли, убрали или кнопка подделана — показываем актуальные месяцы.
+        # Проведения месяца перенесли, убрали или кнопка подделана - показываем актуальные месяцы.
         await callback.answer(texts.ADMIN_MONTH_EMPTY)
         await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, scope=scope)
         return
@@ -202,7 +202,7 @@ async def show_item(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
 @router.callback_query(DictCb.filter(F.action.in_({DictAction.ARCHIVE, DictAction.RESTORE})))
 async def toggle_archive(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                          client: Client) -> None:
-    """«В архив» / «Вернуть из архива». Курс и проведение при этом переезжают в другой раздел — показываем
+    """«В архив» / «Вернуть из архива». Курс и проведение при этом переезжают в другой раздел - показываем
     соседнюю карточку прежнего; запись справочника остаётся на месте с пометкой."""
     await state.clear()
     active = callback_data.action is DictAction.RESTORE
@@ -223,7 +223,7 @@ async def toggle_archive(callback: CallbackQuery, callback_data: DictCb, state: 
 
 async def _move_course(callback: CallbackQuery, session: AsyncSession, client: Client, item_id: int,
                        active: bool) -> None:
-    """Курс в архив или обратно. В архив — только если у курса нет проведений в афише: из раздела «Курсы»
+    """Курс в архив или обратно. В архив - только если у курса нет проведений в афише: из раздела «Курсы»
     афиша не меняется, сначала в архив уходят сами проведения."""
     service = _courses(session, client)
     item = await service.item(item_id)
@@ -276,7 +276,7 @@ async def _move_session(callback: CallbackQuery, session: AsyncSession, client: 
                                      & F.kind.in_({DictKind.COURSES, DictKind.SESSIONS})))
 async def ask_delete(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """«🗑 Удалить навсегда» под карточкой в архиве: сначала вопрос. Если удалить нельзя — сразу говорим почему."""
+    """«🗑 Удалить навсегда» под карточкой в архиве: сначала вопрос. Если удалить нельзя - сразу говорим почему."""
     await state.clear()
     kind, item_id = callback_data.kind, callback_data.item_id
     if kind is DictKind.COURSES:
@@ -305,7 +305,7 @@ async def ask_delete(callback: CallbackQuery, callback_data: DictCb, state: FSMC
                                      & F.kind.in_({DictKind.COURSES, DictKind.SESSIONS})))
 async def purge(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                 client: Client) -> None:
-    """«Да, удалить навсегда»: курс (вместе с его проведениями) или проведение — только из архива."""
+    """«Да, удалить навсегда»: курс (вместе с его проведениями) или проведение - только из архива."""
     await state.clear()
     kind, item_id = callback_data.kind, callback_data.item_id
     service = _courses(session, client) if kind is DictKind.COURSES else _sessions(session, client)
@@ -324,7 +324,7 @@ async def purge(callback: CallbackQuery, callback_data: DictCb, state: FSMContex
 @router.callback_query(DictCb.filter((F.action == DictAction.STATUS) & (F.kind == DictKind.SESSIONS)))
 async def set_status(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
-    """Статус проведения в одно нажатие прямо в карточке. value — статус."""
+    """Статус проведения в одно нажатие прямо в карточке. value - статус."""
     await state.clear()
     if await _sessions(session, client).set_status(callback_data.item_id, callback_data.value) is None:
         await callback.answer(texts.UNKNOWN_CALLBACK)
@@ -361,7 +361,7 @@ async def start_add(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
 async def start_copy(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                      client: Client) -> None:
     """«📋 Скопировать»: всё из исходного проведения, спрашиваем только новые дни и время. Работает и из
-    архива, и из прошедших — так повторяют прошлое мероприятие; копия сразу встаёт в афишу."""
+    архива, и из прошедших - так повторяют прошлое мероприятие; копия сразу встаёт в афишу."""
     service = _sessions(session, client)
     item = await service.item(callback_data.item_id)
     if item is None:
@@ -393,7 +393,7 @@ async def start_edit(callback: CallbackQuery, callback_data: DictCb, state: FSMC
 
 
 def _editable(service: AdminEntityService, item: Any) -> bool:
-    """Курс в архиве и проведение из архива или прошедших не правятся: карточка там — «как было»."""
+    """Курс в архиве и проведение из архива или прошедших не правятся: карточка там - «как было»."""
     if isinstance(service, AdminSessionService):
         return service.scope(item) is SessionScope.ACTIVE
     if isinstance(service, AdminCourseService):
@@ -473,7 +473,7 @@ async def on_toggle(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
         await callback.answer(texts.UNKNOWN_CALLBACK)
         return
     if toggled not in allowed:
-        await callback.answer(texts.UNKNOWN_CALLBACK)  # не из списка вариантов — подделанная кнопка
+        await callback.answer(texts.UNKNOWN_CALLBACK)  # не из списка вариантов - подделанная кнопка
         return
     await callback.answer()
     selected = sorted(set(current) ^ {toggled}, key=str)
@@ -501,7 +501,7 @@ async def on_done(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
         await callback.answer(texts.ADMIN_MULTI_EMPTY, show_alert=True)
         return
     if field.kind is FieldKind.PRICES and selected:
-        # Категории выбраны — по каждой спросим подпись и цену (в каноническом порядке, как в афише).
+        # Категории выбраны - по каждой спросим подпись и цену (в каноническом порядке, как в афише).
         await callback.answer()
         kinds = [kind for kind in PRICE_KINDS if kind in selected]
         await state.update_data(price_kinds=kinds, price_i=0, price_stage="label", prices_acc=[])
@@ -514,7 +514,7 @@ async def on_done(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
 @router.callback_query(AdminDict.value, DictCb.filter(F.action.in_({DictAction.SKIP, DictAction.CLEAR})))
 async def on_skip_or_clear(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                            client: Client) -> None:
-    """«Пропустить» в мастере и «Очистить» при правке — пустое значение необязательного поля."""
+    """«Пропустить» в мастере и «Очистить» при правке - пустое значение необязательного поля."""
     data = await state.get_data()
     field = _matching_field(data, callback_data)
     expected_mode = "add" if callback_data.action is DictAction.SKIP else "edit"
@@ -544,7 +544,7 @@ async def on_save(callback: CallbackQuery, callback_data: DictCb, state: FSMCont
 @router.callback_query(DictCb.filter(F.action == DictAction.CANCEL))
 async def on_cancel(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                     client: Client) -> None:
-    """Отмена мастера — к списку, отмена правки — к карточке записи."""
+    """Отмена мастера - к списку, отмена правки - к карточке записи."""
     await callback.answer()
     await state.clear()
     if callback_data.item_id and await _show_card(callback.message, session, client, callback_data.kind,
@@ -567,7 +567,7 @@ async def on_text(message: Message, state: FSMContext, session: AsyncSession, cl
     if field.kind in BUTTON_KINDS or field.kind in (FieldKind.PHOTO, FieldKind.PRICES):
         await message.answer(texts.ADMIN_FIELD_ERRORS[field.kind.value])
         return
-    # Многострочные поля — с форматированием, которое админ сделал в Telegram (жирный, курсив, ссылки).
+    # Многострочные поля - с форматированием, которое админ сделал в Telegram (жирный, курсив, ссылки).
     rich = field.kind in (FieldKind.HTML, FieldKind.DOCUMENT)
     value = parse_field(field, message.html_text if rich else message.text, datetime.now(UTC),
                         ZoneInfo(get_settings().timezone))
@@ -742,7 +742,7 @@ async def _ask_field(message: Message, state: FSMContext, session: AsyncSession,
 async def _ask_course(message: Message, state: FSMContext, session: AsyncSession, client: Client, course_id: int,
                       in_place: bool) -> None:
     """Шаг «Курс» мастера проведения: карточка курса из библиотеки, как в разделе «Курсы», со стрелками
-    ◀️ n/N ▶️ и «✅ Выбрать этот курс». course_id — какой курс показать; 0 или курса уже нет в библиотеке — первый."""
+    ◀️ n/N ▶️ и «✅ Выбрать этот курс». course_id - какой курс показать; 0 или курса уже нет в библиотеке - первый."""
     data = await state.get_data()
     spec = ADMIN_SPECS[DictKind(data["kind"])]
     header = await _header(spec, data, session, client)
@@ -765,9 +765,9 @@ async def _ask_course(message: Message, state: FSMContext, session: AsyncSession
 
 async def _accept(message: Message, state: FSMContext, session: AsyncSession, client: Client, value: Any,
                   in_place: bool) -> SaveResult:
-    """Значение текущего поля принято. Мастер — следующий шаг или предпросмотр; правка — сохранить и карточку.
+    """Значение текущего поля принято. Мастер - следующий шаг или предпросмотр; правка - сохранить и карточку.
 
-    in_place=False — ответ пришёл сообщением: у вопроса убираем кнопки, следующий экран — новым сообщением.
+    in_place=False - ответ пришёл сообщением: у вопроса убираем кнопки, следующий экран - новым сообщением.
     """
     data = await state.get_data()
     spec = ADMIN_SPECS[DictKind(data["kind"])]
@@ -839,8 +839,8 @@ async def _show_archive(message: Message, session: AsyncSession, client: Client,
 async def _show_list(message: Message, session: AsyncSession, client: Client, kind: DictKind, page: int,
                      notice: str | None = None, in_place: bool = True,
                      scope: SessionScope = SessionScope.ACTIVE) -> None:
-    """Список записей. Проведения — не списком, а по месяцам своего раздела (scope: афиша, архив, прошедшие).
-    Курсы — тоже не списком: сразу карточка первого курса с листанием (scope не «афиша» — курсы из архива)."""
+    """Список записей. Проведения - не списком, а по месяцам своего раздела (scope: афиша, архив, прошедшие).
+    Курсы - тоже не списком: сразу карточка первого курса с листанием (scope не «афиша» - курсы из архива)."""
     if kind is DictKind.SESSIONS:
         text, markup = admin_views.session_months(await _sessions(session, client).months(scope), scope, page)
         # После мастера или карточки с фото этот текстовый экран заменит фото: screen.py удалит и пришлёт заново.
@@ -866,7 +866,7 @@ async def _show_list(message: Message, session: AsyncSession, client: Client, ki
 async def _show_neighbour(message: Message, session: AsyncSession, client: Client, kind: DictKind,
                           siblings: list[int], gone_id: int, notice: str, scope: SessionScope) -> None:
     """Запись ушла из раздела (в архив, из архива, удалена): показываем соседнюю карточку того же раздела,
-    а если карточек там не осталось — экран раздела. siblings — карточки, среди которых она листалась."""
+    а если карточек там не осталось - экран раздела. siblings - карточки, среди которых она листалась."""
     place = siblings.index(gone_id) if gone_id in siblings else 0
     rest = [item_id for item_id in siblings if item_id != gone_id]
     if rest and await _show_card(message, session, client, kind, rest[min(place, len(rest) - 1)], 0, notice=notice):
@@ -881,7 +881,7 @@ async def _show_neighbour(message: Message, session: AsyncSession, client: Clien
 
 async def _show_card(message: Message, session: AsyncSession, client: Client, kind: DictKind, item_id: int, page: int,
                      notice: str | None = None, in_place: bool = True) -> bool:
-    """Карточка записи; курс и проведение — фото с подписью, как в афише. False — записи нет."""
+    """Карточка записи; курс и проведение - фото с подписью, как в афише. False - записи нет."""
     if kind is DictKind.SESSIONS:
         return await _show_session_card(message, session, client, item_id, notice, in_place)
     if kind is DictKind.COURSES:
@@ -899,7 +899,7 @@ async def _show_card(message: Message, session: AsyncSession, client: Client, ki
 async def _show_course_card(message: Message, session: AsyncSession, client: Client, item_id: int,
                             notice: str | None, in_place: bool) -> bool:
     """Карточка курса со стрелками ◀️ n/N ▶️ по курсам своего раздела: «Курсы» (с правкой) или архив
-    («как было»: вернуть или удалить). False — курса нет."""
+    («как было»: вернуть или удалить). False - курса нет."""
     service = _courses(session, client)
     item = await service.item(item_id)
     if item is None:
@@ -923,7 +923,7 @@ async def _show_course_card(message: Message, session: AsyncSession, client: Cli
 async def _show_session_card(message: Message, session: AsyncSession, client: Client, item_id: int,
                              notice: str | None, in_place: bool) -> bool:
     """Карточка проведения как в афише, со стрелками ◀️ n/N ▶️ по проведениям того же раздела и месяца
-    (или по всем проведениям без дат). False — проведения нет."""
+    (или по всем проведениям без дат). False - проведения нет."""
     service = _sessions(session, client)
     item = await service.item(item_id)
     if item is None:
@@ -939,7 +939,7 @@ async def _show_session_card(message: Message, session: AsyncSession, client: Cl
     )
     card = SessionCard(session=item, seats_left=None)
     caption = _session_caption(card)
-    # Пометки над подписью — то, чего по самой карточке не видно.
+    # Пометки над подписью - то, чего по самой карточке не видно.
     hints = []
     if scope is SessionScope.ACTIVE and item.program.archived_at is not None:
         hints.append(texts.ADMIN_COURSE_ARCHIVED_HINT)
@@ -964,7 +964,7 @@ def _session_photo(card: SessionCard) -> Photo:
 
 
 def _fit_notice(notice: str | None, caption: str) -> str:
-    """Отметка («✅ Сохранено.») над подписью к фото — только если подпись не вылезет за лимит Telegram."""
+    """Отметка («✅ Сохранено.») над подписью к фото - только если подпись не вылезет за лимит Telegram."""
     if notice and render.visible_length(with_notice(notice, caption)) <= render.CAPTION_LIMIT:
         return with_notice(notice, caption)
     return caption

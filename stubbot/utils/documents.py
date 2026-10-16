@@ -14,14 +14,14 @@ _BLANK_LINES = re.compile(r"\n{3,}")
 
 
 def file_to_html(filename: str, content: bytes) -> str | None:
-    """None — формат не поддерживается или файл не читается."""
+    """None - формат не поддерживается или файл не читается."""
     name = filename.lower()
     try:
         if name.endswith(".docx"):
             return _docx_to_html(content)
         if name.endswith(".txt"):
             return _txt_to_html(content)
-    except Exception:  # битый файл — сообщим админу, не роняя апдейт
+    except Exception:  # битый файл - сообщим админу, не роняя апдейт
         return None
     return None
 

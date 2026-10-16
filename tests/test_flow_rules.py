@@ -21,7 +21,7 @@ TODAY = date(2026, 10, 1)
         (Registration.specialties.state, SelectGroup.SPECIALTIES, True),
         (Registration.positions.state, SelectGroup.POSITIONS, True),
         (EditProfile.specialties.state, SelectGroup.SPECIALTIES, True),
-        # Старая клавиатура специальностей, а человек уже выбирает должности — кнопка неактуальна.
+        # Старая клавиатура специальностей, а человек уже выбирает должности - кнопка неактуальна.
         (Registration.positions.state, SelectGroup.SPECIALTIES, False),
         (EditProfile.positions.state, SelectGroup.SPECIALTIES, False),
         (Registration.full_name.state, SelectGroup.SPECIALTIES, False),
@@ -71,7 +71,7 @@ class _FakeClients:
 
 
 def test_selection_saves_only_active_items() -> None:
-    """У клиента осталась специальность из архива (#7) — она не мешает сохранить выбор, а сама не сохраняется."""
+    """У клиента осталась специальность из архива (#7) - она не мешает сохранить выбор, а сама не сохраняется."""
     service = RegistrationService(None)
     service.dictionaries, service.clients = _FakeDictionaries(), _FakeClients()
     client = SimpleNamespace(id=1)
@@ -87,13 +87,13 @@ def test_carousel_shows_neighbour_when_session_archived_meanwhile() -> None:
     service = ScheduleService(None)
     service.catalog = _FakeCatalog()
     slide = asyncio.run(service.slide(TODAY, 0))
-    assert slide is not None, "вместо «курсы скоро появятся» — соседнее проведение"
+    assert slide is not None, "вместо «курсы скоро появятся» - соседнее проведение"
     assert slide.card.session.id == 2
     assert (slide.index, slide.total) == (0, 1)
 
 
 def test_carousel_is_empty_without_sessions() -> None:
-    """Афиша — только проведения: курс без проведения в неё сам не попадает (решение 16)."""
+    """Афиша - только проведения: курс без проведения в неё сам не попадает (решение 16)."""
     service = ScheduleService(None)
     service.catalog = _FakeCatalog()
     service.catalog.visible = []

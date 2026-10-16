@@ -25,7 +25,7 @@ class ClientRepository:
         return await self.session.scalar(select(Client).where(Client.phone == phone, Client.deleted_at.is_(None)))
 
     async def insert_if_absent(self, values: dict[str, Any]) -> Client | None:
-        """INSERT … ON CONFLICT DO NOTHING RETURNING. None — строка не вставлена (гонка двух /start или коллизия кода)."""
+        """INSERT … ON CONFLICT DO NOTHING RETURNING. None - строка не вставлена (гонка двух /start или коллизия кода)."""
         stmt = pg_insert(Client).values(**values).on_conflict_do_nothing().returning(Client)
         return await self.session.scalar(stmt)
 
@@ -39,7 +39,7 @@ class ClientRepository:
         return (await self.session.scalars(stmt)).one()
 
     async def all_for_export(self) -> list[Client]:
-        """Все клиенты (кроме удалённых) со специальностями и должностями — для выгрузки, в порядке прихода."""
+        """Все клиенты (кроме удалённых) со специальностями и должностями - для выгрузки, в порядке прихода."""
         stmt = (
             select(Client)
             .where(Client.deleted_at.is_(None))
@@ -84,7 +84,7 @@ class ClientRepository:
             )
 
     async def mark_bot_blocked(self, telegram_id: int, at: datetime) -> int | None:
-        """Отметить, что клиент заблокировал бота. Возвращает id клиента; None — не найден или уже отмечен."""
+        """Отметить, что клиент заблокировал бота. Возвращает id клиента; None - не найден или уже отмечен."""
         return await self.session.scalar(
             update(Client)
             .where(Client.telegram_id == telegram_id, Client.is_bot_blocked.is_(False))

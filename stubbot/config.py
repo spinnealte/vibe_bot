@@ -12,7 +12,7 @@ class Settings(BaseSettings):
 
     # Telegram. Токен не обязателен для alembic и скриптов, проверяется при старте бота.
     bot_token: SecretStr | None = None
-    # Пусто — напрямую (локальная разработка). На сервере: socks5://127.0.0.1:1080 (sing-box).
+    # Пусто - напрямую (локальная разработка). На сервере: socks5://127.0.0.1:1080 (sing-box).
     # SecretStr: URL прокси может содержать логин/пароль, в логи не попадает.
     telegram_proxy_url: SecretStr | None = None
     telegram_timeout: float = 30.0
@@ -34,15 +34,15 @@ class Settings(BaseSettings):
     log_dir: Path = Path("logs")
     timezone: str = "Europe/Moscow"
 
-    # Защита от флуда: не больше flood_limit обращений от одного человека за flood_window секунд. 0 — выключить.
+    # Защита от флуда: не больше flood_limit обращений от одного человека за flood_window секунд. 0 - выключить.
     flood_limit: int = 20
     flood_window: float = 5.0
 
-    # MVP — афиша: заявки, «Мои заявки» и «Сообщить о наборе» выключены (код в tg/handlers/application.py).
+    # MVP - афиша: заявки, «Мои заявки» и «Сообщить о наборе» выключены (код в tg/handlers/application.py).
     applications_enabled: bool = False
 
-    # Чат менеджера для записи: https://t.me/<username>. Пусто — кнопки «Менеджер» нет.
-    # Короткие записи «t.me/<username>» и «@<username>» тоже принимаются — приводятся к полной ссылке.
+    # Чат менеджера для записи: https://t.me/<username>. Пусто - кнопки «Менеджер» нет.
+    # Короткие записи «t.me/<username>» и «@<username>» тоже принимаются - приводятся к полной ссылке.
     manager_url: str | None = None
 
     @field_validator("admin_ids", mode="before")
@@ -61,7 +61,7 @@ class Settings(BaseSettings):
         if isinstance(value, str):
             value = value.strip() or None
         if isinstance(value, str):
-            # Ссылку вписывают руками, и чаще всего — так, как её видят в Telegram: «t.me/name» или «@name».
+            # Ссылку вписывают руками, и чаще всего - так, как её видят в Telegram: «t.me/name» или «@name».
             if value.startswith("@"):
                 value = f"https://t.me/{value[1:]}"
             elif value.startswith(("t.me/", "telegram.me/")):
@@ -69,7 +69,7 @@ class Settings(BaseSettings):
             elif value.startswith(("http://t.me/", "http://telegram.me/")):
                 value = "https://" + value.removeprefix("http://")
         if value is not None and not str(value).startswith(("https://", "tg://")):
-            raise ValueError("MANAGER_URL — ссылка вида https://t.me/<username>")
+            raise ValueError("MANAGER_URL - ссылка вида https://t.me/<username>")
         return value
 
     @property

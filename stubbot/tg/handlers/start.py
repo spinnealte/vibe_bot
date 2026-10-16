@@ -12,7 +12,7 @@ from stubbot.tg import keyboards, texts
 router = Router(name="start")
 
 
-# Без StateFilter — срабатывает в любом состоянии: /start всегда выводит из незаконченного сценария.
+# Без StateFilter - срабатывает в любом состоянии: /start всегда выводит из незаконченного сценария.
 @router.message(CommandStart())
 async def cmd_start(message: Message, command: CommandObject, state: FSMContext, session: AsyncSession,
                     client: Client, client_created: bool) -> None:

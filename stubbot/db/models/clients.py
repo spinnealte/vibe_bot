@@ -61,14 +61,14 @@ class Position(TimestampMixin, Base):
 class Client(TimestampMixin, Base):
     __tablename__ = "clients"
     __table_args__ = (
-        # Один телефон — один живой клиент; после удаления/анонимизации номер освобождается.
+        # Один телефон - один живой клиент; после удаления/анонимизации номер освобождается.
         Index("uq_clients_phone_active", "phone", unique=True, postgresql_where=text("deleted_at IS NULL")),
         CheckConstraint("referred_by_client_id <> id", name="not_self_referred"),
         CheckConstraint("practice_since_year BETWEEN 1950 AND 2100", name="practice_since_year_range"),
     )
 
     id: Mapped[IntPK]
-    # NULL — клиент заведён админом/клиникой и ещё не заходил в бот.
+    # NULL - клиент заведён админом/клиникой и ещё не заходил в бот.
     telegram_id: Mapped[int | None] = mapped_column(unique=True)
 
     # Снимок профиля Telegram, обновляется при визитах.
@@ -77,7 +77,7 @@ class Client(TimestampMixin, Base):
     tg_last_name: Mapped[str | None] = mapped_column(String(64))
     tg_language_code: Mapped[str | None] = mapped_column(String(16))
 
-    # ФИО одной строкой, как написал клиент (регистр не меняем) — так же пойдёт в сертификат.
+    # ФИО одной строкой, как написал клиент (регистр не меняем) - так же пойдёт в сертификат.
     full_name: Mapped[str | None] = mapped_column(String(300))
     name_confirmed_at: Mapped[datetime | None]
     birth_date: Mapped[date | None]
@@ -100,7 +100,7 @@ class Client(TimestampMixin, Base):
     first_source_id: Mapped[int | None] = mapped_column(
         ForeignKey("acquisition_sources.id", ondelete="RESTRICT"), index=True
     )
-    # Хвост ссылки t.me/<bot>?start=<хвост>, с которым клиент пришёл в первый раз, как есть. NULL — пришёл без ссылки.
+    # Хвост ссылки t.me/<bot>?start=<хвост>, с которым клиент пришёл в первый раз, как есть. NULL - пришёл без ссылки.
     start_param: Mapped[str | None] = mapped_column(String(64))
 
     is_bot_blocked: Mapped[bool] = mapped_column(Boolean, server_default=text("false"))

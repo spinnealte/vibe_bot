@@ -34,7 +34,7 @@ def create_dispatcher(
 ) -> Dispatcher:
     # Обращения одного человека обрабатываются строго по очереди (events_isolation): иначе два быстрых нажатия
     # «Сохранить» идут одновременно, оба видят один и тот же шаг и создают две одинаковые записи.
-    # Замки в памяти процесса — бот работает одним процессом. Разные люди друг друга не ждут.
+    # Замки в памяти процесса - бот работает одним процессом. Разные люди друг друга не ждут.
     dp = Dispatcher(storage=storage or create_storage(settings.redis_url), events_isolation=SimpleEventIsolation())
     dp["settings"] = settings  # доступно в хендлерах аргументом `settings`
     dp["session_factory"] = session_factory  # для работы с БД вне транзакции апдейта (обработчик ошибок)
@@ -42,7 +42,7 @@ def create_dispatcher(
 
     dp.update.outer_middleware(DbSessionMiddleware(session_factory))
     dp.update.outer_middleware(UnhandledLogMiddleware())
-    # Защита от флуда — раньше всего остального: лишние обращения не доходят до БД.
+    # Защита от флуда - раньше всего остального: лишние обращения не доходят до БД.
     if settings.flood_limit > 0:
         throttle = ThrottlingMiddleware(settings.flood_limit, settings.flood_window)
         dp.message.outer_middleware(throttle)

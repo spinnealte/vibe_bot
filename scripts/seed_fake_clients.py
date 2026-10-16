@@ -1,8 +1,8 @@
 """Выдуманные клиенты для ручной проверки админки и выгрузки. Только для разработки!
 
 Запуск из корня stubBot:
-    python -m scripts.seed_fake_clients            — создать 40 клиентов (повторный запуск пересоздаёт тех же)
-    python -m scripts.seed_fake_clients --remove   — удалить их
+    python -m scripts.seed_fake_clients            - создать 40 клиентов (повторный запуск пересоздаёт тех же)
+    python -m scripts.seed_fake_clients --remove   - удалить их
 
 Все данные вымышлены: telegram_id из диапазона 910000001…, телефоны +7 999 555-…, почта @example.com.
 Настоящих людей за ними нет, написать им бот не может. В выгрузке их видно по заметке «тестовая запись».
@@ -66,12 +66,12 @@ async def remove(session) -> int:
                           .values(referred_by_client_id=None))
     for model in (ClientEvent, ClientSourceTouch, ClientConsent):
         await session.execute(delete(model).where(model.client_id.in_(ids)))
-    await session.execute(delete(Client).where(Client.id.in_(ids)))  # специальности и должности — CASCADE
+    await session.execute(delete(Client).where(Client.id.in_(ids)))  # специальности и должности - CASCADE
     return len(ids)
 
 
 def _person(rng: random.Random) -> tuple[str, str, str]:
-    """Фамилия, имя, отчество — согласованные по роду."""
+    """Фамилия, имя, отчество - согласованные по роду."""
     if rng.random() < 0.6:
         return rng.choice(SURNAMES) + "а", rng.choice(FEMALE_NAMES), rng.choice(FEMALE_PATRONYMICS)
     return rng.choice(SURNAMES), rng.choice(MALE_NAMES), rng.choice(MALE_PATRONYMICS)
@@ -88,7 +88,7 @@ async def create(session, now: datetime) -> None:
 
     removed = await remove(session)
     rng = random.Random(SEED)
-    # Сначала — когда кто пришёл: клиенты добавляются в порядке прихода, как настоящие.
+    # Сначала - когда кто пришёл: клиенты добавляются в порядке прихода, как настоящие.
     arrivals = sorted(now - timedelta(days=rng.randint(0, 45), hours=rng.randint(0, 23), minutes=rng.randint(0, 59))
                       for _ in range(COUNT))
     clients: list[Client] = []
@@ -131,10 +131,10 @@ async def create(session, now: datetime) -> None:
             wants_referrer.append(client)
         clients.append(client)
 
-    # Особые случаи — на них видно, как бот и выгрузка справляются с неудобными данными.
+    # Особые случаи - на них видно, как бот и выгрузка справляются с неудобными данными.
     completed = [c for c in clients if c.profile_status is ProfileStatus.COMPLETED]
     completed[0].full_name = "Константинопольский-Задунайский Александр-Мария Вениаминович"  # очень длинное ФИО
-    completed[1].workplace_raw = "=СУММ(A1:A9)"  # похоже на формулу Excel — в выгрузке должно остаться текстом
+    completed[1].workplace_raw = "=СУММ(A1:A9)"  # похоже на формулу Excel - в выгрузке должно остаться текстом
     completed[2].workplace_raw = "ООО «Зуб <32>» & партнёры"  # знаки, которые нельзя вставлять в HTML как есть
     completed[3].tg_first_name = "Аня 🦷✨"  # эмодзи в имени Telegram
     for client in rng.sample(clients, 3):
@@ -144,7 +144,7 @@ async def create(session, now: datetime) -> None:
     session.add_all(clients)
     await session.flush()  # нужны id: для приглашений, согласий и журналов
 
-    for client in wants_referrer:  # пришёл по ссылке друга — того, кто зарегистрировался раньше
+    for client in wants_referrer:  # пришёл по ссылке друга - того, кто зарегистрировался раньше
         earlier = [c for c in completed if c.created_at < client.created_at]
         if earlier:
             referrer = rng.choice(earlier)

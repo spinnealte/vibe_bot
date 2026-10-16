@@ -23,7 +23,7 @@ SWEEP_INTERVAL = 60.0  # как часто выбрасывать из памя�
 
 
 class ThrottlingMiddleware(BaseMiddleware):
-    """Outer-middleware на message и callback_query (один объект на оба — счёт общий). Ставится раньше остальных."""
+    """Outer-middleware на message и callback_query (один объект на оба - счёт общий). Ставится раньше остальных."""
 
     def __init__(self, limit: int, window: float, clock: Callable[[], float] = time.monotonic) -> None:
         self.limit = limit
@@ -42,7 +42,7 @@ class ThrottlingMiddleware(BaseMiddleware):
         user = data.get("event_from_user")
         chat = data.get("event_chat")
         if user is None or chat is None or chat.type != ChatType.PRIVATE:
-            return await handler(event, data)  # не личный чат — бот там всё равно не отвечает
+            return await handler(event, data)  # не личный чат - бот там всё равно не отвечает
         now = self._clock()
         self._sweep(now)
         hits = self._hits.setdefault(user.id, deque())
@@ -59,7 +59,7 @@ class ThrottlingMiddleware(BaseMiddleware):
         if now - self._warned.get(user_id, float("-inf")) < self.window:
             return
         self._warned[user_id] = now
-        logger.warning("Флуд: пользователь Telegram %s — больше %s обращений за %g с, лишние пропускаются",
+        logger.warning("Флуд: пользователь Telegram %s - больше %s обращений за %g с, лишние пропускаются",
                        user_id, self.limit, self.window)
         try:
             if isinstance(event, CallbackQuery):
@@ -67,7 +67,7 @@ class ThrottlingMiddleware(BaseMiddleware):
             elif isinstance(event, Message):
                 await event.answer(texts.FLOOD_WAIT)
         except TelegramAPIError:
-            pass  # не смогли предупредить (бот заблокирован, сеть) — обращение всё равно пропущено
+            pass  # не смогли предупредить (бот заблокирован, сеть) - обращение всё равно пропущено
 
     def _sweep(self, now: float) -> None:
         if now - self._swept_at < SWEEP_INTERVAL:

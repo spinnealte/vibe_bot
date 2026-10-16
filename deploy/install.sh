@@ -4,7 +4,7 @@
 # Обычно этот скрипт запускает deploy.cmd с компьютера разработчика:   deploy\deploy.cmd root@IP
 # Вручную на сервере:   bash install.sh /каталог/с/распакованным/кодом
 #
-# Первый запуск ставит всё с нуля. Повторный — обновляет код, зависимости и схему базы и перезапускает бота.
+# Первый запуск ставит всё с нуля. Повторный - обновляет код, зависимости и схему базы и перезапускает бота.
 # Данные при обновлении не трогаются: .env, база, legal/, logs/, backups/.
 
 set -euo pipefail
@@ -46,13 +46,13 @@ fi
 python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 12) else 1)' \
     || fail "нужен Python 3.12 или новее (он есть в Ubuntu 24.04), а здесь $(python3 -V 2>&1)"
 systemctl enable --now postgresql redis-server >/dev/null 2>&1
-timedatectl set-timezone Europe/Moscow 2>/dev/null || true  # время в логах и резервные копии — по Москве
+timedatectl set-timezone Europe/Moscow 2>/dev/null || true  # время в логах и резервные копии - по Москве
 
 # ---------------------------------------------------------------------------------------------------------------
 step "2/9 Пользователь и каталоги"
 if ! id -u "$APP_USER" >/dev/null 2>&1; then
     useradd --system --user-group --home-dir "$APP_DIR" --no-create-home --shell /usr/sbin/nologin "$APP_USER"
-    info "создан пользователь $APP_USER (без входа в систему) — бот работает от него, не от root"
+    info "создан пользователь $APP_USER (без входа в систему) - бот работает от него, не от root"
 fi
 mkdir -p "$APP_DIR"/{logs,legal,backups}
 
@@ -102,17 +102,17 @@ if [ ! -f "$ENV_FILE" ]; then
     echo
     read -r -p "   Telegram ID владельца бота (число): " OWNER_INPUT || true
     if [ -n "$BOT_TOKEN_INPUT" ] && ! [[ "$BOT_TOKEN_INPUT" =~ ^[0-9]{6,12}:[A-Za-z0-9_-]{30,}$ ]]; then
-        info "это не похоже на токен бота — оставляю пустым, впишите его позже"
+        info "это не похоже на токен бота - оставляю пустым, впишите его позже"
         BOT_TOKEN_INPUT=""
     fi
     if ! [[ "$OWNER_INPUT" =~ ^[0-9]{5,15}$ ]]; then
-        info "Telegram ID не задан — без него в боте не будет кнопки «Админка»; впишите OWNER_TELEGRAM_ID позже"
+        info "Telegram ID не задан - без него в боте не будет кнопки «Админка»; впишите OWNER_TELEGRAM_ID позже"
         OWNER_INPUT=0
     fi
 
     umask 077
     cat > "$ENV_FILE" <<EOF
-# Настройки бота на сервере. Создано установщиком $(date '+%d.%m.%Y %H:%M'). Здесь секреты — никому не показывать.
+# Настройки бота на сервере. Создано установщиком $(date '+%d.%m.%Y %H:%M'). Здесь секреты - никому не показывать.
 BOT_TOKEN=$BOT_TOKEN_INPUT
 # Туннель до Telegram, если с сервера он недоступен: socks5://127.0.0.1:1080 (см. deploy/tunnel/README.md)
 TELEGRAM_PROXY_URL=
@@ -137,15 +137,15 @@ FLOOD_LIMIT=20
 FLOOD_WINDOW=5
 
 APPLICATIONS_ENABLED=false
-# Чат менеджера: https://t.me/<username>. Пусто — кнопки «Менеджер» нет.
+# Чат менеджера: https://t.me/<username>. Пусто - кнопки «Менеджер» нет.
 MANAGER_URL=
 EOF
     umask 022
     unset BOT_TOKEN_INPUT DB_PASSWORD
 else
-    info "настройки уже есть ($ENV_FILE) — не меняю"
+    info "настройки уже есть ($ENV_FILE) - не меняю"
 fi
-# Читать настройки может только бот, менять — только root.
+# Читать настройки может только бот, менять - только root.
 chown root:"$APP_USER" "$ENV_FILE"
 chmod 640 "$ENV_FILE"
 
@@ -173,22 +173,22 @@ ufw allow 22/tcp >/dev/null
 ufw --force enable >/dev/null
 info "файрвол включён: снаружи открыт только SSH (боту входящие порты не нужны)"
 if ss -ltnH | awk '{print $4}' | grep -E ':(5432|6379)$' | grep -vqE '^(127\.0\.0\.1|\[::1\]):'; then
-    info "ВНИМАНИЕ: PostgreSQL или Redis слушают не только localhost — файрвол их закрывает, но настройку стоит поправить"
+    info "ВНИМАНИЕ: PostgreSQL или Redis слушают не только localhost - файрвол их закрывает, но настройку стоит поправить"
 fi
 install -m 755 "$APP_DIR/deploy/backup.sh" /usr/local/bin/stubbot-backup
 cat > /etc/cron.d/stubbot-backup <<'EOF'
 # Ежедневная резервная копия базы stubBot в 03:30 по Москве (хранятся 14 дней в /opt/stubbot/backups)
 30 3 * * * root /usr/local/bin/stubbot-backup >/dev/null 2>&1
 EOF
-info "резервная копия базы — каждый день в 03:30, вручную: stubbot-backup"
+info "резервная копия базы - каждый день в 03:30, вручную: stubbot-backup"
 
 # ---------------------------------------------------------------------------------------------------------------
 step "9/9 Запуск"
 TELEGRAM_CODE="$(curl -sS -m 10 -o /dev/null -w '%{http_code}' https://api.telegram.org 2>/dev/null || true)"
 if [ -z "$TELEGRAM_CODE" ] || [ "$TELEGRAM_CODE" = "000" ]; then
-    info "ВНИМАНИЕ: Telegram с этого сервера напрямую недоступен — нужен туннель (deploy/tunnel/README.md)"
+    info "ВНИМАНИЕ: Telegram с этого сервера напрямую недоступен - нужен туннель (deploy/tunnel/README.md)"
 else
-    info "Telegram с сервера доступен напрямую — туннель не нужен"
+    info "Telegram с сервера доступен напрямую - туннель не нужен"
 fi
 
 if grep -qE '^BOT_TOKEN=.+' "$ENV_FILE"; then
@@ -203,7 +203,7 @@ if grep -qE '^BOT_TOKEN=.+' "$ENV_FILE"; then
         exit 1
     fi
 else
-    info "токен бота не задан — бот пока не запущен."
+    info "токен бота не задан - бот пока не запущен."
     info "впишите BOT_TOKEN:   nano $ENV_FILE"
     info "и запустите:         systemctl start $SERVICE"
 fi

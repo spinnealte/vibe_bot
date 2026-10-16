@@ -6,11 +6,11 @@ _TRANSLIT = {
     "х": "h", "ц": "ts", "ч": "ch", "ш": "sh", "щ": "sch", "ъ": "", "ы": "y", "ь": "", "э": "e", "ю": "yu", "я": "ya",
 }
 _NOT_SLUG = re.compile(r"[^a-z0-9]+")
-MAX_SLUG_LENGTH = 50  # колонка programs.slug — 64, запас под суффикс «-2»
+MAX_SLUG_LENGTH = 50  # колонка programs.slug - 64, запас под суффикс «-2»
 
 
 def slugify(title: str) -> str:
-    """«Имплантация: от А до Я» → «implantatsiya-ot-a-do-ya». Пусто (одни символы) — «course»."""
+    """«Имплантация: от А до Я» → «implantatsiya-ot-a-do-ya». Пусто (одни символы) - «course»."""
     latin = "".join(_TRANSLIT.get(char, char) for char in title.lower())
     slug = _NOT_SLUG.sub("-", latin).strip("-")[:MAX_SLUG_LENGTH].rstrip("-")
     return slug or "course"

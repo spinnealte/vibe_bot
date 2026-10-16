@@ -23,7 +23,7 @@ class RegistrationStep(StrEnum):
 
 
 class OptionalField(StrEnum):
-    """Необязательные поля профиля в порядке вопросов после регистрации. Значение — колонка в clients."""
+    """Необязательные поля профиля в порядке вопросов после регистрации. Значение - колонка в clients."""
 
     CITY = "city"
     WORKPLACE = "workplace_raw"
@@ -82,7 +82,7 @@ class RegistrationService:
 
     @staticmethod
     def parse_optional(field: OptionalField, raw: str, today: date) -> str | int | date | None:
-        """Разбор ввода пользователя для необязательного поля. None — ввод не подходит."""
+        """Разбор ввода пользователя для необязательного поля. None - ввод не подходит."""
         match field:
             case OptionalField.CITY:
                 return profile_fields.parse_city(raw)
@@ -97,9 +97,9 @@ class RegistrationService:
 
     @staticmethod
     def save_optional(client: Client, field: OptionalField, value: str | int | date | None) -> None:
-        """value — результат parse_optional; None очищает поле."""
+        """value - результат parse_optional; None очищает поле."""
         setattr(client, field.value, value)
-        # Само значение не пишем — это ПД (в старом боте было «на 'asd'»).
+        # Само значение не пишем - это ПД (в старом боте было «на 'asd'»).
         logger.info("Клиент #%s: %s поле '%s'", client.id, "очищено" if value is None else "обновлено", field.value)
 
     async def specialties(self) -> list[Specialty]:
@@ -116,7 +116,7 @@ class RegistrationService:
 
     async def save_specialties(self, client: Client, specialty_ids: list[int]) -> bool:
         """Сохраняется то, что отмечено на экране: id не из действующего справочника отбрасываются (запись ушла
-        в архив, пока клиент выбирал, или была у него раньше; подделанная кнопка). False — не осталось ни одной."""
+        в архив, пока клиент выбирал, или была у него раньше; подделанная кнопка). False - не осталось ни одной."""
         chosen = set(specialty_ids) & {s.id for s in await self.dictionaries.active_specialties()}
         if not chosen:
             return False
@@ -125,7 +125,7 @@ class RegistrationService:
         return True
 
     async def save_positions(self, client: Client, position_ids: list[int]) -> bool:
-        """Как save_specialties: архивные и подделанные id отбрасываются. False — не осталось ни одной."""
+        """Как save_specialties: архивные и подделанные id отбрасываются. False - не осталось ни одной."""
         chosen = set(position_ids) & {p.id for p in await self.dictionaries.active_positions()}
         if not chosen:
             return False
@@ -134,8 +134,8 @@ class RegistrationService:
         return True
 
     async def complete(self, client: Client) -> bool:
-        """Отмечает профиль заполненным, если пройдены обязательные шаги. True — регистрация завершена именно сейчас
-        (тогда предлагаем необязательные поля); False — уже была завершена раньше."""
+        """Отмечает профиль заполненным, если пройдены обязательные шаги. True - регистрация завершена именно сейчас
+        (тогда предлагаем необязательные поля); False - уже была завершена раньше."""
         if await self.next_step(client) is not RegistrationStep.DONE:
             return False
         if client.profile_status is ProfileStatus.COMPLETED:

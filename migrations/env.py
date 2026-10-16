@@ -21,14 +21,14 @@ target_metadata = Base.metadata
 
 
 def render_item(type_: str, obj: object, autogen_context: object) -> str | bool:
-    """Enum(native_enum=False) в миграции — обычный VARCHAR; CHECK рендерится отдельно по naming convention."""
+    """Enum(native_enum=False) в миграции - обычный VARCHAR; CHECK рендерится отдельно по naming convention."""
     if type_ == "type" and isinstance(obj, Enum) and not obj.native_enum:
         return f"sa.String(length={obj.length})"
     return False
 
 
 # Alembic рендерит CHECK от Enum дважды: по конвенции (name=op.f('ck_...')) и под голым именем enum
-# (name='admin_role'). Второй — дубль, при upgrade дал бы лишнее ограничение. Хук вычищает его из файла миграции.
+# (name='admin_role'). Второй - дубль, при upgrade дал бы лишнее ограничение. Хук вычищает его из файла миграции.
 _ENUM_CHECK_DUPLICATE = re.compile(r"^[ \t]*sa\.CheckConstraint\(.*, name='[^']*'\),?[ \t]*\r?\n", re.MULTILINE)
 
 

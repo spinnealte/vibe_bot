@@ -8,8 +8,8 @@ from stubbot.db.enums import ConsentSource, ConsentType, LegalDocumentType
 
 
 class LegalDocument(TimestampMixin, Base):
-    """Версия юридического документа. Текст, который показывает бот, — в коде (services/legal.py),
-    полный документ — по url на сайте учебного центра."""
+    """Версия юридического документа. Текст, который показывает бот, - в коде (services/legal.py),
+    полный документ - по url на сайте учебного центра."""
 
     __tablename__ = "legal_documents"
     __table_args__ = (
@@ -31,7 +31,7 @@ class ClientConsent(TimestampMixin, Base):
     __tablename__ = "client_consents"
     __table_args__ = (
         Index("ix_client_consents_client_id_type", "client_id", "type"),
-        # Не больше одного действующего согласия каждого типа; отзыв — через revoked_at, новое согласие — новая строка.
+        # Не больше одного действующего согласия каждого типа; отзыв - через revoked_at, новое согласие - новая строка.
         Index(
             "uq_client_consents_active",
             "client_id",

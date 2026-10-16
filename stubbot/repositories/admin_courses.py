@@ -6,7 +6,7 @@ from stubbot.db.models import Lecturer, Program, ProgramInterest, Specialty
 
 
 class AdminCourseRepository:
-    """Курсы (programs) для админки: действующие и архив; связи — направления и лекторы."""
+    """Курсы (programs) для админки: действующие и архив; связи - направления и лекторы."""
 
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
@@ -17,7 +17,7 @@ class AdminCourseRepository:
         return list(await self.session.scalars(stmt))
 
     async def list_archived(self) -> list[Program]:
-        """«Архив → Курсы»: недавно убранные — первыми."""
+        """«Архив → Курсы»: недавно убранные - первыми."""
         stmt = select(Program).where(Program.archived_at.is_not(None)).order_by(Program.archived_at.desc(), Program.id)
         return list(await self.session.scalars(stmt))
 
@@ -58,7 +58,7 @@ class AdminCourseRepository:
         return program
 
     async def has_interests(self, program_id: int) -> bool:
-        """Есть ли подписки «Сообщить о наборе» на курс — это данные клиентов, такой курс не удаляем."""
+        """Есть ли подписки «Сообщить о наборе» на курс - это данные клиентов, такой курс не удаляем."""
         stmt = select(ProgramInterest.id).where(ProgramInterest.program_id == program_id).limit(1)
         return await self.session.scalar(stmt) is not None
 

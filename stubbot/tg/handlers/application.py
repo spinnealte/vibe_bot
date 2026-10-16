@@ -1,5 +1,5 @@
 """Заявки: «Оставить заявку» и «Сообщить о наборе» под карточкой расписания, шаги заявки
-(тариф → число мест → комментарий → подтверждение), «Мои заявки» в кабинете. Все проверки — в EnrollmentService.
+(тариф → число мест → комментарий → подтверждение), «Мои заявки» в кабинете. Все проверки - в EnrollmentService.
 
 В MVP-афише выключено (APPLICATIONS_ENABLED=false): роутер не подключается, кнопки не показываются.
 Шаги по кнопкам меняют одно и то же сообщение; после комментария текстом подтверждение приходит новым сообщением.
@@ -140,7 +140,7 @@ async def on_notify(callback: CallbackQuery, callback_data: ScheduleCb, session:
         await callback.answer(texts.UNKNOWN_CALLBACK)
         return
     created = await EnrollmentService(session).subscribe_interest(client.id, callback_data.item_id)
-    # Карусель остаётся на месте — ответ всплывающим окном.
+    # Карусель остаётся на месте - ответ всплывающим окном.
     await callback.answer(texts.INTEREST_CREATED if created else texts.INTEREST_EXISTS, show_alert=True)
 
 
@@ -158,7 +158,7 @@ async def on_apply(callback: CallbackQuery, callback_data: ScheduleCb, state: FS
                                              callback_data.item_id, callback_data.index)
         return
 
-    # Сначала профиль (там reply-клавиатуры и ввод текста — новыми сообщениями), поток запоминаем:
+    # Сначала профиль (там reply-клавиатуры и ввод текста - новыми сообщениями), поток запоминаем:
     # после регистрации flows вернёт к заявке.
     await delete_quietly(message)
     await state.update_data({PENDING_APPLY_KEY: callback_data.item_id, catalog_flow.CAROUSEL_INDEX_KEY: callback_data.index})
@@ -180,7 +180,7 @@ async def open_applications(callback: CallbackQuery, session: AsyncSession, clie
 @router.callback_query(MyApplicationCb.filter(F.action.in_({MyApplicationAction.VIEW, MyApplicationAction.KEEP})))
 async def view_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
                            client: Client) -> None:
-    """Стрелки ◀️ ▶️ и «Нет, оставить» — показать карточку заявки номер index."""
+    """Стрелки ◀️ ▶️ и «Нет, оставить» - показать карточку заявки номер index."""
     await callback.answer()
     await _show_application(callback.message, session, client, callback_data.index)
 
@@ -201,12 +201,12 @@ async def ask_cancel_application(callback: CallbackQuery, callback_data: MyAppli
 @router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.CANCEL))
 async def cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
                              client: Client) -> None:
-    # Своя ли заявка и можно ли её отменить — проверяет сервис (enrollment_id из кнопки может быть подделан).
+    # Своя ли заявка и можно ли её отменить - проверяет сервис (enrollment_id из кнопки может быть подделан).
     if await EnrollmentService(session).cancel(client.id, callback_data.enrollment_id) is None:
         await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
         return
     await callback.answer()
-    # Отменённая пропадает из списка — на её месте окажется следующая (или предыдущая, если была последней).
+    # Отменённая пропадает из списка - на её месте окажется следующая (или предыдущая, если была последней).
     await _show_application(callback.message, session, client, callback_data.index,
                             notice=texts.APPLICATION_CANCELLED)
 

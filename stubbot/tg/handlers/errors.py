@@ -14,13 +14,13 @@ USER_ERROR_TEXT = "Что-то пошло не так. Попробуйте ещ
 # Регистрируется на Dispatcher (dp.errors), а не на дочернем роутере: ошибки дочерних роутеров
 # всплывают только к родителям, соседний роутер их не видит.
 async def on_error(event: ErrorEvent, session_factory: async_sessionmaker[AsyncSession]) -> bool:
-    """Единая точка для необработанных исключений. В лог — тип апдейта и update_id, без содержимого (там ПД)."""
+    """Единая точка для необработанных исключений. В лог - тип апдейта и update_id, без содержимого (там ПД)."""
     exc = event.exception
     update = event.update
     update_type = update.event_type
 
     if isinstance(exc, (TelegramNetworkError, TelegramRetryAfter)):
-        # Ретраи уже исчерпаны в RetryRequestMiddleware — вероятно, лежит туннель.
+        # Ретраи уже исчерпаны в RetryRequestMiddleware - вероятно, лежит туннель.
         logger.warning("Сеть: %s при обработке %s #%s", type(exc).__name__, update_type, update.update_id)
         return True
     if isinstance(exc, TelegramForbiddenError):
@@ -34,7 +34,7 @@ async def on_error(event: ErrorEvent, session_factory: async_sessionmaker[AsyncS
 
 
 async def _mark_bot_blocked(event: ErrorEvent, session_factory: async_sessionmaker[AsyncSession]) -> None:
-    """Транзакция апдейта к этому моменту откачена — отметку пишем в своей, короткой."""
+    """Транзакция апдейта к этому моменту откачена - отметку пишем в своей, короткой."""
     user = getattr(event.update.event, "from_user", None)
     if user is None:
         return
@@ -53,5 +53,5 @@ async def _notify_user(event: ErrorEvent) -> None:
         elif update.message is not None:
             await update.message.answer(USER_ERROR_TEXT)
     except Exception:
-        # Сообщить пользователю не удалось — исходная ошибка уже в логе, вторую не раскручиваем.
+        # Сообщить пользователю не удалось - исходная ошибка уже в логе, вторую не раскручиваем.
         logger.warning("Не удалось отправить сообщение об ошибке (#%s)", update.update_id)

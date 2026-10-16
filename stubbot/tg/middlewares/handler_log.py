@@ -3,7 +3,7 @@
 Пример:
     2026-09-29 12:00:01,512 | INFO | stubbot.handlers | message /start → start.cmd_start: OK, 12 мс
     2026-09-29 12:00:05,030 | INFO | stubbot.handlers | callback sch:s:0:1:0 → schedule.on_slide: OK, 40 мс
-    2026-09-29 12:00:09,774 | INFO | stubbot.handlers | message text → —: не обработано
+    2026-09-29 12:00:09,774 | INFO | stubbot.handlers | message text → -: не обработано
 
 Рядом aiogram пишет свою строку: «Update id=… is handled. Duration … ms by bot id=…».
 Текст сообщений пользователя не логируется (там ПД): только команда или тип содержимого.
@@ -30,7 +30,7 @@ def describe_event(event: TelegramObject, raw_state: str | None = None) -> str:
         event = event.event
     if isinstance(event, Message):
         if event.text and event.text.startswith("/"):
-            # Только сама команда: аргументы /start — диплинк, но в общем случае после команды может быть что угодно.
+            # Только сама команда: аргументы /start - диплинк, но в общем случае после команды может быть что угодно.
             process = f"message {event.text.split(maxsplit=1)[0]}"
         else:
             process = f"message {getattr(event.content_type, 'value', event.content_type)}"
@@ -45,7 +45,7 @@ def describe_event(event: TelegramObject, raw_state: str | None = None) -> str:
 
 def describe_handler(handler: HandlerObject | None) -> str:
     if handler is None:
-        return "—"
+        return "-"
     callback = handler.callback
     module = getattr(callback, "__module__", "").rsplit(".", 1)[-1]
     name = getattr(callback, "__qualname__", repr(callback))
@@ -71,7 +71,7 @@ class HandlerLogMiddleware(BaseMiddleware):
         try:
             result = await handler(event, data)
         except TelegramForbiddenError:
-            # Пользователь заблокировал бота — штатная ситуация (её обрабатывает handlers/errors.py), не ошибка.
+            # Пользователь заблокировал бота - штатная ситуация (её обрабатывает handlers/errors.py), не ошибка.
             _log(logging.INFO, process, handler_name, f"бот заблокирован пользователем, {_elapsed_ms(started)} мс")
             raise
         except Exception as exc:
@@ -93,7 +93,7 @@ class UnhandledLogMiddleware(BaseMiddleware):
     ) -> Any:
         result = await handler(event, data)
         if result is UNHANDLED:
-            _log(logging.INFO, describe_event(event, data.get("raw_state")), "—", "не обработано")
+            _log(logging.INFO, describe_event(event, data.get("raw_state")), "-", "не обработано")
         return result
 
 

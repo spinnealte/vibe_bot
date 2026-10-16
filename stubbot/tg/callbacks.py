@@ -13,7 +13,7 @@ class ConsentKind(StrEnum):
 
 
 class ConsentCb(CallbackData, prefix="consent"):
-    """«Да / Нет» на включение рекламных рассылок из кабинета (kind — MARKETING). При регистрации согласия
+    """«Да / Нет» на включение рекламных рассылок из кабинета (kind - MARKETING). При регистрации согласия
     даются галочками (ConsentFormCb)."""
 
     kind: ConsentKind
@@ -21,9 +21,9 @@ class ConsentCb(CallbackData, prefix="consent"):
 
 
 class ConsentFormAction(StrEnum):
-    PD = "pd"  # галочка 1 — политика и обработка ПД (обязательна)
-    ADS = "ads"  # галочка 2 — рекламные рассылки (по желанию)
-    CONTINUE = "go"  # «Продолжить» — пускает дальше только с первой галочкой
+    PD = "pd"  # галочка 1 - политика и обработка ПД (обязательна)
+    ADS = "ads"  # галочка 2 - рекламные рассылки (по желанию)
+    CONTINUE = "go"  # «Продолжить» - пускает дальше только с первой галочкой
 
 
 class ConsentFormCb(CallbackData, prefix="cform"):
@@ -40,7 +40,7 @@ class NameCb(CallbackData, prefix="name"):
 
 
 class SkipOptionalCb(CallbackData, prefix="skip"):
-    """«Пропустить» у необязательного поля; field — значение OptionalField."""
+    """«Пропустить» у необязательного поля; field - значение OptionalField."""
 
     field: str
 
@@ -89,13 +89,13 @@ class EditFieldCb(CallbackData, prefix="edit"):
 
 
 class ScheduleAction(StrEnum):
-    """index — позиция курса в карусели (чтобы «Назад» вернул туда же)."""
+    """index - позиция курса в карусели (чтобы «Назад» вернул туда же)."""
 
     SLIDE = "s"  # слайд карусели расписания
-    CLOSE = "close"  # «⬅️ Назад» — закрыть карусель, вернуться в главное меню
-    PROGRAM = "prog"  # программа курса постранично, item_id — курс, page — страница
-    APPLY = "apply"  # заявка, item_id — поток
-    NOTIFY = "notify"  # «Сообщить о наборе», item_id — курс
+    CLOSE = "close"  # «⬅️ Назад» - закрыть карусель, вернуться в главное меню
+    PROGRAM = "prog"  # программа курса постранично, item_id - курс, page - страница
+    APPLY = "apply"  # заявка, item_id - поток
+    NOTIFY = "notify"  # «Сообщить о наборе», item_id - курс
     NOOP = "noop"  # счётчик «2/5» между стрелками
 
 
@@ -128,7 +128,7 @@ class MyApplicationAction(StrEnum):
     VIEW = "view"  # карточка заявки номер index
     ASK_CANCEL = "ask"
     CANCEL = "yes"
-    KEEP = "no"  # «Нет, оставить» — назад к той же карточке
+    KEEP = "no"  # «Нет, оставить» - назад к той же карточке
 
 
 class MyApplicationCb(CallbackData, prefix="myapp"):
@@ -161,10 +161,10 @@ class AdminCb(CallbackData, prefix="adm"):
 
 
 class DictAction(StrEnum):
-    # Список, page — страница. У проведений — месяцы раздела: value — SessionScope («» афиша, «a» архив,
-    # «p» прошедшие). У курсов value «a» — курсы из архива.
+    # Список, page - страница. У проведений - месяцы раздела: value - SessionScope («» афиша, «a» архив,
+    # «p» прошедшие). У курсов value «a» - курсы из архива.
     LIST = "ls"
-    MONTH = "mon"  # проведения месяца: page — месяц ГГГГММ (0 — без дат), value — раздел; дальше листание
+    MONTH = "mon"  # проведения месяца: page - месяц ГГГГММ (0 - без дат), value - раздел; дальше листание
     VIEW = "v"  # карточка записи; курс и проведение сами знают, в каком они разделе
     ADD = "add"  # мастер новой записи
     EDIT = "ed"  # изменить поле field
@@ -179,9 +179,9 @@ class DictAction(StrEnum):
     ARCHIVE = "arc"  # в архив; у проведения это и есть «убрать из афиши»
     RESTORE = "res"
     DELETE = "del"  # «🗑 Удалить навсегда» из архива: сначала вопрос «точно?»
-    PURGE = "purge"  # «Да, удалить» — удаление курса или проведения из архива
-    PROGRAM = "prog"  # программа курса постранично, page — страница
-    STATUS = "st"  # статус проведения в одно нажатие, value — статус
+    PURGE = "purge"  # «Да, удалить» - удаление курса или проведения из архива
+    PROGRAM = "prog"  # программа курса постранично, page - страница
+    STATUS = "st"  # статус проведения в одно нажатие, value - статус
     COPY = "copy"  # «📋 Скопировать» проведение: мастер спросит только новые даты
 
 

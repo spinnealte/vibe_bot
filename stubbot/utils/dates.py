@@ -18,7 +18,7 @@ def month_key(day: date) -> int:
 
 
 def month_bounds(key: int) -> tuple[date, date] | None:
-    """Первый день месяца ГГГГММ и первый день следующего. None — число не похоже на месяц (подделанная кнопка)."""
+    """Первый день месяца ГГГГММ и первый день следующего. None - число не похоже на месяц (подделанная кнопка)."""
     year, month = divmod(key, 100)
     if not (2000 <= year <= 2100 and 1 <= month <= 12):
         return None

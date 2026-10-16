@@ -1,4 +1,4 @@
-"""Тексты карточек расписания и заявок из моделей. Пользовательские и админские строки — через safe()."""
+"""Тексты карточек расписания и заявок из моделей. Пользовательские и админские строки - через safe()."""
 
 import re
 from html import escape, unescape
@@ -15,8 +15,8 @@ from stubbot.utils.names import short_name
 
 MAX_BUTTON_TITLE = 40
 CAPTION_LIMIT = 1024  # лимит подписи к фото в Telegram (считается видимый текст, без HTML-тегов)
-MIN_DESCRIPTION = 80  # если под описание остаётся меньше — не показываем обрывок
-EXCERPT_LIMIT = 400  # сколько программы/описания показывать в карточке; полная программа — по кнопке
+MIN_DESCRIPTION = 80  # если под описание остаётся меньше - не показываем обрывок
+EXCERPT_LIMIT = 400  # сколько программы/описания показывать в карточке; полная программа - по кнопке
 PROGRAM_PAGE_LIMIT = 900  # страница полной программы ≈ один экран телефона
 MAX_QUESTION_DRAFT = 200  # текст едет в ссылке кнопки: кириллица там в шесть раз длиннее, а ссылка не резиновая
 _TAG = re.compile(r"<[^>]+>")
@@ -38,7 +38,7 @@ def visible_length(html_text: str) -> int:
 def plain_excerpt(html_text: str, limit: int) -> str:
     """Начало текста без разметки, по границе слова, с сохранением строк (пунктов программы).
 
-    Разметку снимаем: обрезать HTML посередине тега нельзя — так ломалась подпись в старом боте.
+    Разметку снимаем: обрезать HTML посередине тега нельзя - так ломалась подпись в старом боте.
     """
     lines = (" ".join(line.split()) for line in unescape(_TAG.sub("", html_text)).splitlines())
     plain = "\n".join(line for line in lines if line)
@@ -52,8 +52,8 @@ def plain_excerpt(html_text: str, limit: int) -> str:
 
 
 def _with_excerpt(lines: list[str], program: Program) -> str:
-    """В конец подписи — начало программы курса (или описания, если программы нет), до EXCERPT_LIMIT символов
-    и в пределах лимита подписи. Полная программа — по кнопке «📖 Программа» с листанием."""
+    """В конец подписи - начало программы курса (или описания, если программы нет), до EXCERPT_LIMIT символов
+    и в пределах лимита подписи. Полная программа - по кнопке «📖 Программа» с листанием."""
     caption = "\n".join(lines)
     source, header = (
         (program.program_html, texts.CAPTION_PROGRAM) if program.program_html
@@ -68,12 +68,12 @@ def _with_excerpt(lines: list[str], program: Program) -> str:
         return caption
     excerpt = plain_excerpt(source, budget)
     if not excerpt.endswith("…"):
-        more = ""  # программа короткая и показана целиком — подсказка про кнопку не нужна
+        more = ""  # программа короткая и показана целиком - подсказка про кнопку не нужна
     return caption + header + excerpt + more
 
 
 def _lecturers_line(program: Program) -> list[str]:
-    """Лекторы курса «Иванов С. П., Смирнова А. О.» — у курса, общие для всех его потоков."""
+    """Лекторы курса «Иванов С. П., Смирнова А. О.» - у курса, общие для всех его потоков."""
     if not program.lecturers:
         return []
     return [texts.CAPTION_LECTURERS.format(value=safe(", ".join(short_name(lec.full_name) for lec in program.lecturers)))]
@@ -93,8 +93,8 @@ def _meta_lines(program: Program, format_value: str) -> list[str]:
 
 
 def _dates_text(course_session: CourseSession) -> str:
-    """13–14 октября 2026, 10:00–18:00 — время добавляем, если во все дни одинаковое.
-    У проведения без дат — «даты уточняются»."""
+    """13–14 октября 2026, 10:00–18:00 - время добавляем, если во все дни одинаковое.
+    У проведения без дат - «даты уточняются»."""
     if course_session.start_date is None:
         return texts.DATES_TBD
     text = format_range_with_year(course_session.start_date, course_session.end_date)
@@ -105,9 +105,9 @@ def _dates_text(course_session: CourseSession) -> str:
 
 
 def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bool = True) -> str:
-    """Подпись под фото потока в карусели: всё главное сразу, полная программа — по кнопке «Программа».
+    """Подпись под фото потока в карусели: всё главное сразу, полная программа - по кнопке «Программа».
 
-    show_seats=False — режим афиши (заявки выключены): мест никто не занимает, счётчик всегда равен вместимости.
+    show_seats=False - режим афиши (заявки выключены): мест никто не занимает, счётчик всегда равен вместимости.
     """
     s, program = card.session, card.program
     lines = [texts.CAPTION_TITLE.format(title=safe(session_title(s)))]
@@ -138,10 +138,10 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
 
 
 def program_caption(program: Program, intro: str | None = None) -> str:
-    """Подпись под фото курса в админке (раздел «Курсы» и архив курсов). Курс — запись библиотеки: дат,
-    площадки, цен и статуса у него нет — они у проведения, а в афише стоят только проведения.
+    """Подпись под фото курса в админке (раздел «Курсы» и архив курсов). Курс - запись библиотеки: дат,
+    площадки, цен и статуса у него нет - они у проведения, а в афише стоят только проведения.
 
-    intro — строки над карточкой (вопрос мастера «Какой курс проводим?»): место под них отнимается у
+    intro - строки над карточкой (вопрос мастера «Какой курс проводим?»): место под них отнимается у
     отрывка программы, поэтому они не пропадут и подпись не вылезет за лимит.
     """
     lines = [intro, ""] if intro else []
@@ -155,7 +155,7 @@ def program_caption(program: Program, intro: str | None = None) -> str:
 def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
     """Программа курса страницами «на один экран телефона» для листания в одном сообщении."""
     title = f"📖 <b>{safe(short(program.title, 200))}</b>"
-    # Заголовок стоит на первой странице — оставляем под него место, чтобы и она влезала в экран.
+    # Заголовок стоит на первой странице - оставляем под него место, чтобы и она влезала в экран.
     pages = split_html(program.program_html or "", limit=limit - visible_length(title) - 2) or [texts.PROGRAM_TEXT_EMPTY]
     pages[0] = f"{title}\n\n{pages[0]}"
     if len(pages) > 1:
@@ -165,7 +165,7 @@ def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str
 
 def manager_draft(card: SessionCard) -> str:
     """Черновик сообщения менеджеру по проведению на слайде (простой текст, без HTML).
-    У проведения без дат — вопрос «когда ближайший поток»."""
+    У проведения без дат - вопрос «когда ближайший поток»."""
     s = card.session
     if s.start_date is None:
         return texts.MANAGER_DRAFT_PROGRAM.format(title=session_title(s))
@@ -174,8 +174,8 @@ def manager_draft(card: SessionCard) -> str:
 
 
 def question_draft(text: str) -> str:
-    """Черновик менеджеру из того, что человек написал боту: короткий текст подставляем как есть — не придётся
-    набирать вопрос заново. Длинный не поместится в ссылку кнопки — тогда общий черновик."""
+    """Черновик менеджеру из того, что человек написал боту: короткий текст подставляем как есть - не придётся
+    набирать вопрос заново. Длинный не поместится в ссылку кнопки - тогда общий черновик."""
     question = " ".join(text.split())
     return question if 0 < len(question) <= MAX_QUESTION_DRAFT else texts.MANAGER_DRAFT_ABOUT
 
@@ -184,7 +184,7 @@ def about_text(venues: list[Venue], with_manager: bool) -> str:
     """«О центре»: текст о центре, площадки из БД (с картой, если есть ссылка), подсказка про кнопку «Менеджер»."""
     parts = [texts.ABOUT]
     if not texts.ABOUT_VENUE:
-        # Шаблон строки площадки пуст (texts.ABOUT_VENUE) — адреса пока не показываем: остаётся один заголовок
+        # Шаблон строки площадки пуст (texts.ABOUT_VENUE) - адреса пока не показываем: остаётся один заголовок
         # с пометкой «Уточняется». Чтобы вернуть список площадок, достаточно вернуть шаблон.
         parts.append(texts.ABOUT_VENUES_TITLE)
     elif venues:
@@ -201,7 +201,7 @@ def about_text(venues: list[Venue], with_manager: bool) -> str:
 
 
 def price_label(price: PriceOption) -> str:
-    return f"{price.label} — {format_rub(price.amount)}{texts.PRICE_UNIT_SUFFIX[price.unit.value]}"
+    return f"{price.label} - {format_rub(price.amount)}{texts.PRICE_UNIT_SUFFIX[price.unit.value]}"
 
 
 def my_application_card(app: MyApplication) -> str:
@@ -227,8 +227,8 @@ def cancel_application_question(app: MyApplication) -> str:
 
 
 def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
-    """Длинный текст на страницы по `limit` видимых символов: сначала по абзацам, слишком длинный абзац — по строкам,
-    слишком длинная строка — по словам. Разметка внутри строки не разрывается, пока строка не длиннее страницы."""
+    """Длинный текст на страницы по `limit` видимых символов: сначала по абзацам, слишком длинный абзац - по строкам,
+    слишком длинная строка - по словам. Разметка внутри строки не разрывается, пока строка не длиннее страницы."""
     pages: list[str] = []
     current = ""
 

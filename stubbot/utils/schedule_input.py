@@ -1,6 +1,6 @@
 """Ввод расписания админом текстом: дни со временем, «запись до», цена.
 
-Значения возвращаются в виде, пригодном для FSM (JSON): даты и время — строками ISO.
+Значения возвращаются в виде, пригодном для FSM (JSON): даты и время - строками ISO.
 """
 
 import re
@@ -12,12 +12,12 @@ MAX_PRICE_RUB = 10_000_000
 
 _DATE = r"(\d{1,2})[./](\d{1,2})(?:[./](\d{2}|\d{4}))?"
 _TIME = r"(\d{1,2})[:.](\d{2})"
-_DAY_LINE = re.compile(rf"^{_DATE}(?:\s+{_TIME}\s*[-–—]\s*{_TIME})?$")
+_DAY_LINE = re.compile(rf"^{_DATE}(?:\s+{_TIME}\s*[-–-]\s*{_TIME})?$")
 _DEADLINE = re.compile(rf"^{_DATE}(?:\s+{_TIME})?$")
 
 
 def _date(day: str, month: str, year: str | None, today: date) -> date | None:
-    """Без года — ближайшая такая дата не раньше сегодняшней. Прошедшая или несуществующая — None."""
+    """Без года - ближайшая такая дата не раньше сегодняшней. Прошедшая или несуществующая - None."""
     try:
         if year:
             parsed = date(int(year) + (2000 if len(year) == 2 else 0), int(month), int(day))
@@ -38,7 +38,7 @@ def _time(hours: str, minutes: str) -> time | None:
 
 
 def parse_days(raw: str, today: date) -> list[dict[str, str | None]] | None:
-    """«13.10 10:00-18:00» — день на строку, время необязательно. None — строка не разобрана, дата прошла,
+    """«13.10 10:00-18:00» - день на строку, время необязательно. None - строка не разобрана, дата прошла,
     начало не раньше конца или дней больше MAX_DAYS. Дни сортируются по дате и времени."""
     days = []
     for line in filter(None, (line.strip() for line in raw.splitlines())):
@@ -63,7 +63,7 @@ def parse_days(raw: str, today: date) -> list[dict[str, str | None]] | None:
 
 
 def format_days(days: list[dict[str, str | None]]) -> str:
-    """Обратно в текст — как админ их вводит (для «Сейчас: …» при правке)."""
+    """Обратно в текст - как админ их вводит (для «Сейчас: …» при правке)."""
     lines = []
     for day in days:
         line = date.fromisoformat(day["date"]).strftime("%d.%m.%Y")
@@ -74,9 +74,9 @@ def format_days(days: list[dict[str, str | None]]) -> str:
 
 
 def parse_deadline(raw: str, now: datetime, tz: ZoneInfo) -> str | None:
-    """«11.10 18:00» (время необязательно, без него — 23:59) в часовом поясе центра → ISO с поясом.
+    """«11.10 18:00» (время необязательно, без него - 23:59) в часовом поясе центра → ISO с поясом.
 
-    None — не разобрано или уже прошло.
+    None - не разобрано или уже прошло.
     """
     match _DEADLINE.match(raw.strip()):
         case None:
@@ -97,7 +97,7 @@ def format_deadline(value: str, tz: ZoneInfo) -> str:
 
 
 def parse_rubles(raw: str) -> int | None:
-    """«45 000», «45000 ₽», «45000 руб» → сумма в копейках. None — не число или вне разумных пределов."""
+    """«45 000», «45000 ₽», «45000 руб» → сумма в копейках. None - не число или вне разумных пределов."""
     digits = re.sub(r"(\s|₽|руб\.?|р\.?)", "", raw.strip().lower())
     if not digits.isdigit():
         return None

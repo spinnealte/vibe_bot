@@ -3,7 +3,7 @@
 Обязательно: телефон → ФИО одним сообщением → подтверждение ФИО → специальности → должности.
 Необязательно (после регистрации, каждое можно пропустить): город → место работы → опыт → email → дата рождения.
 
-Порядок хендлеров важен: сначала «Назад»/«Отмена», затем ожидаемые ответы, в конце — подсказки на
+Порядок хендлеров важен: сначала «Назад»/«Отмена», затем ожидаемые ответы, в конце - подсказки на
 неподходящий ввод (фото, стикеры, голос, текст вместо кнопки).
 """
 
@@ -56,7 +56,7 @@ async def step_back(message: Message, state: FSMContext, session: AsyncSession, 
     if current in FIELD_BY_STATE:
         index = OPTIONAL_FIELDS_ORDER.index(FIELD_BY_STATE[current])
         if index == 0:
-            # Обязательная часть уже сохранена; назад из первого необязательного — к должностям.
+            # Обязательная часть уже сохранена; назад из первого необязательного - к должностям.
             await flows.show_registration_step(message, state, session, client, RegistrationStep.POSITIONS)
         else:
             await flows.ask_optional(message, state, OPTIONAL_FIELDS_ORDER[index - 1])
@@ -111,7 +111,7 @@ async def on_full_name(message: Message, state: FSMContext) -> None:
 @router.callback_query(Registration.confirm_name, NameCb.filter(F.action == NameAction.FIX))
 async def on_fix_name(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
-    # Вопрос про ФИО — с reply-клавиатурой «Назад/Отмена», поэтому новым сообщением, а подтверждение убираем.
+    # Вопрос про ФИО - с reply-клавиатурой «Назад/Отмена», поэтому новым сообщением, а подтверждение убираем.
     await delete_quietly(callback.message)
     await flows.ask_full_name(callback.message, state)
 
@@ -121,7 +121,7 @@ async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: A
     await callback.answer()
     data = await state.get_data()
     if not data.get(FULL_NAME_KEY):
-        # Данные шага потерялись (например, перезапуск Redis) — просим ФИО заново.
+        # Данные шага потерялись (например, перезапуск Redis) - просим ФИО заново.
         await delete_quietly(callback.message)
         await flows.ask_full_name(callback.message, state)
         return
@@ -132,7 +132,7 @@ async def on_confirm_name(callback: CallbackQuery, state: FSMContext, session: A
 
 # --- Специальности и должности (общий мультивыбор) -------------------------------------------------------------
 
-# Переключение галочек — общий хендлер в handlers/selection.py.
+# Переключение галочек - общий хендлер в handlers/selection.py.
 @router.callback_query(StateFilter(Registration.specialties, Registration.positions), SelectDoneCb.filter(),
                        group_matches_state)
 async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, state: FSMContext,
@@ -152,7 +152,7 @@ async def on_select_done(callback: CallbackQuery, callback_data: SelectDoneCb, s
 
 async def _next_step_in_place(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                               step: RegistrationStep) -> None:
-    """Следующий шаг с inline-кнопками — в том же сообщении; финал регистрации — новыми (там reply-клавиатуры)."""
+    """Следующий шаг с inline-кнопками - в том же сообщении; финал регистрации - новыми (там reply-клавиатуры)."""
     if step in (RegistrationStep.SPECIALTIES, RegistrationStep.POSITIONS):
         await flows.show_registration_step(message, state, session, client, step, in_place=True)
         return
@@ -179,7 +179,7 @@ async def on_skip_optional(callback: CallbackQuery, callback_data: SkipOptionalC
     await callback.answer()
     current = FIELD_BY_STATE[await state.get_state()]
     if callback_data.field != current.value:
-        # Кнопка «Пропустить» от предыдущего вопроса — не сдвигаемся дважды.
+        # Кнопка «Пропустить» от предыдущего вопроса - не сдвигаемся дважды.
         return
     await flows.ask_next_optional(callback.message, state, current, in_place=True)
 
@@ -188,7 +188,7 @@ async def on_skip_optional(callback: CallbackQuery, callback_data: SkipOptionalC
 
 @router.message(StateFilter(*REGISTRATION_TEXT_STATES))
 async def text_step_expects_text(message: Message) -> None:
-    # Сюда попадают фото, стикеры, голосовые — всё, что не F.text.
+    # Сюда попадают фото, стикеры, голосовые - всё, что не F.text.
     await message.answer(texts.REG_TEXT_ONLY)
 
 

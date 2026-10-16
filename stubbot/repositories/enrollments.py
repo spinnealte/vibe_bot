@@ -29,7 +29,7 @@ class EnrollmentRepository:
     async def list_for_client(
         self, client_id: int, exclude_statuses: tuple[EnrollmentStatus, ...] = ()
     ) -> list[tuple[Enrollment, CourseSession, Program, PriceOption | None]]:
-        """Заявки клиента с потоком, курсом и тарифом; ближайшие потоки — первыми."""
+        """Заявки клиента с потоком, курсом и тарифом; ближайшие потоки - первыми."""
         stmt = (
             select(Enrollment, CourseSession, Program, PriceOption)
             .join(CourseSession, CourseSession.id == Enrollment.session_id)
@@ -45,7 +45,7 @@ class EnrollmentRepository:
         self.session.add(enrollment)
 
     async def add_interest(self, client_id: int, program_id: int) -> bool:
-        """True — подписка создана сейчас, False — уже была."""
+        """True - подписка создана сейчас, False - уже была."""
         stmt = (
             pg_insert(ProgramInterest)
             .values(client_id=client_id, program_id=program_id)

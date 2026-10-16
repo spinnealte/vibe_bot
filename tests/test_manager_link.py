@@ -16,7 +16,7 @@ from stubbot.utils.links import with_draft_text
     [
         ("https://t.me/aquastom_manager", "https://t.me/aquastom_manager?text=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%21"),
         ("https://t.me/aquastom_manager/", "https://t.me/aquastom_manager?text=%D0%9F%D1%80%D0%B8%D0%B2%D0%B5%D1%82%21"),
-        # Не чат по username — черновик не дописываем, ссылку не портим.
+        # Не чат по username - черновик не дописываем, ссылку не портим.
         ("https://t.me/aquastom_manager?start=x", "https://t.me/aquastom_manager?start=x"),
         ("https://t.me/+AbCdEf123", "https://t.me/+AbCdEf123"),
         ("tg://resolve?domain=aquastom_manager", "tg://resolve?domain=aquastom_manager"),
@@ -33,7 +33,7 @@ def test_manager_draft_mentions_course_and_dates() -> None:
                               start_date=date(2026, 10, 13), end_date=date(2026, 10, 14))
     card = SimpleNamespace(session=session)
     assert manager_draft(card) == "Здравствуйте! Хочу записаться на курс «Имплантация» (13–14 октября 2026)."
-    session.start_date = session.end_date = None  # проведение без дат — «даты уточняются»
+    session.start_date = session.end_date = None  # проведение без дат - «даты уточняются»
     assert manager_draft(card) == "Здравствуйте! Интересует курс «Имплантация». Когда ближайший поток?"
 
 
@@ -50,7 +50,7 @@ def _settings(**overrides: object) -> Settings:
     ("raw", "expected"),
     [
         (MANAGER, MANAGER),
-        ("t.me/aquastom_manager", MANAGER),  # как ссылку видят в Telegram — без https://
+        ("t.me/aquastom_manager", MANAGER),  # как ссылку видят в Telegram - без https://
         (" @aquastom_manager ", MANAGER),
         ("http://t.me/aquastom_manager", MANAGER),
         ("telegram.me/aquastom_manager", "https://telegram.me/aquastom_manager"),
@@ -74,8 +74,8 @@ def test_main_menu_has_manager_button_when_link_is_set(monkeypatch: pytest.Monke
     rows = lambda chat_id: [[b.text for b in row] for row in keyboards.main_menu(chat_id).keyboard]  # noqa: E731
     monkeypatch.setattr(keyboards, "get_settings", lambda: _settings(admin_ids="22", manager_url=MANAGER))
     assert rows(99) == [MENU_TOP, [texts.BTN_ABOUT, texts.BTN_MANAGER]]
-    assert rows(22) == [MENU_TOP, [texts.BTN_ABOUT, texts.BTN_MANAGER], [texts.BTN_ADMIN]]  # «Админке» — свой ряд
-    # Нет ссылки — нет и кнопки: вести ей было бы некуда.
+    assert rows(22) == [MENU_TOP, [texts.BTN_ABOUT, texts.BTN_MANAGER], [texts.BTN_ADMIN]]  # «Админке» - свой ряд
+    # Нет ссылки - нет и кнопки: вести ей было бы некуда.
     monkeypatch.setattr(keyboards, "get_settings", lambda: _settings(admin_ids="22"))
     assert rows(99) == [MENU_TOP, [texts.BTN_ABOUT]]
     assert rows(22) == [MENU_TOP, [texts.BTN_ABOUT, texts.BTN_ADMIN]]
@@ -83,7 +83,7 @@ def test_main_menu_has_manager_button_when_link_is_set(monkeypatch: pytest.Monke
 
 def test_main_menu_can_be_collapsed_and_reopened_by_person(monkeypatch: pytest.MonkeyPatch) -> None:
     """Главное меню человек сворачивает и разворачивает сам значком у поля ввода (не «всегда на виду»).
-    Само оно не сворачивается: в режиме one_time на iPhone пропадает и значок. Клавиатуры шагов регистрации —
+    Само оно не сворачивается: в режиме one_time на iPhone пропадает и значок. Клавиатуры шагов регистрации -
     всегда на виду."""
     monkeypatch.setattr(keyboards, "get_settings", lambda: _settings())
     menu = keyboards.main_menu(99)
@@ -98,7 +98,7 @@ def test_manager_button_under_program_and_empty_schedule() -> None:
     assert [[b.text for b in row] for row in markup.inline_keyboard] == [
         ["1/3", "▶️"], [texts.BTN_MANAGER], [texts.BTN_BACK_TO_COURSE]]
     assert markup.inline_keyboard[1][0].url == link
-    without = keyboards.program_pages(5, 2, 0, 1)  # ссылки нет — только «Назад к курсу»
+    without = keyboards.program_pages(5, 2, 0, 1)  # ссылки нет - только «Назад к курсу»
     assert [b.text for row in without.inline_keyboard for b in row] == [texts.BTN_BACK_TO_COURSE]
     # Под пустым расписанием кнопка называется по делу: «Узнать о ближайших курсах».
     button = keyboards.contact_manager(link, texts.BTN_MANAGER_COURSES).inline_keyboard[0][0]
@@ -106,11 +106,11 @@ def test_manager_button_under_program_and_empty_schedule() -> None:
 
 
 def test_question_draft_takes_what_person_wrote_to_bot() -> None:
-    """Человек написал боту вопрос — в чат менеджера он подставится черновиком, набирать заново не придётся."""
+    """Человек написал боту вопрос - в чат менеджера он подставится черновиком, набирать заново не придётся."""
     assert question_draft("  Сколько стоит\nкурс по имплантации? ") == "Сколько стоит курс по имплантации?"
     assert question_draft("а" * 201) == texts.MANAGER_DRAFT_ABOUT  # длинное в ссылку не поместится
     assert question_draft("   ") == texts.MANAGER_DRAFT_ABOUT
-    assert len(with_draft_text(MANAGER, question_draft("я" * 200))) < 2000  # кириллица в ссылке — в шесть раз длиннее
+    assert len(with_draft_text(MANAGER, question_draft("я" * 200))) < 2000  # кириллица в ссылке - в шесть раз длиннее
 
 
 VENUES = [
@@ -120,9 +120,9 @@ VENUES = [
 
 
 def test_about_text_lists_venues_and_manager_hint(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Список площадок в «О центре» — когда задан шаблон строки площадки."""
+    """Список площадок в «О центре» - когда задан шаблон строки площадки."""
     monkeypatch.setattr(texts, "ABOUT_VENUES_TITLE", "🏫 <b>Где проходят занятия</b>")
-    monkeypatch.setattr(texts, "ABOUT_VENUE", "• <b>{name}</b> — {address}")
+    monkeypatch.setattr(texts, "ABOUT_VENUE", "• <b>{name}</b> - {address}")
     monkeypatch.setattr(texts, "ABOUT_VENUE_MAP", ' · <a href="{url}">на карте</a>')
     text = about_text(VENUES, with_manager=True)
     assert "АкваСтом" in text
@@ -130,12 +130,12 @@ def test_about_text_lists_venues_and_manager_hint(monkeypatch: pytest.MonkeyPatc
     assert 'href="https://yandex.ru/maps/?text=a&amp;b"' in text
     assert text.count("на карте") == 1
     assert text.endswith(texts.ABOUT_MANAGER_HINT)
-    assert texts.ABOUT_MANAGER_HINT not in about_text(VENUES, with_manager=False)  # нет ссылки — нет и подсказки
+    assert texts.ABOUT_MANAGER_HINT not in about_text(VENUES, with_manager=False)  # нет ссылки - нет и подсказки
     assert texts.ABOUT_VENUES_TITLE not in about_text([], with_manager=False)
 
 
 def test_about_text_without_venue_list(monkeypatch: pytest.MonkeyPatch) -> None:
-    """Шаблон строки площадки пуст — адреса не показываем: один заголовок («Уточняется»), без пустых строк,
+    """Шаблон строки площадки пуст - адреса не показываем: один заголовок («Уточняется»), без пустых строк,
     и неважно, заведены ли площадки в базе."""
     monkeypatch.setattr(texts, "ABOUT_VENUES_TITLE", "🏫 <b>Где проходят занятия</b>\n Уточняется...")
     monkeypatch.setattr(texts, "ABOUT_VENUE", "")

@@ -16,7 +16,7 @@ down_revision: Union[str, Sequence[str], None] = '4cd3f432915c'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-# concat_ws пропускает NULL: «Иванов Иван» без отчества — без хвостового пробела.
+# concat_ws пропускает NULL: «Иванов Иван» без отчества - без хвостового пробела.
 _JOIN = "NULLIF(concat_ws(' ', last_name, first_name, middle_name), '')"
 
 
@@ -35,7 +35,7 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    """Обратно на три колонки: первое слово — фамилия, второе — имя, остальное — отчество."""
+    """Обратно на три колонки: первое слово - фамилия, второе - имя, остальное - отчество."""
     for table, required in (('clients', False), ('lecturers', True)):
         op.add_column(table, sa.Column('last_name', sa.String(length=100), nullable=True))
         op.add_column(table, sa.Column('first_name', sa.String(length=100), nullable=True))

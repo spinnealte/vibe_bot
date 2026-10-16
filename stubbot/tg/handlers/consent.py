@@ -1,8 +1,8 @@
 """Согласия. Ответ на кнопку меняет то же сообщение: экран согласий → «принято» → следующий шаг регистрации.
 
-При регистрации (требование заказчика 16.10.2026) — две отдельные галочки и «Продолжить»: 1 — политика и обработка
-ПД, обязательна (без неё дальше не пускает, данные профиля бот не спрашивает и не сохраняет); 2 — рекламные
-рассылки, по желанию. Из кабинета рассылки включаются отдельно — текст согласия и «Да / Нет».
+При регистрации (требование заказчика 16.10.2026) - две отдельные галочки и «Продолжить»: 1 - политика и обработка
+ПД, обязательна (без неё дальше не пускает, данные профиля бот не спрашивает и не сохраняет); 2 - рекламные
+рассылки, по желанию. Из кабинета рассылки включаются отдельно - текст согласия и «Да / Нет».
 """
 
 from aiogram import Bot, F, Router
@@ -47,7 +47,7 @@ async def on_consent_toggle(callback: CallbackQuery, callback_data: ConsentFormC
     try:
         await callback.message.edit_reply_markup(reply_markup=markup)
     except TelegramBadRequest:
-        pass  # кнопки уже такие (два нажатия подряд) — менять нечего
+        pass  # кнопки уже такие (два нажатия подряд) - менять нечего
 
 
 @router.callback_query(Consent.personal_data, ConsentFormCb.filter(F.action == ConsentFormAction.CONTINUE))
@@ -70,12 +70,12 @@ async def on_consent_continue(callback: CallbackQuery, state: FSMContext, sessio
     shown_ads = data.get(ADS_DOCUMENT_KEY)
     if pd_document.id != data.get(PD_DOCUMENT_KEY) or (shown_ads is not None and (
             ads_document is None or ads_document.id != shown_ads)):
-        # Пока человек читал, вышла новая версия документов — соглашаться надо с ней: показываем заново.
+        # Пока человек читал, вышла новая версия документов - соглашаться надо с ней: показываем заново.
         await flows.show_consent_form(message, state, session, client, in_place=True, notice=texts.CONSENT_PD_UPDATED)
         return
 
     await service.grant(client.id, ConsentType.PERSONAL_DATA, pd_document)
-    # Согласие есть — теперь можно запомнить имя и @username из Telegram (до согласия их не храним).
+    # Согласие есть - теперь можно запомнить имя и @username из Telegram (до согласия их не храним).
     ClientService(session).remember_profile(client, telegram_profile(callback.from_user))
     answer = texts.CONSENT_PD_ACCEPTED
     if shown_ads is not None:
@@ -83,7 +83,7 @@ async def on_consent_continue(callback: CallbackQuery, state: FSMContext, sessio
             await service.grant(client.id, ConsentType.MARKETING, ads_document)
             answer += "\n\n" + texts.CONSENT_MARKETING_ACCEPTED
         else:
-            # Галочка стояла (соглашался раньше), а её сняли — это отказ от рассылок.
+            # Галочка стояла (соглашался раньше), а её сняли - это отказ от рассылок.
             if await service.has_any_consent(client.id, ConsentType.MARKETING):
                 await service.revoke(client.id, ConsentType.MARKETING)
             answer += "\n\n" + texts.CONSENT_MARKETING_DECLINED
@@ -106,7 +106,7 @@ async def on_marketing_consent(callback: CallbackQuery, callback_data: ConsentCb
     answer = texts.CONSENT_MARKETING_ACCEPTED if callback_data.accept else texts.CONSENT_MARKETING_DECLINED
 
     if (await state.get_data()).get("return_to") == RETURN_TO_CABINET:
-        # Включали рассылки из кабинета — возвращаем кабинет в то же сообщение.
+        # Включали рассылки из кабинета - возвращаем кабинет в то же сообщение.
         await state.clear()
         await flows.show_cabinet(message, session, client, settings, bot, notice=answer, in_place=True)
         return
@@ -121,6 +121,6 @@ async def consent_expects_buttons(message: Message) -> None:
 
 
 async def _continue_registration(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
-    # Следующий шаг (телефон) — с reply-клавиатурой, поэтому новым сообщением.
+    # Следующий шаг (телефон) - с reply-клавиатурой, поэтому новым сообщением.
     step = await RegistrationService(session).next_step(client)
     await flows.show_registration_step(message, state, session, client, step)
