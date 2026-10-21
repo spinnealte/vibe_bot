@@ -1,9 +1,14 @@
-"""Запись на курс (полная версия, этап 1; решения 19-20.10.2026).
+"""Запись на курс и её отмена самим клиентом (полная версия, этап 1; решения 19-21.10.2026).
 
 «Записаться» сразу занимает место и создаёт заказ: сумма фиксируется по тарифу в момент записи, оплатить нужно
 за 72 часа (PAYMENT_HOURS). Записаться можно за себя или вдвоём с коллегой по тарифу «Для двух коллег» (цена за
 двоих, платит записывающий): коллега - отдельный клиент, у него своя запись по тому же заказу. Мест не хватает -
 лист ожидания (обоих, если записываются вдвоём), заказа нет.
+
+Отменить запись сам клиент может не позже чем за 2 недели до начала (у проведения без дат - всегда), позже - через
+менеджера. Пара отменяется целиком и только записавшим; коллега отказывается через менеджера. Оплаты не было -
+заказ закрывается, оба попадают в лист ожидания курса. Была - клиент выбирает: перенос, аванс или возврат, деньги
+двигает админ.
 """
 
 import logging
@@ -14,7 +19,7 @@ from enum import StrEnum
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.db.enums import ClientEventType, EnrollmentSource, EnrollmentStatus, PriceUnit
+from stubbot.db.enums import CancelChoice, ClientEventType, EnrollmentSource, EnrollmentStatus, OrderStatus, PriceUnit
 from stubbot.db.models import Client, CourseSession, Enrollment, Order, PriceOption, Program
 from stubbot.db.models.orders import PAYMENT_HOURS
 from stubbot.repositories.analytics import AnalyticsRepository
@@ -26,26 +31,81 @@ from stubbot.services.schedule import ScheduleService, SessionCard
 logger = logging.getLogger(__name__)
 
 PAIR_SEATS = 2  # «Для двух коллег»: записывающий и его коллега
-# Клиент может сам отменить только ещё не подтверждённую заявку; подтверждённую - через менеджера.
-CLIENT_CANCELLABLE = (EnrollmentStatus.APPLICATION, EnrollmentStatus.WAITLIST)
-# Не показываем в «Моих заявках».
+SELF_CANCEL_DAYS = 14  # сам клиент отменяет запись не позже чем за 2 недели до начала (решение 20.10.2026)
+# Запись, которую можно отменить (или выйти из листа ожидания); прошедшие и отменённые - нет.
+CLIENT_CANCELLABLE = (EnrollmentStatus.APPLICATION, EnrollmentStatus.CONFIRMED, EnrollmentStatus.WAITLIST)
+# Не показываем в «Моих записях».
 HIDDEN_FROM_CLIENT = (EnrollmentStatus.CANCELLED_BY_CLIENT,)
+# Заказ ждёт денег: срок оплаты, «Как будете оплачивать?», реквизиты.
+PAYABLE_ORDER_STATUSES = (OrderStatus.AWAITING_PAYMENT, OrderStatus.PARTIALLY_PAID)
+CLIENT_CANCEL_REASON = "Отменена клиентом в боте"
+
+
+def cancel_deadline(course_session: CourseSession) -> date | None:
+    """Последний день, когда клиент отменяет запись сам (включительно). None - у проведения нет дат: можно всегда."""
+    if course_session.start_date is None:
+        return None
+    return course_session.start_date - timedelta(days=SELF_CANCEL_DAYS)
+
+
+def can_self_cancel(enrollment: Enrollment, course_session: CourseSession, today: date) -> bool:
+    """Отменить здесь, без менеджера: только свою запись (не коллегу из пары) и не позже чем за 2 недели до начала.
+    Из листа ожидания выйти можно всегда - места и денег там нет."""
+    if enrollment.status not in CLIENT_CANCELLABLE or enrollment.enrolled_by_client_id is not None:
+        return False
+    if enrollment.status is EnrollmentStatus.WAITLIST:
+        return True
+    deadline = cancel_deadline(course_session)
+    return deadline is None or today <= deadline
 
 
 @dataclass(frozen=True)
 class MyApplication:
+    """Карточка «Моих записей»: запись, проведение, заказ (у листа ожидания нет) и второй участник пары."""
+
     enrollment: Enrollment
     session: CourseSession
     program: Program
     price: PriceOption | None
+    order: Order | None = None
+    paid: int = 0  # оплачено по заказу, копейки
+    partner: Client | None = None  # коллега, которого записал клиент, или тот, кто записал клиента
+    self_cancel: bool = False  # можно отменить здесь (can_self_cancel)
 
     @property
     def title(self) -> str:
         return self.session.title_override or self.program.title
 
     @property
-    def cancellable(self) -> bool:
+    def is_payer(self) -> bool:
+        """Записался сам (и платит), а не записан коллегой."""
+        return self.enrollment.enrolled_by_client_id is None
+
+    @property
+    def active(self) -> bool:
         return self.enrollment.status in CLIENT_CANCELLABLE
+
+    @property
+    def cancel_until(self) -> date | None:
+        return cancel_deadline(self.session)
+
+
+class CancelOutcome(StrEnum):
+    CANCELLED = "cancelled"
+    NEEDS_CHOICE = "needs_choice"  # по заказу уже платили: сначала выбрать перенос, аванс или возврат
+    NOT_ALLOWED = "not_allowed"  # чужая или уже отменённая, коллега из пары, до начала меньше двух недель
+
+
+@dataclass(frozen=True)
+class CancelResult:
+    outcome: CancelOutcome
+    enrollment: Enrollment | None = None
+    order: Order | None = None
+    paid: int = 0
+    choice: CancelChoice | None = None
+    colleagues: tuple[Client, ...] = ()  # их записи отменены вместе с записью клиента
+    course_waitlist: bool = False  # заказ без оплаты: все участники в листе ожидания курса
+    waitlist: bool = False  # это был выход из листа ожидания проведения
 
 
 @dataclass(frozen=True)
@@ -154,6 +214,8 @@ class EnrollmentService:
                     session_id=session_id,
                     price_option_id=price.id if price else None,
                     order_id=order.id if order else None,
+                    # Пару связывает «кто записал» - и в листе ожидания, где заказа нет.
+                    enrolled_by_client_id=client.id if person is not client else None,
                     status=EnrollmentStatus.WAITLIST if waitlist else EnrollmentStatus.APPLICATION,
                     requested_seats=1,
                     source=EnrollmentSource.BOT,
@@ -179,21 +241,68 @@ class EnrollmentService:
         return EnrollResult(EnrollOutcome.WAITLIST if waitlist else EnrollOutcome.CREATED, card, enrollments[0],
                             order, colleague_client)
 
-    async def my_applications(self, client_id: int) -> list[MyApplication]:
-        """Заявки для «Мои заявки». Отменённые самим клиентом не показываем - он их уже убрал."""
+    async def my_applications(self, client_id: int, today: date) -> list[MyApplication]:
+        """Записи для «Моих записей». Отменённые самим клиентом не показываем - он их уже убрал."""
         rows = await self.enrollments.list_for_client(client_id, exclude_statuses=HIDDEN_FROM_CLIENT)
-        return [MyApplication(*row) for row in rows]
+        paid = await self.orders.paid_amounts([order.id for *_, order in rows if order is not None])
+        partners = await self.enrollments.partners(client_id, [enrollment.session_id for enrollment, *_ in rows])
+        return [
+            MyApplication(enrollment, course_session, program, price, order,
+                          paid=paid.get(order.id, 0) if order is not None else 0,
+                          partner=partners.get(course_session.id),
+                          self_cancel=can_self_cancel(enrollment, course_session, today))
+            for enrollment, course_session, program, price, order in rows
+        ]
 
-    async def cancel(self, client_id: int, enrollment_id: int) -> Enrollment | None:
-        """None - не своя заявка или её уже нельзя отменить самому."""
+    async def cancel(self, client_id: int, enrollment_id: int, today: date, choice: CancelChoice | None = None,
+                     now: datetime | None = None) -> CancelResult:
+        """Отмена записи самим клиентом (вместе с коллегой, если записывались вдвоём).
+
+        По заказу уже платили, а выбора (перенос / аванс / возврат) нет - NEEDS_CHOICE, ничего не меняем.
+        """
         enrollment = await self.enrollments.get_for_client(enrollment_id, client_id)
-        if enrollment is None or enrollment.status not in CLIENT_CANCELLABLE:
-            return None
-        enrollment.status = EnrollmentStatus.CANCELLED_BY_CLIENT
-        enrollment.cancelled_at = datetime.now(UTC)
-        enrollment.cancel_reason = "Отменена клиентом в боте"
-        logger.info("Клиент #%s: отменил заявку #%s", client_id, enrollment_id)
-        return enrollment
+        if enrollment is None:
+            return CancelResult(CancelOutcome.NOT_ALLOWED)
+        # Сначала заказ, потом запись - в том же порядке блокирует и отметка оплаты админом: пока идёт отмена,
+        # деньги по заказу не появятся, а второе нажатие «Отменить» дождётся первого и увидит отменённую запись.
+        order = await self.orders.lock(enrollment.order_id) if enrollment.order_id is not None else None
+        enrollment = await self.enrollments.get_for_client(enrollment_id, client_id, lock=True)
+        course_session = await self.enrollments.get_session(enrollment.session_id)
+        if not can_self_cancel(enrollment, course_session, today):
+            return CancelResult(CancelOutcome.NOT_ALLOWED, enrollment)
+
+        paid = (await self.orders.paid_amounts([order.id])).get(order.id, 0) if order is not None else 0
+        if paid and choice is None:
+            return CancelResult(CancelOutcome.NEEDS_CHOICE, enrollment, order, paid)
+        if not paid:
+            choice = None  # денег нет - переносить и возвращать нечего
+
+        now = now or datetime.now(UTC)
+        waitlist = enrollment.status is EnrollmentStatus.WAITLIST
+        colleagues = await self.enrollments.colleagues(enrollment.session_id, client_id)
+        for row in [enrollment, *(row for row, _ in colleagues)]:
+            row.status = EnrollmentStatus.CANCELLED_BY_CLIENT
+            row.cancelled_at = now
+            row.cancel_reason = CLIENT_CANCEL_REASON
+        course_waitlist = order is not None and not paid
+        if order is not None:
+            order.status = OrderStatus.CANCELLED
+            order.cancelled_at = now
+            order.cancel_reason = CLIENT_CANCEL_REASON
+            order.cancel_choice = choice
+        if course_waitlist:
+            # Не оплачено - в лист ожидания курса (решение 20.10.2026): на новое проведение пригласит админ.
+            for person_id in [client_id, *(person.id for _, person in colleagues)]:
+                await self.enrollments.put_on_course_waitlist(person_id, course_session.program_id)
+
+        self.analytics.add_event(client_id, ClientEventType.APPLICATION_CANCELLED, {
+            "session_id": enrollment.session_id, "order": order.number if order else None,
+            "paid": bool(paid), "choice": choice.value if choice else None, "pair": bool(colleagues),
+        })
+        logger.info("Клиент #%s: отменил запись #%s%s%s", client_id, enrollment.id,
+                    f", заказ №{order.number}" if order else "", f", выбор - {choice.value}" if choice else "")
+        return CancelResult(CancelOutcome.CANCELLED, enrollment, order, paid, choice,
+                            tuple(person for _, person in colleagues), course_waitlist, waitlist)
 
     async def subscribe_interest(self, client_id: int, program_id: int) -> bool:
         created = await self.enrollments.add_interest(client_id, program_id)

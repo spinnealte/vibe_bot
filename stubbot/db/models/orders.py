@@ -17,7 +17,15 @@ from sqlalchemy import BigInteger, CHAR, CheckConstraint, ForeignKey, Integer, S
 from sqlalchemy.orm import Mapped, mapped_column
 
 from stubbot.db.base import Base, CreatedAtMixin, IntPK, TimestampMixin, str_enum
-from stubbot.db.enums import AdvanceReason, OrderStatus, PayerType, PaymentMethod, PaymentProvider, PaymentState
+from stubbot.db.enums import (
+    AdvanceReason,
+    CancelChoice,
+    OrderStatus,
+    PayerType,
+    PaymentMethod,
+    PaymentProvider,
+    PaymentState,
+)
 
 # Номер заказа для людей - шесть цифр по порядку, с 100001 (решение пользователя 19.10.2026).
 ORDER_NUMBER_SEQUENCE = Sequence("order_number_seq", start=100001, minvalue=100001, maxvalue=999999,
@@ -59,6 +67,9 @@ class Order(TimestampMixin, Base):
     paid_at: Mapped[datetime | None]
     cancelled_at: Mapped[datetime | None]
     cancel_reason: Mapped[str | None] = mapped_column(String(512))
+    # Клиент сам отменил запись, по которой уже платил: перенос, аванс или возврат. NULL - оплаты не было или
+    # отменил админ.
+    cancel_choice: Mapped[CancelChoice | None] = mapped_column(str_enum(CancelChoice, "cancel_choice"))
     admin_comment: Mapped[str | None] = mapped_column(Text)
 
 

@@ -164,6 +164,8 @@
 
 - id, client_id, session_id, price_option_id NULL
 - order_id NULL [FULL] - заказ, по которому оплачивается место (у пары «для двух коллег» один заказ на двоих); NULL - лист ожидания
+- enrolled_by_client_id NULL [FULL] - кто записал: у коллеги из пары - записавший его плательщик; NULL - записался сам.
+  Связывает пару и в листе ожидания, где заказа нет (миграция 5d3a9c7e1b20)
 - status: application / confirmed / waitlist / cancelled_by_client / cancelled_by_admin / attended / no_show / completed
 - payment_status: unpaid / partial / paid / refunded (кэш, в FULL считается из orders)
 - requested_seats smallint default 1 - MVP: «записываюсь с коллегами», менеджер обрабатывает вручную
@@ -171,7 +173,8 @@
 - created_at, confirmed_at, cancelled_at, cancel_reason
 - UNIQUE (client_id, session_id) WHERE status не отменён
 
-**program_interests** [MVP] - «сообщите о наборе»: client_id, program_id, created_at, notified_at, UNIQUE(client_id, program_id)
+**program_interests** [MVP] - «сообщите о наборе»: client_id, program_id, created_at, notified_at, UNIQUE(client_id, program_id).
+В FULL это и лист ожидания курса: туда попадают отменившие запись без оплаты (notified_at сбрасывается), приглашает админ.
 **enrollment_status_history** [FULL] - enrollment_id, from_status, to_status, changed_by_admin_id, note, changed_at
 
 ### F. Заказы и оплаты [FULL]
@@ -184,7 +187,8 @@ payer_client_id, session_id, price_option_id NULL, payer_type NULL (individual /
 total_amount NULL (копейки, зафиксировано при записи; NULL - «стоимость уточняется»), currency,
 status (awaiting_payment / partially_paid / paid / cancelled), due_at (+72 ч), requisites_file_id / _name /
 _received_at (реквизиты юрлица файлом), invoice_sent_at, payment_reminded_at (24 ч), overdue_notified_at (срок вышел),
-paid_at, cancelled_at, cancel_reason, admin_comment.
+paid_at, cancelled_at, cancel_reason, cancel_choice NULL (transfer / advance / refund - что клиент выбрал для уже
+внесённой оплаты, когда сам отменил запись; деньги двигает админ; миграция 5d3a9c7e1b20), admin_comment.
 Позже, когда понадобится: organization_id (клиники), скидки и промокоды, email / телефон для чека.
 
 Участники заказа - enrollments.order_id (у каждого своя запись); отдельная order_items не нужна: сумма у заказа целиком.

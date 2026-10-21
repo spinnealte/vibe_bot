@@ -133,9 +133,14 @@ class OrderCb(CallbackData, prefix="order"):
 
 
 class MyApplicationAction(StrEnum):
-    VIEW = "view"  # карточка заявки номер index
+    VIEW = "view"  # карточка записи номер index
+    PAY = "pay"  # «Как будете оплачивать?» - выбор «Физлицо / Юрлицо» для заказа этой записи
     ASK_CANCEL = "ask"
-    CANCEL = "yes"
+    CANCEL = "yes"  # «Да, отменить» - оплаты не было (или выйти из листа ожидания)
+    # Оплата была: выбор, что сделать с деньгами, он же подтверждение отмены.
+    TRANSFER = "tr"
+    ADVANCE = "adv"
+    REFUND = "ref"
     KEEP = "no"  # «Нет, оставить» - назад к той же карточке
 
 

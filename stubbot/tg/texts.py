@@ -61,6 +61,10 @@ MANAGER_DRAFT_SESSION = "Здравствуйте! Хочу записаться
 MANAGER_DRAFT_PROGRAM = "Здравствуйте! Интересует курс «{title}». Когда ближайший поток?"
 MANAGER_DRAFT_ABOUT = "Здравствуйте! У меня вопрос по курсам."
 MANAGER_DRAFT_SCHEDULE = "Здравствуйте! Подскажите, какие курсы планируются в ближайшее время?"
+# Из «Моих записей», когда отменить самому уже нельзя, и после отмены с возвратом денег.
+MANAGER_DRAFT_CANCEL = "Здравствуйте! Хочу отменить запись на курс «{title}»{order}."
+MANAGER_DRAFT_ORDER = ", заказ №{number}"
+MANAGER_DRAFT_REFUND = "Здравствуйте! Прошу вернуть оплату по заказу №{number}."
 
 # Подпись под фото курса (лимит Telegram - 1024 символа; описание обрезается под остаток).
 CAPTION_TITLE = "📚 <b>{title}</b>"
@@ -113,7 +117,7 @@ APPLY_CLOSED = "😔 Запись на этот поток сейчас закр
 APPLY_DUPLICATE = (
     "📝 Вы уже записаны на этот поток.\n\n"
     "Статус: <b>{status}</b>\n"
-    "Посмотреть запись можно в <b>«👤 Личный кабинет» → «📝 Мои заявки»</b>."
+    "Посмотреть запись можно в <b>«👤 Личный кабинет» → «📝 Мои записи»</b>."
 )
 APPLY_CHOOSE_PRICE = "💳 <b>Выберите вариант участия</b> 👇"
 APPLY_ASK_COLLEAGUE_NAME = (
@@ -191,17 +195,17 @@ COLLEAGUE_ENROLLED = (
     "🦷 <b>{title}</b>\n"
     "🗓 {dates}\n"
     "👤 Кто записал: {name}\n\n"
-    "Заказ оплачивает коллега. Запись видна в <b>«👤 Личный кабинет» → «📝 Мои заявки»</b>."
+    "Заказ оплачивает коллега. Запись видна в <b>«👤 Личный кабинет» → «📝 Мои записи»</b>."
 )
 APPLY_WAITLISTED = (
     "🕒 <b>Мест нет - Вы в листе ожидания.</b>\n\n"
     "Если место освободится, менеджер свяжется с Вами.\n\n"
-    "Статус - в <b>«👤 Личный кабинет» → «📝 Мои заявки»</b>."
+    "Статус - в <b>«👤 Личный кабинет» → «📝 Мои записи»</b>."
 )
 APPLY_WAITLISTED_PAIR = (
     "🕒 <b>Мест нет - Вы с коллегой в листе ожидания.</b>\n\n"
     "Если места освободятся, менеджер свяжется с Вами.\n\n"
-    "Статус - в <b>«👤 Личный кабинет» → «📝 Мои заявки»</b>."
+    "Статус - в <b>«👤 Личный кабинет» → «📝 Мои записи»</b>."
 )
 APPLY_COLLEAGUE_DUPLICATE = (
     "📝 Коллега с этим телефоном уже записан на этот поток. Если хотите пойти сами - выберите вариант участия "
@@ -397,7 +401,8 @@ CABINET = (
     "🩺 <b>Специальность:</b> {specialties}\n"
     "📋 <b>Должность:</b> {positions}\n"
     "📊 <b>Опыт работы:</b> {experience}\n"
-    "🔔 <b>Рассылки:</b> {marketing}\n\n"
+    "🔔 <b>Рассылки:</b> {marketing}\n"
+    "{advance}\n"
     "🎁 <b>Пригласите коллег</b>\n"
     "Поделитесь ссылкой - коллеги попадут прямо в бот:\n"
     "<code>{referral_link}</code>\n"
@@ -406,11 +411,13 @@ CABINET = (
 NOT_SET = "—"  # пустое поле в личном кабинете
 CABINET_MARKETING_ON = "включены"
 CABINET_MARKETING_OFF = "выключены"
+# Строка {advance} кабинета - только если аванс не ноль (полная версия, этап 1).
+CABINET_ADVANCE = "💰 <b>Аванс:</b> {amount} - менеджер зачтёт его в оплату курса\n"
 
 BTN_EDIT_PROFILE = "✏️ Изменить профиль"
 BTN_MARKETING_TURN_OFF = "🔕 Отключить рассылки"
 BTN_MARKETING_TURN_ON = "🔔 Включить рассылки"
-BTN_MY_APPLICATIONS = "📝 Мои заявки"
+BTN_MY_APPLICATIONS = "📝 Мои записи"
 BTN_BACK_TO_CABINET = "⬅️ В кабинет"
 BTN_EDIT_CANCEL = "✖️ Отмена"
 BTN_EDIT_CLEAR = "🗑 Очистить"
@@ -449,34 +456,119 @@ MARKETING_TURNED_OFF = (
     "Анонсы больше не придут. Включить обратно можно здесь же, в кабинете."
 )
 
+# --- Мои записи (полная версия, этап 1, шаг 3; тексты согласованы 21.10.2026) --------------------------------
+
 MY_APPLICATIONS_EMPTY = (
-    "📝 <b>Мои заявки</b>\n\n"
-    "Заявок пока нет.\n\n"
-    "Выберите курс в разделе <b>«📅 Расписание»</b> и оставьте заявку ✨"
+    "📝 <b>Мои записи</b>\n\n"
+    "Записей пока нет.\n\n"
+    "Выберите курс в разделе <b>«📅 Расписание»</b> и запишитесь ✨"
 )
-MY_APPLICATIONS_TITLE = "📝 <b>Мои заявки</b>"
+MY_APPLICATIONS_TITLE = "📝 <b>Мои записи</b>"
 MY_APPLICATION_COURSE = "🦷 <b>{value}</b>"
 MY_APPLICATION_DATES = "🗓 <b>Даты:</b> {value}"
 MY_APPLICATION_VENUE = "📍 <b>Где:</b> {value}"
 MY_APPLICATION_PRICE = "💳 <b>Тариф:</b> {value}"
-MY_APPLICATION_SEATS = "👥 <b>Мест:</b> {value}"
-MY_APPLICATION_COMMENT = "💬 <b>Комментарий:</b> {value}"
+MY_APPLICATION_COLLEAGUE = "👥 <b>Вместе с Вами:</b> {name}"
+MY_APPLICATION_ENROLLER = "🤝 <b>Вместе с:</b> {name} - заказ оплачивает коллега"
+MY_APPLICATION_ORDER = "🧾 <b>Заказ №{number}</b> · {amount}"
+MY_APPLICATION_PAID = "💰 <b>Оплачено:</b> {paid}, осталось {left}"
+MY_APPLICATION_PAID_FULL = "💰 <b>Оплачено:</b> {paid} - полностью"
+MY_APPLICATION_PAID_OPEN = "💰 <b>Оплачено:</b> {paid}"  # сумму заказа ещё уточняет менеджер
+MY_APPLICATION_DUE = "⏰ <b>Оплатить до:</b> {value}"
+MY_APPLICATION_OVERDUE = "⚠️ Срок оплаты прошёл - менеджер может снять бронь. Оплатите или напишите менеджеру."
+MY_APPLICATION_PAYER = "👤 <b>Плательщик:</b> {value}"
+PAYER_INDIVIDUAL = "физическое лицо"
+PAYER_ORGANIZATION = "юридическое лицо, реквизиты получены"
+PAYER_ORGANIZATION_WAITING = "юридическое лицо, ждём реквизиты"
 MY_APPLICATION_STATUS = "📌 <b>Статус:</b> {value}"
-MY_APPLICATION_CONFIRMED_HINT = "<i>Отменить подтверждённую заявку можно через менеджера.</i>"
-BTN_CANCEL_APPLICATION = "✖️ Отменить заявку"
+MY_APPLICATION_CANCEL_UNTIL = "<i>Отменить запись здесь можно до {date} включительно, позже - через менеджера.</i>"
+MY_APPLICATION_CANCEL_LATE = "<i>До начала меньше двух недель - отменить запись можно через менеджера.</i>"
+MY_APPLICATION_COLLEAGUE_HINT = "<i>Отказаться от участия можно через менеджера.</i>"
+BTN_ORDER_PAY = "💳 Как будете оплачивать?"
+BTN_ORDER_REQUISITES = "📎 Прислать реквизиты"
+BTN_CANCEL_APPLICATION = "✖️ Отменить запись"
+BTN_LEAVE_WAITLIST = "✖️ Выйти из листа ожидания"
+BTN_CANCEL_VIA_MANAGER = "💬 Написать менеджеру"
+BTN_TO_MY_APPLICATIONS = "📝 К моим записям"
+ORDER_PAY_CHOICE = (
+    "💳 <b>Заказ №{number}</b> · {amount}\n"
+    "⏰ Оплатить до {due}\n\n"
+    "Как будете оплачивать? 👇"
+)
+
+# Отмена: без оплаты - «Да / Нет»; оплата была - сначала выбор, что сделать с деньгами (он же подтверждение).
 CANCEL_APPLICATION_CONFIRM = (
-    "❓ <b>Отменить заявку?</b>\n\n"
+    "❓ <b>Отменить запись?</b>\n\n"
     "🦷 {title}\n"
-    "🗓 {dates}\n\n"
-    "<i>Место освободится для других участников.</i>"
+    "🗓 {dates}\n"
+    "{colleague}\n"
+    "<i>Заказ №{number} закроется, {seats}. Мы добавим {who} в лист ожидания курса - менеджер пригласит "
+    "на следующее проведение.</i>"
+)
+CANCEL_COLLEAGUE_LINE = "👥 Отменится и запись коллеги: {name}\n"
+CANCEL_SEATS_ONE = "место освободится"
+CANCEL_SEATS_PAIR = "места освободятся"
+CANCEL_WHO_ONE = "Вас"
+CANCEL_WHO_PAIR = "Вас с коллегой"
+CANCEL_WAITLIST_CONFIRM = (
+    "❓ <b>Выйти из листа ожидания?</b>\n\n"
+    "🦷 {title}\n"
+    "🗓 {dates}\n"
+    "{colleague}"
+)
+CANCEL_WAITLIST_COLLEAGUE_LINE = "👥 Коллега тоже выйдет из листа ожидания: {name}\n"
+# Запись без заказа и не в листе ожидания (оставлена до появления заказов) - без строки про заказ.
+CANCEL_PLAIN_CONFIRM = (
+    "❓ <b>Отменить запись?</b>\n\n"
+    "🦷 {title}\n"
+    "🗓 {dates}\n"
+    "{colleague}"
+)
+CANCEL_PAID_CONFIRM = (
+    "❓ <b>Отменить запись?</b>\n\n"
+    "🦷 {title}\n"
+    "🗓 {dates}\n"
+    "{colleague}\n"
+    "💰 По заказу №{number} Вы оплатили {paid}.\n\n"
+    "Что сделать с оплатой? 👇"
 )
 BTN_CANCEL_APPLICATION_YES = "Да, отменить"
 BTN_CANCEL_APPLICATION_NO = "Нет, оставить"
-APPLICATION_CANCELLED = "✖️ Заявка отменена. Если передумаете - оставьте новую в расписании 📅"
-APPLICATION_CANNOT_CANCEL = "Эту заявку уже нельзя отменить здесь - напишите менеджеру."
+BTN_CANCEL_TRANSFER = "🔁 Перенести на другое проведение"
+BTN_CANCEL_ADVANCE = "💰 Оставить на аванс"
+BTN_CANCEL_REFUND = "↩️ Вернуть деньги"
+BTN_CANCEL_KEEP = "Нет, оставить запись"
+CANCELLED_UNPAID = (
+    "✖️ <b>Запись отменена</b>, заказ №{number} закрыт.\n\n"
+    "{who} в листе ожидания курса - менеджер напишет, когда будет новое проведение 📅"
+)
+CANCELLED_WHO_ONE = "Вы"
+CANCELLED_WHO_PAIR = "Вы с коллегой"
+CANCELLED_WAITLIST = "👌 Вы вышли из листа ожидания."
+CANCELLED_WAITLIST_PAIR = "👌 Вы с коллегой вышли из листа ожидания."
+CANCELLED_PLAIN = "✖️ Запись отменена. Если передумаете - запишитесь снова в расписании 📅"
+CANCELLED_TRANSFER = (
+    "✖️ <b>Запись отменена.</b>\n\n"
+    "Выберите новое проведение в расписании и запишитесь - менеджер зачтёт {paid} в оплату нового заказа."
+)
+CANCELLED_ADVANCE = (
+    "✖️ <b>Запись отменена.</b>\n\n"
+    "Менеджер зачислит {paid} на Ваш аванс - сумма появится в личном кабинете и пойдёт в оплату любого курса."
+)
+CANCELLED_REFUND = "✖️ <b>Запись отменена.</b>\n\nЧтобы вернуть {paid}, напишите менеджеру 👇"
+CANCELLED_REFUND_NO_MANAGER = "✖️ <b>Запись отменена.</b>\n\nМенеджер свяжется с Вами и оформит возврат {paid}."
+COLLEAGUE_CANCELLED = (
+    "✖️ <b>Запись отменена</b>\n\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n\n"
+    "Запись отменена по решению коллеги: {name}."
+)
+# Всплывающее окно (без HTML, до 200 символов).
+APPLICATION_CANNOT_CANCEL = "Эту запись уже нельзя отменить здесь - напишите менеджеру."
 ENROLLMENT_STATUS_LABELS = {
     "application": "⏳ Записаны, ждём оплату",
-    "confirmed": "✅ Оплачено, место закреплено",
+    # Место закрепляет и частичная оплата: сколько оплачено - строкой «Оплачено» (решение 21.10.2026).
+    "confirmed": "✅ Место закреплено",
     "waitlist": "🕒 В листе ожидания",
     "cancelled_by_client": "✖️ Отменена Вами",
     "cancelled_by_admin": "✖️ Отменена центром",

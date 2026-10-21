@@ -1,4 +1,4 @@
-"""Заказы со стороны клиента (полная версия, этап 1): кто платит и реквизиты юрлица.
+"""Заказы со стороны клиента (полная версия, этап 1): кто платит, реквизиты юрлица, аванс в кабинете.
 
 Заказ создаётся при записи (services/enrollments.py). Дальше плательщик выбирает «Физлицо / Юрлицо»; юрлицо
 присылает файл с реквизитами, по ним менеджер делает счёт в 1С. Счета, отметку оплаты, аванс и снятие брони
@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.db.enums import OrderStatus, PayerType
 from stubbot.db.models import Order
-from stubbot.repositories.orders import OrderRepository
+from stubbot.repositories.orders import AdvanceRepository, OrderRepository
 
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,11 @@ MAX_FILE_NAME = 256  # колонка orders.requisites_file_name
 class OrderService:
     def __init__(self, session: AsyncSession) -> None:
         self.orders = OrderRepository(session)
+        self.advances = AdvanceRepository(session)
+
+    async def advance_balance(self, client_id: int) -> int:
+        """Аванс клиента в копейках - для кабинета. Меняет его только админ."""
+        return await self.advances.balance(client_id)
 
     async def payer_order(self, client_id: int, order_id: int) -> Order | None:
         """Действующий заказ, который оплачивает этот клиент. None - чужой, отменённый или такого нет."""

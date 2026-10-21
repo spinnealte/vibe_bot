@@ -46,6 +46,7 @@ class ClientEventType(StrEnum):
     SESSION_VIEWED = "session_viewed"
     PROGRAM_OPENED = "program_opened"
     APPLICATION_CREATED = "application_created"
+    APPLICATION_CANCELLED = "application_cancelled"
     INTEREST_CREATED = "interest_created"
     PROFILE_EDITED = "profile_edited"
 
@@ -113,6 +114,14 @@ class OrderStatus(StrEnum):
     PARTIALLY_PAID = "partially_paid"  # оплачено частично - место закреплено, остаток на контроле менеджера
     PAID = "paid"
     CANCELLED = "cancelled"
+
+
+class CancelChoice(StrEnum):
+    """Клиент сам отменил оплаченную (хотя бы частично) запись: что сделать с деньгами. Двигает их админ."""
+
+    TRANSFER = "transfer"  # перенести на другое проведение: запишется заново, оплату засчитает админ
+    ADVANCE = "advance"  # оставить на аванс
+    REFUND = "refund"  # вернуть деньги - через менеджера
 
 
 class PayerType(StrEnum):

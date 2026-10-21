@@ -41,6 +41,11 @@ def format_day(day: date) -> str:
     return f"{day.day} {MONTHS_GENITIVE[day.month - 1]} ({WEEKDAYS_SHORT[day.weekday()]})"
 
 
+def format_date(day: date) -> str:
+    """30 октября"""
+    return f"{day.day} {MONTHS_GENITIVE[day.month - 1]}"
+
+
 def format_range(start: date, end: date) -> str:
     """12 октября · 12–13 октября · 30 сентября – 2 октября · 30 декабря 2026 – 2 января 2027"""
     if start == end:

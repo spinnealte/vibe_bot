@@ -9,7 +9,9 @@ from aiogram.types import (
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from stubbot.config import get_settings
+from stubbot.db.enums import EnrollmentStatus, PayerType
 from stubbot.services.admin_dictionaries import DictKind
+from stubbot.services.enrollments import PAYABLE_ORDER_STATUSES, MyApplication
 from stubbot.tg import texts
 from stubbot.tg.callbacks import (
     ApplyAction,
@@ -270,18 +272,26 @@ def apply_confirm(pair: bool = False, colleague_ok: bool = False) -> InlineKeybo
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def payer_choice(order_id: int) -> InlineKeyboardMarkup:
-    """Под «Вы записаны»: как будет оплачивать плательщик заказа."""
-    return InlineKeyboardMarkup(inline_keyboard=[
+def payer_choice(order_id: int, back_index: int | None = None) -> InlineKeyboardMarkup:
+    """Под «Вы записаны» (и «Как будете оплачивать?» из «Моих записей» - тогда с кнопкой назад к записи)."""
+    rows = [
         [InlineKeyboardButton(text=texts.BTN_PAY_INDIVIDUAL,
                               callback_data=OrderCb(action=OrderAction.INDIVIDUAL, order_id=order_id).pack())],
         [InlineKeyboardButton(text=texts.BTN_PAY_ORGANIZATION,
                               callback_data=OrderCb(action=OrderAction.ORGANIZATION, order_id=order_id).pack())],
-    ])
+    ]
+    if back_index is not None:
+        rows.append([_to_my_applications(back_index)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def _myapp(action: MyApplicationAction, enrollment_id: int = 0, index: int = 0) -> str:
     return MyApplicationCb(action=action, enrollment_id=enrollment_id, index=index).pack()
+
+
+def _to_my_applications(index: int) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=texts.BTN_TO_MY_APPLICATIONS,
+                                callback_data=_myapp(MyApplicationAction.VIEW, index=index))
 
 
 def back_to_cabinet() -> InlineKeyboardMarkup:
@@ -290,26 +300,69 @@ def back_to_cabinet() -> InlineKeyboardMarkup:
     ]])
 
 
-def my_application_card(enrollment_id: int, index: int, total: int, cancellable: bool) -> InlineKeyboardMarkup:
-    """◀️ n/N ▶️ / ✖️ Отменить заявку / ⬅️ В кабинет."""
+def my_application_card(app: MyApplication, index: int, total: int,
+                        manager_url: str | None = None) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / как оплатить (плательщику) / отменить или «Написать менеджеру» / ⬅️ В кабинет.
+
+    manager_url - чат менеджера с черновиком об отмене: под записью, которую самому отменить уже нельзя.
+    """
+    enrollment, order = app.enrollment, app.order
     rows = []
     if total > 1:
         rows.append(_pager(index, total, _myapp(MyApplicationAction.VIEW, index=index - 1),
                            _myapp(MyApplicationAction.VIEW, index=index + 1)))
-    if cancellable:
-        rows.append([InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION,
-                                          callback_data=_myapp(MyApplicationAction.ASK_CANCEL, enrollment_id, index))])
+    if app.active and app.is_payer and order is not None and order.status in PAYABLE_ORDER_STATUSES:
+        if order.payer_type is None:
+            rows.append([InlineKeyboardButton(text=texts.BTN_ORDER_PAY,
+                                              callback_data=_myapp(MyApplicationAction.PAY, enrollment.id, index))])
+        elif order.payer_type is PayerType.ORGANIZATION and order.requisites_file_id is None:
+            rows.append([InlineKeyboardButton(
+                text=texts.BTN_ORDER_REQUISITES,
+                callback_data=OrderCb(action=OrderAction.ORGANIZATION, order_id=order.id).pack(),
+            )])
+    if app.self_cancel:
+        waitlist = enrollment.status is EnrollmentStatus.WAITLIST
+        label = texts.BTN_LEAVE_WAITLIST if waitlist else texts.BTN_CANCEL_APPLICATION
+        rows.append([InlineKeyboardButton(text=label,
+                                          callback_data=_myapp(MyApplicationAction.ASK_CANCEL, enrollment.id, index))])
+    elif app.active and manager_url:
+        rows.append([manager_button(manager_url, texts.BTN_CANCEL_VIA_MANAGER)])
     rows.append(back_to_cabinet().inline_keyboard[0])
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def confirm_cancel_application(enrollment_id: int, index: int) -> InlineKeyboardMarkup:
+    """Отмена без оплаты (и выход из листа ожидания): «Да, отменить / Нет, оставить»."""
     return InlineKeyboardMarkup(inline_keyboard=[[
         InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_YES,
                              callback_data=_myapp(MyApplicationAction.CANCEL, enrollment_id, index)),
         InlineKeyboardButton(text=texts.BTN_CANCEL_APPLICATION_NO,
                              callback_data=_myapp(MyApplicationAction.KEEP, enrollment_id, index)),
     ]])
+
+
+def cancel_paid_choice(enrollment_id: int, index: int) -> InlineKeyboardMarkup:
+    """Отмена оплаченной записи: что сделать с деньгами - выбор и есть подтверждение. Последняя - передумать."""
+    choices = (
+        (texts.BTN_CANCEL_TRANSFER, MyApplicationAction.TRANSFER),
+        (texts.BTN_CANCEL_ADVANCE, MyApplicationAction.ADVANCE),
+        (texts.BTN_CANCEL_REFUND, MyApplicationAction.REFUND),
+        (texts.BTN_CANCEL_KEEP, MyApplicationAction.KEEP),
+    )
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=label, callback_data=_myapp(action, enrollment_id, index))] for label, action in choices
+    ])
+
+
+def cancelled_actions(index: int, schedule: bool = False, manager_url: str | None = None) -> InlineKeyboardMarkup:
+    """После отмены: к расписанию (перенос) или чат менеджера (возврат денег), затем назад к записям."""
+    rows = []
+    if schedule:
+        rows.append(to_schedule().inline_keyboard[0])
+    if manager_url:
+        rows.append([manager_button(manager_url, texts.BTN_CANCEL_VIA_MANAGER)])
+    rows.append([_to_my_applications(index)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def multiselect(group: SelectGroup, options: Iterable[tuple[int, str]], selected: Iterable[int]) -> InlineKeyboardMarkup:

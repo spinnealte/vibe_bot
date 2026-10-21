@@ -36,6 +36,9 @@ class Enrollment(TimestampMixin, Base):
     price_option_id: Mapped[int | None] = mapped_column(ForeignKey("price_options.id", ondelete="RESTRICT"))
     # Заказ, по которому оплачивается место (у пары «для двух коллег» - один заказ на двоих). NULL - лист ожидания.
     order_id: Mapped[int | None] = mapped_column(ForeignKey("orders.id", ondelete="RESTRICT"), index=True)
+    # Кто записал: у коллеги из пары - записавший его клиент (он же плательщик). NULL - записался сам. По этой
+    # ссылке пара видна и в листе ожидания, где заказа нет.
+    enrolled_by_client_id: Mapped[int | None] = mapped_column(ForeignKey("clients.id", ondelete="RESTRICT"), index=True)
     status: Mapped[EnrollmentStatus] = mapped_column(
         str_enum(EnrollmentStatus, "enrollment_status"), server_default=EnrollmentStatus.APPLICATION.value, index=True
     )

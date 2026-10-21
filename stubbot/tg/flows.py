@@ -19,6 +19,7 @@ from stubbot.db.models import Client
 from stubbot.services.clients import ClientService
 from stubbot.services.consents import ConsentService
 from stubbot.services.legal import document_text
+from stubbot.services.orders import OrderService
 from stubbot.services.registration import (
     OPTIONAL_FIELDS_ORDER,
     OptionalField,
@@ -31,6 +32,7 @@ from stubbot.tg.formatting import safe, safe_join
 from stubbot.tg.screen import send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import FULL_NAME_KEY, OPTIONAL_STATES, PENDING_APPLY_KEY, Consent, Registration
 from stubbot.utils.dates import local_today
+from stubbot.utils.money import format_rub
 from stubbot.utils.profile_fields import experience_years
 
 # Экран согласий при регистрации (FSM data): какие версии документов показали и какие галочки стоят.
@@ -205,6 +207,8 @@ async def cabinet_view(session: AsyncSession, client: Client, settings: Settings
     profile = await RegistrationService(session).load_profile(client.id)
     marketing = await ConsentService(session).has_any_consent(client.id, ConsentType.MARKETING)
     referrals = await ClientService(session).count_referrals(client.id)
+    # Аванс бывает только в полной версии (отмена оплаченной записи); строка - если он есть.
+    advance = await OrderService(session).advance_balance(client.id) if settings.applications_enabled else 0
     me = await bot.me()  # имя бота только из API, не хардкодом; aiogram кэширует ответ
     years = experience_years(profile.practice_since_year, local_today(settings.timezone))
     text = texts.CABINET.format(
@@ -218,6 +222,8 @@ async def cabinet_view(session: AsyncSession, client: Client, settings: Settings
         specialties=safe_join([s.title for s in profile.specialties], texts.NOT_SET),
         positions=safe_join([p.title for p in profile.positions], texts.NOT_SET),
         marketing=texts.CABINET_MARKETING_ON if marketing else texts.CABINET_MARKETING_OFF,
+        # Отрицательным аванс не бывает (списать больше баланса админ не может) - показываем только плюс.
+        advance=texts.CABINET_ADVANCE.format(amount=format_rub(advance)) if advance > 0 else "",
         referral_link=safe(f"https://t.me/{me.username}?start=ref_{profile.referral_code}"),
         referrals=referrals,
     )

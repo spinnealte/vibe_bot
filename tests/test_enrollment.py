@@ -128,6 +128,7 @@ def test_pair_enrolls_a_new_colleague_on_the_same_order() -> None:
     [colleague] = service.clients.created
     assert (colleague.full_name, colleague.phone, colleague.telegram_id) == (COLLEAGUE.full_name, COLLEAGUE.phone, None)
     assert [(e.client_id, e.order_id) for e in service.enrollments.added] == [(10, 77), (50, 77)]
+    assert [e.enrolled_by_client_id for e in service.enrollments.added] == [None, 10]  # коллегу записал плательщик
     assert result.colleague is colleague
 
 
@@ -144,6 +145,8 @@ def test_pair_with_one_seat_left_goes_to_waitlist_together() -> None:
     result = _enroll(service, price_id=2, colleague=COLLEAGUE)
     assert result.outcome is EnrollOutcome.WAITLIST and result.order is None and not service.orders.added
     assert [(e.status, e.order_id) for e in service.enrollments.added] == [(EnrollmentStatus.WAITLIST, None)] * 2
+    # Заказа нет - пару связывает «кто записал»: выйти из листа ожидания они смогут только вместе.
+    assert [e.enrolled_by_client_id for e in service.enrollments.added] == [None, 10]
 
 
 def test_full_session_puts_solo_to_waitlist_without_order() -> None:

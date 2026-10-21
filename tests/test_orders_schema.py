@@ -1,6 +1,6 @@
 """Заказы, платежи и аванс (полная версия, этап 1): схема без БД. Ограничения на живой базе проверены при миграции."""
 
-from stubbot.db.enums import AdvanceReason, OrderStatus, PaymentMethod, PaymentState
+from stubbot.db.enums import AdvanceReason, CancelChoice, OrderStatus, PaymentMethod, PaymentState
 from stubbot.db.models import Advance, Enrollment, Order, Payment
 from stubbot.db.models.orders import ORDER_NUMBER_SEQUENCE, PAYMENT_HOURS
 
@@ -46,3 +46,13 @@ def test_enrollment_points_to_its_order() -> None:
     assert order_id.nullable  # у листа ожидания заказа нет
     fk = next(iter(order_id.foreign_keys))
     assert fk.column.table.name == "orders" and fk.ondelete == "RESTRICT"
+
+
+def test_cancel_choice_and_who_enrolled() -> None:
+    """Шаг 3: выбор клиента при отмене оплаченной записи и «кто записал» коллегу из пары."""
+    assert Order.__table__.c.cancel_choice.nullable
+    assert "ck_orders_cancel_choice" in {c.name for c in Order.__table__.constraints}
+    assert {c.value for c in CancelChoice} == {"transfer", "advance", "refund"}
+    enrolled_by = Enrollment.__table__.c.enrolled_by_client_id
+    fk = next(iter(enrolled_by.foreign_keys))
+    assert enrolled_by.nullable and fk.column.table.name == "clients" and fk.ondelete == "RESTRICT"

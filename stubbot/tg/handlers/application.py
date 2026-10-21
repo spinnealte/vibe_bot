@@ -1,12 +1,13 @@
 """Запись на курс: «📝 Записаться» и «Сообщить о наборе» под карточкой расписания, шаги записи (тариф → для двух
 коллег ФИО и телефон коллеги → проверка → «Записаться»), выбор «Физлицо / Юрлицо» и файл с реквизитами юрлица;
-«Мои заявки» в кабинете. Все проверки - в EnrollmentService и OrderService.
+«Мои записи» в кабинете и отмена записи. Все проверки - в EnrollmentService и OrderService.
 
 В MVP-афише выключено (APPLICATIONS_ENABLED=false): роутер не подключается, кнопки не показываются.
 Шаги по кнопкам меняют одно и то же сообщение; ответы текстом (ФИО, телефон коллеги) - новым сообщением.
 """
 
 import logging
+from datetime import UTC, datetime
 
 from aiogram import Bot, F, Router
 from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
@@ -16,10 +17,19 @@ from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.config import Settings
-from stubbot.db.enums import ConsentType, PayerType
+from stubbot.db.enums import CancelChoice, ConsentType, PayerType
 from stubbot.db.models import Client
 from stubbot.services.consents import ConsentService
-from stubbot.services.enrollments import Colleague, EnrollmentService, EnrollOutcome, EnrollResult
+from stubbot.services.enrollments import (
+    PAYABLE_ORDER_STATUSES,
+    CancelOutcome,
+    CancelResult,
+    Colleague,
+    EnrollmentService,
+    EnrollOutcome,
+    EnrollResult,
+    MyApplication,
+)
 from stubbot.services.orders import OrderService
 from stubbot.services.registration import RegistrationService, RegistrationStep
 from stubbot.services.schedule import ScheduleService
@@ -44,11 +54,11 @@ from stubbot.tg.catalog_flow import (
     COLLEAGUE_PHONE_KEY,
     ORDER_KEY,
 )
-from stubbot.tg.flows import with_notice
 from stubbot.tg.formatting import safe
 from stubbot.tg.screen import delete_quietly, show_screen
 from stubbot.tg.states import PENDING_APPLY_KEY, Application
 from stubbot.utils.dates import local_today
+from stubbot.utils.links import with_draft_text
 from stubbot.utils.names import parse_full_name
 from stubbot.utils.phone import normalize_phone
 
@@ -285,55 +295,120 @@ async def on_apply(callback: CallbackQuery, callback_data: ScheduleCb, state: FS
         await flows.show_registration_step(message, state, session, client, step)
 
 
-# --- Мои заявки ------------------------------------------------------------------------------------------------
+# --- Мои записи ------------------------------------------------------------------------------------------------
+# Карточки листаются стрелками. Плательщику - заказ, оплата, «Как будете оплачивать?»; отменить запись сам он
+# может до даты за 2 недели до начала, позже (и коллеге из пары) - «Написать менеджеру».
+
+CANCEL_CHOICES = {
+    MyApplicationAction.TRANSFER: CancelChoice.TRANSFER,
+    MyApplicationAction.ADVANCE: CancelChoice.ADVANCE,
+    MyApplicationAction.REFUND: CancelChoice.REFUND,
+}
+
 
 @router.callback_query(CabinetCb.filter(F.action == CabinetAction.APPLICATIONS))
-async def open_applications(callback: CallbackQuery, session: AsyncSession, client: Client) -> None:
+async def open_applications(callback: CallbackQuery, session: AsyncSession, client: Client,
+                            settings: Settings) -> None:
     await callback.answer()
-    await _show_application(callback.message, session, client, index=0)
+    await _show_application(callback.message, session, client, settings, index=0)
 
 
 @router.callback_query(MyApplicationCb.filter(F.action.in_({MyApplicationAction.VIEW, MyApplicationAction.KEEP})))
 async def view_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                           client: Client) -> None:
-    """Стрелки ◀️ ▶️ и «Нет, оставить» - показать карточку заявки номер index."""
+                           client: Client, settings: Settings) -> None:
+    """Стрелки ◀️ ▶️, «Нет, оставить» и «К моим записям» - показать карточку записи номер index."""
     await callback.answer()
-    await _show_application(callback.message, session, client, callback_data.index)
+    await _show_application(callback.message, session, client, settings, callback_data.index)
+
+
+@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.PAY))
+async def choose_how_to_pay(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
+                            client: Client, settings: Settings) -> None:
+    """«Как будете оплачивать?» под записью: тот же выбор «Физлицо / Юрлицо», что после записи."""
+    app = await _find_application(session, client, settings, callback_data.enrollment_id)
+    order = app.order if app is not None and app.is_payer else None
+    if order is None or order.status not in PAYABLE_ORDER_STATUSES:
+        await callback.answer(texts.ORDER_UNAVAILABLE, show_alert=True)
+        return
+    await callback.answer()
+    await show_screen(callback.message, render.order_pay_choice(order, settings.timezone),
+                      keyboards.payer_choice(order.id, back_index=callback_data.index))
 
 
 @router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.ASK_CANCEL))
 async def ask_cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                                 client: Client) -> None:
-    apps = await EnrollmentService(session).my_applications(client.id)
-    app = next((a for a in apps if a.enrollment.id == callback_data.enrollment_id and a.cancellable), None)
-    if app is None:
+                                 client: Client, settings: Settings) -> None:
+    app = await _find_application(session, client, settings, callback_data.enrollment_id)
+    if app is None or not app.self_cancel:
         await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
         return
     await callback.answer()
-    await show_screen(callback.message, render.cancel_application_question(app),
+    if app.paid:
+        # Оплата была: выбор, что сделать с деньгами, - он же подтверждение отмены.
+        await show_screen(callback.message, render.cancel_paid_question(app, app.paid),
+                          keyboards.cancel_paid_choice(app.enrollment.id, callback_data.index))
+        return
+    await show_screen(callback.message, render.cancel_question(app),
                       keyboards.confirm_cancel_application(app.enrollment.id, callback_data.index))
 
 
-@router.callback_query(MyApplicationCb.filter(F.action == MyApplicationAction.CANCEL))
+@router.callback_query(MyApplicationCb.filter(F.action.in_({MyApplicationAction.CANCEL, *CANCEL_CHOICES})))
 async def cancel_application(callback: CallbackQuery, callback_data: MyApplicationCb, session: AsyncSession,
-                             client: Client) -> None:
-    # Своя ли заявка и можно ли её отменить - проверяет сервис (enrollment_id из кнопки может быть подделан).
-    if await EnrollmentService(session).cancel(client.id, callback_data.enrollment_id) is None:
+                             client: Client, settings: Settings, bot: Bot) -> None:
+    # Карточку берём до отмены: отменённая пропадёт из списка, а название и даты нужны для ответа и коллеге.
+    app = await _find_application(session, client, settings, callback_data.enrollment_id)
+    if app is None:
+        await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
+        return
+    # Своя ли запись, можно ли её отменить и была ли оплата - решает сервис под блокировкой заказа
+    # (enrollment_id из кнопки может быть подделан, а оплата - прийти, пока человек думал).
+    result = await EnrollmentService(session).cancel(client.id, app.enrollment.id, local_today(settings.timezone),
+                                                     CANCEL_CHOICES.get(callback_data.action))
+    if result.outcome is CancelOutcome.NOT_ALLOWED:
         await callback.answer(texts.APPLICATION_CANNOT_CANCEL, show_alert=True)
         return
     await callback.answer()
-    # Отменённая пропадает из списка - на её месте окажется следующая (или предыдущая, если была последней).
-    await _show_application(callback.message, session, client, callback_data.index,
-                            notice=texts.APPLICATION_CANCELLED)
+    if result.outcome is CancelOutcome.NEEDS_CHOICE:
+        # Пока был открыт вопрос «Да / Нет», пришла оплата - сначала решить, что сделать с деньгами.
+        await show_screen(callback.message, render.cancel_paid_question(app, result.paid),
+                          keyboards.cancel_paid_choice(app.enrollment.id, callback_data.index))
+        return
+    refund_url = None
+    if result.choice is CancelChoice.REFUND and settings.manager_url:
+        refund_url = with_draft_text(settings.manager_url, render.manager_refund_draft(result.order))
+    await show_screen(callback.message, render.cancelled(result, has_manager=bool(settings.manager_url)),
+                      keyboards.cancelled_actions(callback_data.index, schedule=result.choice is CancelChoice.TRANSFER,
+                                                  manager_url=refund_url))
+    await _tell_colleagues_cancelled(bot, result, app, client)
 
 
-async def _show_application(message: Message, session: AsyncSession, client: Client, index: int,
-                            notice: str | None = None) -> None:
-    apps = await EnrollmentService(session).my_applications(client.id)
+async def _tell_colleagues_cancelled(bot: Bot, result: CancelResult, app: MyApplication, client: Client) -> None:
+    """Коллегам из пары, которые уже в боте: записавший отменил запись."""
+    for colleague in result.colleagues:
+        if colleague.telegram_id is None:
+            continue
+        try:
+            await bot.send_message(colleague.telegram_id, render.colleague_cancelled(app, client.full_name))
+        except (TelegramForbiddenError, TelegramBadRequest):
+            logger.info("Коллеге #%s не удалось сообщить об отмене записи", colleague.id)
+
+
+async def _find_application(session: AsyncSession, client: Client, settings: Settings,
+                            enrollment_id: int) -> MyApplication | None:
+    """Своя запись из «Моих записей» (id из кнопки может быть подделан - ищем только среди своих)."""
+    apps = await EnrollmentService(session).my_applications(client.id, local_today(settings.timezone))
+    return next((app for app in apps if app.enrollment.id == enrollment_id), None)
+
+
+async def _show_application(message: Message, session: AsyncSession, client: Client, settings: Settings,
+                            index: int) -> None:
+    apps = await EnrollmentService(session).my_applications(client.id, local_today(settings.timezone))
     if not apps:
-        await show_screen(message, with_notice(notice, texts.MY_APPLICATIONS_EMPTY), keyboards.back_to_cabinet())
+        await show_screen(message, texts.MY_APPLICATIONS_EMPTY, keyboards.back_to_cabinet())
         return
     index = min(max(index, 0), len(apps) - 1)
     app = apps[index]
-    await show_screen(message, with_notice(notice, render.my_application_card(app)),
-                      keyboards.my_application_card(app.enrollment.id, index, len(apps), app.cancellable))
+    manager_url = (with_draft_text(settings.manager_url, render.manager_cancel_draft(app))
+                   if settings.manager_url else None)
+    await show_screen(message, render.my_application_card(app, settings.timezone, datetime.now(UTC)),
+                      keyboards.my_application_card(app, index, len(apps), manager_url))
