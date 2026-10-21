@@ -15,7 +15,6 @@ from stubbot.tg.callbacks import (
     ApplyAction,
     ApplyCb,
     ApplyPriceCb,
-    ApplySeatsCb,
     DictAction,
     DictCb,
     MyApplicationAction,
@@ -34,6 +33,8 @@ from stubbot.tg.callbacks import (
     NameCb,
     ConsentFormAction,
     ConsentFormCb,
+    OrderAction,
+    OrderCb,
     SelectDoneCb,
     SelectGroup,
     SkipOptionalCb,
@@ -248,29 +249,35 @@ def apply_prices(prices: list[tuple[int, str]]) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def apply_seats(choices: list[int]) -> InlineKeyboardMarkup:
-    builder = InlineKeyboardBuilder()
-    for n in choices:
-        label = texts.APPLY_SEATS_ONE if n == 1 else texts.APPLY_SEATS_MANY.format(n=n)
-        builder.button(text=label, callback_data=ApplySeatsCb(seats=n))
-    builder.adjust(1, 4)
-    builder.row(InlineKeyboardButton(text=texts.BTN_APPLY_CANCEL,
-                                     callback_data=ApplyCb(action=ApplyAction.CANCEL).pack()))
-    return builder.as_markup()
-
-
-def apply_comment() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text=texts.BTN_NO_COMMENT, callback_data=ApplyCb(action=ApplyAction.NO_COMMENT).pack())],
-        [InlineKeyboardButton(text=texts.BTN_APPLY_CANCEL, callback_data=ApplyCb(action=ApplyAction.CANCEL).pack())],
-    ])
-
-
-def apply_confirm() -> InlineKeyboardMarkup:
+def apply_input_cancel() -> InlineKeyboardMarkup:
+    """Под вопросами про коллегу (ответ - текстом): только «Отмена»."""
     return InlineKeyboardMarkup(inline_keyboard=[[
-        InlineKeyboardButton(text=texts.BTN_APPLY_SEND, callback_data=ApplyCb(action=ApplyAction.SEND).pack()),
         InlineKeyboardButton(text=texts.BTN_APPLY_CANCEL, callback_data=ApplyCb(action=ApplyAction.CANCEL).pack()),
     ]])
+
+
+def apply_confirm(pair: bool = False, colleague_ok: bool = False) -> InlineKeyboardMarkup:
+    """Проверка записи: для «Для двух коллег» - галочка «Коллега согласен» (без неё «Записаться» не пускает),
+    потом «✅ Записаться» и «✖️ Отмена»."""
+    rows = []
+    if pair:
+        mark = texts.CONSENT_MARK_ON if colleague_ok else texts.CONSENT_MARK_OFF
+        rows.append([InlineKeyboardButton(text=mark + texts.BTN_APPLY_COLLEAGUE_OK,
+                                          callback_data=ApplyCb(action=ApplyAction.COLLEAGUE_OK).pack())])
+    rows.append([InlineKeyboardButton(text=texts.BTN_APPLY_SEND, callback_data=ApplyCb(action=ApplyAction.SEND).pack())])
+    rows.append([InlineKeyboardButton(text=texts.BTN_APPLY_CANCEL,
+                                      callback_data=ApplyCb(action=ApplyAction.CANCEL).pack())])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def payer_choice(order_id: int) -> InlineKeyboardMarkup:
+    """Под «Вы записаны»: как будет оплачивать плательщик заказа."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text=texts.BTN_PAY_INDIVIDUAL,
+                              callback_data=OrderCb(action=OrderAction.INDIVIDUAL, order_id=order_id).pack())],
+        [InlineKeyboardButton(text=texts.BTN_PAY_ORGANIZATION,
+                              callback_data=OrderCb(action=OrderAction.ORGANIZATION, order_id=order_id).pack())],
+    ])
 
 
 def _myapp(action: MyApplicationAction, enrollment_id: int = 0, index: int = 0) -> str:

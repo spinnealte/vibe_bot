@@ -1,21 +1,26 @@
-"""Заявки: «Оставить заявку» и «Сообщить о наборе» под карточкой расписания, шаги заявки
-(тариф → число мест → комментарий → подтверждение), «Мои заявки» в кабинете. Все проверки - в EnrollmentService.
+"""Запись на курс: «📝 Записаться» и «Сообщить о наборе» под карточкой расписания, шаги записи (тариф → для двух
+коллег ФИО и телефон коллеги → проверка → «Записаться»), выбор «Физлицо / Юрлицо» и файл с реквизитами юрлица;
+«Мои заявки» в кабинете. Все проверки - в EnrollmentService и OrderService.
 
 В MVP-афише выключено (APPLICATIONS_ENABLED=false): роутер не подключается, кнопки не показываются.
-Шаги по кнопкам меняют одно и то же сообщение; после комментария текстом подтверждение приходит новым сообщением.
+Шаги по кнопкам меняют одно и то же сообщение; ответы текстом (ФИО, телефон коллеги) - новым сообщением.
 """
 
-from aiogram import F, Router
+import logging
+
+from aiogram import Bot, F, Router
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.config import Settings
-from stubbot.db.enums import ConsentType
+from stubbot.db.enums import ConsentType, PayerType
 from stubbot.db.models import Client
 from stubbot.services.consents import ConsentService
-from stubbot.services.enrollments import MAX_COMMENT_LENGTH, ApplyOutcome, EnrollmentService
+from stubbot.services.enrollments import Colleague, EnrollmentService, EnrollOutcome, EnrollResult
+from stubbot.services.orders import OrderService
 from stubbot.services.registration import RegistrationService, RegistrationStep
 from stubbot.services.schedule import ScheduleService
 from stubbot.tg import catalog_flow, flows, keyboards, render, texts
@@ -23,25 +28,37 @@ from stubbot.tg.callbacks import (
     ApplyAction,
     ApplyCb,
     ApplyPriceCb,
-    ApplySeatsCb,
     CabinetAction,
     CabinetCb,
     MyApplicationAction,
     MyApplicationCb,
+    OrderAction,
+    OrderCb,
     ScheduleAction,
     ScheduleCb,
 )
-from stubbot.tg.catalog_flow import CAROUSEL_INDEX_KEY
+from stubbot.tg.catalog_flow import (
+    CAROUSEL_INDEX_KEY,
+    COLLEAGUE_NAME_KEY,
+    COLLEAGUE_OK_KEY,
+    COLLEAGUE_PHONE_KEY,
+    ORDER_KEY,
+)
 from stubbot.tg.flows import with_notice
+from stubbot.tg.formatting import safe
 from stubbot.tg.screen import delete_quietly, show_screen
 from stubbot.tg.states import PENDING_APPLY_KEY, Application
 from stubbot.utils.dates import local_today
+from stubbot.utils.names import parse_full_name
+from stubbot.utils.phone import normalize_phone
+
+logger = logging.getLogger(__name__)
 
 router = Router(name="application")
 
 
 @router.callback_query(StateFilter(Application), ApplyCb.filter(F.action == ApplyAction.CANCEL))
-async def cancel_application(callback: CallbackQuery, state: FSMContext) -> None:
+async def cancel_enrollment_steps(callback: CallbackQuery, state: FSMContext) -> None:
     await callback.answer()
     index = (await state.get_data()).get(CAROUSEL_INDEX_KEY, 0)
     await state.clear()
@@ -53,83 +70,182 @@ async def on_price(callback: CallbackQuery, callback_data: ApplyPriceCb, state: 
                    client: Client, settings: Settings) -> None:
     await callback.answer()
     data = await state.get_data()
-    card, _ = await EnrollmentService(session).availability(client, data.get(PENDING_APPLY_KEY),
-                                                            local_today(settings.timezone))
+    today = local_today(settings.timezone)
+    card, _ = await EnrollmentService(session).availability(client, data.get(PENDING_APPLY_KEY), today)
     price = next((p for p in card.active_prices if p.id == callback_data.price_id), None) if card else None
     if price is None:
         await state.clear()
         await show_screen(callback.message, texts.APPLY_EXPIRED, keyboards.to_schedule(data.get(CAROUSEL_INDEX_KEY, 0)))
         return
     await state.update_data(price_id=price.id)
-    await catalog_flow.ask_seats(callback.message, state, price)
+    await catalog_flow.after_price(callback.message, state, session, client, today, price)
 
 
-@router.callback_query(Application.seats, ApplySeatsCb.filter())
-async def on_seats(callback: CallbackQuery, callback_data: ApplySeatsCb, state: FSMContext) -> None:
-    await callback.answer()
-    await state.update_data(seats=callback_data.seats)  # диапазон ещё раз проверит сервис при отправке
-    await catalog_flow.ask_comment(callback.message, state)
+# --- Коллега (тариф «Для двух коллег») -----------------------------------------------------------------------------
 
-
-@router.message(Application.comment, F.text)
-async def on_comment(message: Message, state: FSMContext, session: AsyncSession, client: Client,
-                     settings: Settings) -> None:
-    if len(message.text) > MAX_COMMENT_LENGTH:
-        await message.answer(texts.APPLY_COMMENT_TOO_LONG)
+@router.message(Application.colleague_name, F.text)
+async def on_colleague_name(message: Message, state: FSMContext) -> None:
+    name = parse_full_name(message.text)
+    if name is None:
+        await message.answer(texts.APPLY_COLLEAGUE_NAME_INVALID)
         return
-    await state.update_data(comment=message.text.strip())
+    await state.update_data({COLLEAGUE_NAME_KEY: name})
+    await catalog_flow.ask_colleague_phone(message, state)
+
+
+@router.message(Application.colleague_phone, F.text)
+async def on_colleague_phone(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                             settings: Settings) -> None:
+    phone = normalize_phone(message.text)
+    if phone is None:
+        await message.answer(texts.APPLY_COLLEAGUE_PHONE_INVALID)
+        return
+    if phone == client.phone:
+        await message.answer(texts.APPLY_COLLEAGUE_PHONE_IS_YOURS)
+        return
+    # Данные коллеги поменялись - галочку согласия ставят заново.
+    await state.update_data({COLLEAGUE_PHONE_KEY: phone, COLLEAGUE_OK_KEY: False})
     await catalog_flow.show_confirm(message, state, session, client, local_today(settings.timezone), in_place=False)
 
 
-@router.callback_query(Application.comment, ApplyCb.filter(F.action == ApplyAction.NO_COMMENT))
-async def on_no_comment(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
-                        settings: Settings) -> None:
-    await callback.answer()
-    await state.update_data(comment=None)
-    await catalog_flow.show_confirm(callback.message, state, session, client, local_today(settings.timezone))
-
-
-@router.callback_query(Application.confirm, ApplyCb.filter(F.action == ApplyAction.SEND))
-async def on_send(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
-                  settings: Settings) -> None:
-    await callback.answer()
-    data = await state.get_data()
-    await state.clear()
-    back = keyboards.to_schedule(data.get(CAROUSEL_INDEX_KEY, 0))
-    if PENDING_APPLY_KEY not in data:
-        await show_screen(callback.message, texts.APPLY_EXPIRED, back)
-        return
-    result = await EnrollmentService(session).apply(
-        client,
-        session_id=data[PENDING_APPLY_KEY],
-        price_option_id=data.get("price_id"),
-        seats=data.get("seats", 1),
-        comment=data.get("comment"),
-        today=local_today(settings.timezone),
-    )
-    match result.outcome:
-        case ApplyOutcome.CREATED:
-            text = texts.APPLY_CREATED
-        case ApplyOutcome.WAITLIST:
-            text = texts.APPLY_WAITLISTED
-        case ApplyOutcome.DUPLICATE:
-            status = result.enrollment.status.value if result.enrollment else "application"
-            text = texts.APPLY_DUPLICATE.format(status=texts.ENROLLMENT_STATUS_LABELS[status])
-        case ApplyOutcome.CLOSED:
-            text = texts.APPLY_CLOSED
-        case _:
-            text = texts.APPLY_EXPIRED
-    await show_screen(callback.message, text, back)
-
-
-@router.message(Application.comment)
-async def comment_expects_text(message: Message) -> None:
+@router.message(StateFilter(Application.colleague_name, Application.colleague_phone))
+async def colleague_expects_text(message: Message) -> None:
     await message.answer(texts.REG_TEXT_ONLY)
 
 
-@router.message(StateFilter(Application.price, Application.seats, Application.confirm))
+@router.callback_query(Application.confirm, ApplyCb.filter(F.action == ApplyAction.COLLEAGUE_OK))
+async def on_colleague_ok(callback: CallbackQuery, state: FSMContext) -> None:
+    """Галочка «Коллега согласен на передачу его ФИО и телефона»: каждое нажатие ставит или снимает её."""
+    data = await state.get_data()
+    if not data.get(COLLEAGUE_NAME_KEY):
+        await callback.answer(texts.UNKNOWN_CALLBACK)  # запись не вдвоём - галочки на экране нет
+        return
+    ok = not data.get(COLLEAGUE_OK_KEY, False)
+    await state.update_data({COLLEAGUE_OK_KEY: ok})
+    await callback.answer()
+    try:
+        await callback.message.edit_reply_markup(reply_markup=keyboards.apply_confirm(pair=True, colleague_ok=ok))
+    except TelegramBadRequest:
+        pass  # кнопки уже такие (два нажатия подряд) - менять нечего
+
+
+# --- «Записаться» -------------------------------------------------------------------------------------------------
+
+@router.callback_query(Application.confirm, ApplyCb.filter(F.action == ApplyAction.SEND))
+async def on_send(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
+                  settings: Settings, bot: Bot) -> None:
+    data = await state.get_data()
+    back = keyboards.to_schedule(data.get(CAROUSEL_INDEX_KEY, 0))
+    if PENDING_APPLY_KEY not in data:
+        await callback.answer()
+        await state.clear()
+        await show_screen(callback.message, texts.APPLY_EXPIRED, back)
+        return
+    colleague = None
+    if data.get(COLLEAGUE_NAME_KEY):
+        if not data.get(COLLEAGUE_OK_KEY):
+            await callback.answer(texts.APPLY_COLLEAGUE_OK_REQUIRED, show_alert=True)
+            return
+        colleague = Colleague(data[COLLEAGUE_NAME_KEY], data[COLLEAGUE_PHONE_KEY])
+    await callback.answer()
+    await state.clear()
+    result = await EnrollmentService(session).enroll(client, data[PENDING_APPLY_KEY], data.get("price_id"), colleague,
+                                                     local_today(settings.timezone))
+    message = callback.message
+    match result.outcome:
+        case EnrollOutcome.CREATED:
+            colleague_name = (result.colleague.full_name or colleague.full_name) if result.colleague else None
+            await show_screen(message, render.enrolled(result.card, result.order, colleague_name, settings.timezone),
+                              keyboards.payer_choice(result.order.id))
+            if result.colleague is not None:
+                await _tell_about_colleague(message, bot, result, client)
+            return
+        case EnrollOutcome.WAITLIST:
+            text = texts.APPLY_WAITLISTED_PAIR if colleague else texts.APPLY_WAITLISTED
+        case EnrollOutcome.DUPLICATE:
+            status = result.enrollment.status.value if result.enrollment else "application"
+            text = texts.APPLY_DUPLICATE.format(status=texts.ENROLLMENT_STATUS_LABELS[status])
+        case EnrollOutcome.COLLEAGUE_DUPLICATE:
+            text = texts.APPLY_COLLEAGUE_DUPLICATE
+        case EnrollOutcome.COLLEAGUE_IS_SELF:
+            text = texts.APPLY_COLLEAGUE_IS_SELF
+        case EnrollOutcome.CLOSED:
+            text = texts.APPLY_CLOSED
+        case EnrollOutcome.BUSY:
+            text = texts.APPLY_BUSY
+        case _:
+            text = texts.APPLY_EXPIRED
+    await show_screen(message, text, back)
+
+
+async def _tell_about_colleague(message: Message, bot: Bot, result: EnrollResult, client: Client) -> None:
+    """Коллега уже в боте - сообщаем ему, что его записали. Ещё нет - записавшему его реферальная ссылка, чтобы
+    пригласить коллегу: по телефону запись свяжется с его аккаунтом."""
+    colleague = result.colleague
+    if colleague.telegram_id is None:
+        me = await bot.me()  # имя бота - только из API
+        link = f"https://t.me/{me.username}?start=ref_{client.referral_code}"
+        await message.answer(texts.APPLY_INVITE_COLLEAGUE.format(phone=safe(colleague.phone), link=safe(link)))
+        return
+    try:
+        await bot.send_message(colleague.telegram_id, render.colleague_enrolled(result.card, client.full_name))
+    except (TelegramForbiddenError, TelegramBadRequest):
+        # Коллега заблокировал бота или не начинал с ним диалог - запись от этого не страдает.
+        logger.info("Коллеге #%s не удалось сообщить о записи", colleague.id)
+
+
+@router.message(StateFilter(Application.price, Application.confirm))
 async def application_expects_buttons(message: Message) -> None:
     await message.answer(texts.REG_USE_BUTTONS)
+
+
+# --- Оплата: физлицо / юрлицо ------------------------------------------------------------------------------------
+
+@router.callback_query(OrderCb.filter(F.action == OrderAction.INDIVIDUAL))
+async def pay_as_individual(callback: CallbackQuery, callback_data: OrderCb, state: FSMContext,
+                            session: AsyncSession, client: Client, settings: Settings) -> None:
+    order = await OrderService(session).choose_payer_type(client.id, callback_data.order_id, PayerType.INDIVIDUAL)
+    if order is None:
+        await callback.answer(texts.ORDER_UNAVAILABLE, show_alert=True)  # чужой или отменённый заказ
+        return
+    await callback.answer()
+    await state.clear()
+    await show_screen(callback.message, render.pay_individual(order, client.email, settings.timezone))
+
+
+@router.callback_query(OrderCb.filter(F.action == OrderAction.ORGANIZATION))
+async def pay_as_organization(callback: CallbackQuery, callback_data: OrderCb, state: FSMContext,
+                              session: AsyncSession, client: Client) -> None:
+    order = await OrderService(session).choose_payer_type(client.id, callback_data.order_id, PayerType.ORGANIZATION)
+    if order is None:
+        await callback.answer(texts.ORDER_UNAVAILABLE, show_alert=True)
+        return
+    await callback.answer()
+    await state.clear()
+    await state.set_state(Application.requisites)
+    await state.update_data({ORDER_KEY: order.id})
+    await show_screen(callback.message, texts.PAY_ORGANIZATION.format(number=order.number))
+
+
+@router.message(Application.requisites, F.document | F.photo)
+async def on_requisites(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
+    """Файл с реквизитами организации - любой документ (или фото карточки предприятия)."""
+    data = await state.get_data()
+    if message.document is not None:
+        file_id, file_name = message.document.file_id, message.document.file_name
+    else:
+        file_id, file_name = message.photo[-1].file_id, None
+    order = await OrderService(session).save_requisites(client.id, data.get(ORDER_KEY, 0), file_id, file_name)
+    await state.clear()
+    if order is None:
+        await message.answer(texts.ORDER_UNAVAILABLE)
+        return
+    await message.answer(texts.REQUISITES_RECEIVED.format(number=order.number))
+
+
+@router.message(Application.requisites)
+async def requisites_expect_file(message: Message) -> None:
+    await message.answer(texts.REQUISITES_FILE_ONLY)
 
 
 # --- Кнопки под карточкой расписания ----------------------------------------------------------------------
@@ -159,7 +275,7 @@ async def on_apply(callback: CallbackQuery, callback_data: ScheduleCb, state: FS
         return
 
     # Сначала профиль (там reply-клавиатуры и ввод текста - новыми сообщениями), поток запоминаем:
-    # после регистрации flows вернёт к заявке.
+    # после регистрации flows вернёт к записи.
     await delete_quietly(message)
     await state.update_data({PENDING_APPLY_KEY: callback_data.item_id, catalog_flow.CAROUSEL_INDEX_KEY: callback_data.index})
     await message.answer(texts.APPLY_NEEDS_PROFILE)

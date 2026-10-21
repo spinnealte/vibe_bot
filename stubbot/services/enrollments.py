@@ -1,27 +1,31 @@
+"""Запись на курс (полная версия, этап 1; решения 19-20.10.2026).
+
+«Записаться» сразу занимает место и создаёт заказ: сумма фиксируется по тарифу в момент записи, оплатить нужно
+за 72 часа (PAYMENT_HOURS). Записаться можно за себя или вдвоём с коллегой по тарифу «Для двух коллег» (цена за
+двоих, платит записывающий): коллега - отдельный клиент, у него своя запись по тому же заказу. Мест не хватает -
+лист ожидания (обоих, если записываются вдвоём), заказа нет.
+"""
+
 import logging
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.db.enums import (
-    ClientEventType,
-    EnrollmentSource,
-    EnrollmentStatus,
-    PriceUnit,
-)
-from stubbot.db.models import Client, CourseSession, Enrollment, PriceOption, Program
+from stubbot.db.enums import ClientEventType, EnrollmentSource, EnrollmentStatus, PriceUnit
+from stubbot.db.models import Client, CourseSession, Enrollment, Order, PriceOption, Program
+from stubbot.db.models.orders import PAYMENT_HOURS
 from stubbot.repositories.analytics import AnalyticsRepository
 from stubbot.repositories.enrollments import EnrollmentRepository
+from stubbot.repositories.orders import OrderRepository
+from stubbot.services.clients import ClientService
 from stubbot.services.schedule import ScheduleService, SessionCard
 
 logger = logging.getLogger(__name__)
 
-MAX_COMMENT_LENGTH = 1000
-MAX_SEATS = 10
-DEFAULT_MAX_SEATS = 5  # если тариф не ограничивает состав: «я + до 4 коллег», больше - через комментарий
+PAIR_SEATS = 2  # «Для двух коллег»: записывающий и его коллега
 # Клиент может сам отменить только ещё не подтверждённую заявку; подтверждённую - через менеджера.
 CLIENT_CANCELLABLE = (EnrollmentStatus.APPLICATION, EnrollmentStatus.WAITLIST)
 # Не показываем в «Моих заявках».
@@ -44,90 +48,136 @@ class MyApplication:
         return self.enrollment.status in CLIENT_CANCELLABLE
 
 
-class ApplyOutcome(StrEnum):
-    CREATED = "created"
-    WAITLIST = "waitlist"
-    DUPLICATE = "duplicate"
-    CLOSED = "closed"  # поток не найден, в архиве, прошёл, запись закрыта или истёк дедлайн
-    BAD_PRICE = "bad_price"
+@dataclass(frozen=True)
+class Colleague:
+    """Коллега для тарифа «Для двух коллег»: полные ФИО и телефон в E.164 - их вводит записывающий."""
+
+    full_name: str
+    phone: str
+
+
+class EnrollOutcome(StrEnum):
+    CREATED = "created"  # места заняты, заказ создан
+    WAITLIST = "waitlist"  # мест не хватило - лист ожидания, заказа нет
+    DUPLICATE = "duplicate"  # записывающий уже записан на это проведение
+    COLLEAGUE_DUPLICATE = "colleague_duplicate"  # коллега уже записан на это проведение
+    COLLEAGUE_IS_SELF = "colleague_is_self"  # телефон коллеги - телефон самого записывающего
+    CLOSED = "closed"  # проведение не найдено, в архиве, прошло, запись закрыта или истёк срок записи
+    BAD_PRICE = "bad_price"  # тариф не этого проведения; «для двух коллег» без коллеги или коллега к другому тарифу
+    BUSY = "busy"  # параллельная запись того же человека или коллеги - попробовать ещё раз
 
 
 @dataclass(frozen=True)
-class ApplyResult:
-    outcome: ApplyOutcome
-    enrollment: Enrollment | None = None
+class EnrollResult:
+    outcome: EnrollOutcome
+    card: SessionCard | None = None
+    enrollment: Enrollment | None = None  # запись записывающего (при DUPLICATE - уже существующая)
+    order: Order | None = None
+    colleague: Client | None = None
 
 
-def fixed_group_seats(price: PriceOption | None) -> int | None:
-    """Тариф «на группу» с фиксированным составом («для двух коллег») сам задаёт число мест."""
-    if price and price.unit is PriceUnit.PER_GROUP and price.max_seats and price.min_seats == price.max_seats:
-        return price.min_seats
-    return None
-
-
-def seat_choices(price: PriceOption | None) -> list[int]:
-    low = price.min_seats if price else 1
-    high = min(price.max_seats or DEFAULT_MAX_SEATS, MAX_SEATS) if price else DEFAULT_MAX_SEATS
-    return list(range(low, max(high, low) + 1))
+def is_pair_price(price: PriceOption | None) -> bool:
+    """Тариф «Для двух коллег»: цена за двоих, оба места - в одном заказе."""
+    return (price is not None and price.unit is PriceUnit.PER_GROUP
+            and price.min_seats == PAIR_SEATS and price.max_seats == PAIR_SEATS)
 
 
 class EnrollmentService:
     def __init__(self, session: AsyncSession) -> None:
         self.db = session
         self.enrollments = EnrollmentRepository(session)
+        self.orders = OrderRepository(session)
+        self.clients = ClientService(session)
         self.analytics = AnalyticsRepository(session)
         self.schedule = ScheduleService(session)
 
     async def availability(self, client: Client, session_id: int, today: date) -> tuple[SessionCard | None, Enrollment | None]:
-        """Карточка потока (None - подать нельзя) и уже существующая активная заявка клиента."""
+        """Карточка потока (None - записаться нельзя) и уже существующая активная запись клиента."""
         card = await self.schedule.card(session_id, today)
         if card is None or not card.accepts_applications or self._deadline_passed(card.session):
             return None, None
         return card, await self.enrollments.active_for(client.id, session_id)
 
-    async def apply(self, client: Client, session_id: int, price_option_id: int | None, seats: int,
-                    comment: str | None, today: date) -> ApplyResult:
+    async def enroll(self, client: Client, session_id: int, price_option_id: int | None, colleague: Colleague | None,
+                     today: date, now: datetime | None = None) -> EnrollResult:
+        """Записать клиента (и коллегу) на проведение: занять места и создать заказ - или лист ожидания."""
+        now = now or datetime.now(UTC)
+        # Места считаем под блокировкой проведения: двое не займут одно последнее место одновременно.
+        await self.enrollments.lock_session(session_id)
         card, existing = await self.availability(client, session_id, today)
         if card is None:
-            return ApplyResult(ApplyOutcome.CLOSED)
+            return EnrollResult(EnrollOutcome.CLOSED)
         if existing is not None:
-            return ApplyResult(ApplyOutcome.DUPLICATE, existing)
+            return EnrollResult(EnrollOutcome.DUPLICATE, card, existing)
 
         price = None
         if price_option_id is not None:
             price = next((p for p in card.active_prices if p.id == price_option_id), None)
             if price is None:
-                return ApplyResult(ApplyOutcome.BAD_PRICE)
-        seats = fixed_group_seats(price) or seats
-        if seats not in seat_choices(price):
-            return ApplyResult(ApplyOutcome.BAD_PRICE)
+                return EnrollResult(EnrollOutcome.BAD_PRICE, card)
+        elif card.active_prices:
+            return EnrollResult(EnrollOutcome.BAD_PRICE, card)  # тарифы есть - без выбора записаться нельзя
+        pair = is_pair_price(price)
+        if pair != (colleague is not None):
+            return EnrollResult(EnrollOutcome.BAD_PRICE, card)
 
+        colleague_client = None
+        if colleague is not None:
+            if colleague.phone == client.phone:
+                return EnrollResult(EnrollOutcome.COLLEAGUE_IS_SELF, card)
+            colleague_client = await self.clients.find_by_phone(colleague.phone)
+            if colleague_client is not None and colleague_client.id == client.id:
+                return EnrollResult(EnrollOutcome.COLLEAGUE_IS_SELF, card)
+            if colleague_client is not None and await self.enrollments.active_for(colleague_client.id, session_id):
+                return EnrollResult(EnrollOutcome.COLLEAGUE_DUPLICATE, card)
+
+        seats = PAIR_SEATS if pair else 1
         waitlist = card.goes_to_waitlist or (card.seats_left is not None and card.seats_left < seats)
-        enrollment = Enrollment(
-            client_id=client.id,
-            session_id=session_id,
-            price_option_id=price.id if price else None,
-            status=EnrollmentStatus.WAITLIST if waitlist else EnrollmentStatus.APPLICATION,
-            requested_seats=seats,
-            source=EnrollmentSource.BOT,
-            client_comment=(comment or None) and comment[:MAX_COMMENT_LENGTH],
-        )
+        order = None
         try:
-            # Savepoint: параллельная заявка (двойное нажатие) упрётся в частичный UNIQUE - не роняем транзакцию.
+            # Точка сохранения: если упрёмся в уникальность (двойное нажатие, параллельная запись), не останется
+            # ни заказа, ни записей, ни нового клиента-коллеги - а транзакция апдейта живёт дальше.
             async with self.db.begin_nested():
-                self.enrollments.add(enrollment)
+                if colleague is not None and colleague_client is None:
+                    colleague_client = await self.clients.add_offline(colleague.full_name, colleague.phone)
+                if not waitlist:
+                    order = await self.orders.add(Order(
+                        payer_client_id=client.id,
+                        session_id=session_id,
+                        price_option_id=price.id if price else None,
+                        total_amount=price.amount if price else None,  # цена закрепляется в момент записи
+                        due_at=now + timedelta(hours=PAYMENT_HOURS),
+                    ))
+                participants = [client] + ([colleague_client] if colleague_client else [])
+                enrollments = [Enrollment(
+                    client_id=person.id,
+                    session_id=session_id,
+                    price_option_id=price.id if price else None,
+                    order_id=order.id if order else None,
+                    status=EnrollmentStatus.WAITLIST if waitlist else EnrollmentStatus.APPLICATION,
+                    requested_seats=1,
+                    source=EnrollmentSource.BOT,
+                ) for person in participants]
+                for enrollment in enrollments:
+                    self.enrollments.add(enrollment)
+                await self.db.flush()
         except IntegrityError:
-            logger.info("Клиент #%s: повторная заявка на поток #%s отклонена базой", client.id, session_id)
-            return ApplyResult(ApplyOutcome.DUPLICATE, await self.enrollments.active_for(client.id, session_id))
+            logger.info("Клиент #%s: запись на поток #%s отклонена базой (повтор или параллельная запись)",
+                        client.id, session_id)
+            mine = await self.enrollments.active_for(client.id, session_id)
+            if mine is not None:
+                return EnrollResult(EnrollOutcome.DUPLICATE, card, mine)
+            return EnrollResult(EnrollOutcome.BUSY, card)
 
-        self.analytics.add_event(
-            client.id,
-            ClientEventType.APPLICATION_CREATED,
-            {"session_id": session_id, "status": enrollment.status.value, "seats": seats},
-        )
-        logger.info("Клиент #%s: заявка #%s на поток #%s - %s, мест %s", client.id, enrollment.id, session_id,
-                    enrollment.status.value, seats)
-        return ApplyResult(ApplyOutcome.WAITLIST if waitlist else ApplyOutcome.CREATED, enrollment)
+        self.analytics.add_event(client.id, ClientEventType.APPLICATION_CREATED, {
+            "session_id": session_id, "status": enrollments[0].status.value, "pair": pair,
+            "order": order.number if order else None,
+        })
+        logger.info("Клиент #%s: запись на поток #%s - %s%s%s", client.id, session_id, enrollments[0].status.value,
+                    f", заказ №{order.number}" if order else "",
+                    f", с коллегой #{colleague_client.id}" if colleague_client else "")
+        return EnrollResult(EnrollOutcome.WAITLIST if waitlist else EnrollOutcome.CREATED, card, enrollments[0],
+                            order, colleague_client)
 
     async def my_applications(self, client_id: int) -> list[MyApplication]:
         """Заявки для «Мои заявки». Отменённые самим клиентом не показываем - он их уже убрал."""

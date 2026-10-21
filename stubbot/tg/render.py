@@ -4,12 +4,12 @@ import re
 from html import escape, unescape
 
 from stubbot.db.enums import EnrollmentStatus
-from stubbot.db.models import CourseSession, PriceOption, Program, Venue
+from stubbot.db.models import CourseSession, Order, PriceOption, Program, Venue
 from stubbot.services.enrollments import MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.formatting import safe
-from stubbot.utils.dates import format_range_with_year, format_time_range
+from stubbot.utils.dates import format_moment, format_range_with_year, format_time_range
 from stubbot.utils.money import format_rub
 from stubbot.utils.names import short_name
 
@@ -202,6 +202,58 @@ def about_text(venues: list[Venue], with_manager: bool) -> str:
 
 def price_label(price: PriceOption) -> str:
     return f"{price.label} - {format_rub(price.amount)}{texts.PRICE_UNIT_SUFFIX[price.unit.value]}"
+
+
+# --- Запись на курс (полная версия, этап 1) ---------------------------------------------------------------------
+
+def apply_confirm(card: SessionCard, price: PriceOption | None, colleague_name: str | None,
+                  colleague_phone: str | None, waitlist: bool) -> str:
+    """«Проверьте запись»: курс, даты, тариф, участники; для пары - просьба отметить согласие коллеги."""
+    participants = (texts.APPLY_PARTICIPANTS_PAIR.format(name=safe(colleague_name), phone=safe(colleague_phone))
+                    if colleague_name else "")
+    note = texts.APPLY_CONFIRM_WAITLIST_NOTE if waitlist else texts.APPLY_CONFIRM_NOTE
+    if colleague_name:
+        note += texts.APPLY_COLLEAGUE_CONSENT_NOTE
+    return texts.APPLY_CONFIRM.format(
+        title=safe(session_title(card.session)),
+        dates=_dates_text(card.session),
+        price=safe(price_label(price)) if price else texts.APPLY_NO_PRICE,
+        participants=participants,
+        note=note,
+    )
+
+
+def order_amount(order: Order) -> str:
+    return format_rub(order.total_amount) if order.total_amount is not None else texts.APPLY_NO_PRICE
+
+
+def enrolled(card: SessionCard, order: Order, colleague_name: str | None, timezone: str) -> str:
+    """«Вы записаны!»: заказ, сумма, срок оплаты и вопрос «Как будете оплачивать?»."""
+    return texts.APPLY_ENROLLED.format(
+        title=safe(session_title(card.session)),
+        dates=_dates_text(card.session),
+        colleague=texts.APPLY_ENROLLED_COLLEAGUE.format(name=safe(colleague_name)) if colleague_name else "",
+        number=order.number,
+        amount=order_amount(order),
+        due=format_moment(order.due_at, timezone),
+    )
+
+
+def pay_individual(order: Order, email: str | None, timezone: str) -> str:
+    return texts.PAY_INDIVIDUAL.format(
+        number=order.number,
+        email=texts.PAY_INDIVIDUAL_EMAIL.format(email=safe(email)) if email else "",
+        due=format_moment(order.due_at, timezone),
+    )
+
+
+def colleague_enrolled(card: SessionCard, enroller_name: str | None) -> str:
+    """Коллеге, который уже есть в боте: его записали вместе с собой."""
+    return texts.COLLEAGUE_ENROLLED.format(
+        title=safe(session_title(card.session)),
+        dates=_dates_text(card.session),
+        name=safe(enroller_name),
+    )
 
 
 def my_application_card(app: MyApplication) -> str:

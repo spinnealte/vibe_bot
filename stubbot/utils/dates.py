@@ -64,6 +64,12 @@ def format_short(day: date) -> str:
     return day.strftime("%d.%m")
 
 
+def format_moment(moment: datetime, timezone: str) -> str:
+    """23 октября, 14:30 - в часовом поясе центра (срок оплаты, «запись до»)."""
+    local = moment.astimezone(ZoneInfo(timezone))
+    return f"{local.day} {MONTHS_GENITIVE[local.month - 1]}, {local:%H:%M}"
+
+
 def format_time_range(start: time | None, end: time | None) -> str | None:
     if start and end:
         return f"{start:%H:%M}–{end:%H:%M}"

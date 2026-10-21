@@ -11,6 +11,11 @@ class EnrollmentRepository:
     def __init__(self, session: AsyncSession) -> None:
         self.session = session
 
+    async def lock_session(self, session_id: int) -> None:
+        """Блокировка строки проведения до конца транзакции: записи на одно проведение идут по очереди, и двое
+        не займут одно последнее место одновременно."""
+        await self.session.execute(select(CourseSession.id).where(CourseSession.id == session_id).with_for_update())
+
     async def active_for(self, client_id: int, session_id: int) -> Enrollment | None:
         return await self.session.scalar(
             select(Enrollment).where(

@@ -24,6 +24,11 @@ class ClientRepository:
     async def get_by_phone(self, phone: str) -> Client | None:
         return await self.session.scalar(select(Client).where(Client.phone == phone, Client.deleted_at.is_(None)))
 
+    async def add(self, client: Client) -> Client:
+        self.session.add(client)
+        await self.session.flush()  # нужен id для записи на курс
+        return client
+
     async def insert_if_absent(self, values: dict[str, Any]) -> Client | None:
         """INSERT … ON CONFLICT DO NOTHING RETURNING. None - строка не вставлена (гонка двух /start или коллизия кода)."""
         stmt = pg_insert(Client).values(**values).on_conflict_do_nothing().returning(Client)

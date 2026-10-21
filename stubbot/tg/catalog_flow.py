@@ -6,7 +6,6 @@
 """
 
 from datetime import date
-from zoneinfo import ZoneInfo
 
 from aiogram.fsm.context import FSMContext
 from aiogram.types import InlineKeyboardMarkup, Message
@@ -15,17 +14,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.config import get_settings
 from stubbot.db.enums import SessionStatus
 from stubbot.db.models import Client, PriceOption
-from stubbot.services.enrollments import EnrollmentService, fixed_group_seats, seat_choices
+from stubbot.services.enrollments import PAIR_SEATS, EnrollmentService, is_pair_price
 from stubbot.services.schedule import ScheduleService, SessionCard
 from stubbot.tg import keyboards, render, texts
-from stubbot.tg.formatting import safe
 from stubbot.tg.screen import DEFAULT_COVER, Photo, send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import PENDING_APPLY_KEY, Application
-from stubbot.utils.dates import MONTHS_GENITIVE, format_range
+from stubbot.utils.dates import format_moment
 from stubbot.utils.links import with_draft_text
 
 CAROUSEL_INDEX_KEY = "carousel_index"
 PROMPT_MESSAGE_KEY = "prompt_message_id"
+# Запись «Для двух коллег» (FSM data): ФИО и телефон коллеги, галочка «Коллега согласен».
+COLLEAGUE_NAME_KEY = "colleague_name"
+COLLEAGUE_PHONE_KEY = "colleague_phone"
+COLLEAGUE_OK_KEY = "colleague_ok"
+ORDER_KEY = "order_id"  # заказ, по которому ждём файл с реквизитами юрлица
 
 
 async def _screen(message: Message, text: str, markup: InlineKeyboardMarkup | None = None, photo: Photo = None,
@@ -101,11 +104,11 @@ def deadline_text(card: SessionCard, timezone: str) -> str | None:
     deadline = card.session.registration_deadline
     if deadline is None or not card.accepts_applications:
         return None
-    local = deadline.astimezone(ZoneInfo(timezone))
-    return f"{local.day} {MONTHS_GENITIVE[local.month - 1]}, {local:%H:%M}"
+    return format_moment(deadline, timezone)
 
 
-# --- Заявка ----------------------------------------------------------------------------------------------------
+# --- Запись на курс --------------------------------------------------------------------------------------------
+# Тариф → (для двух коллег) ФИО и телефон коллеги → проверка (галочка за коллегу) → «Записаться».
 
 async def start_application(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                             today: date, session_id: int, index: int = 0, in_place: bool = True) -> None:
@@ -129,53 +132,56 @@ async def start_application(message: Message, state: FSMContext, session: AsyncS
         return
     price = prices[0] if prices else None
     await state.update_data(price_id=price.id if price else None)
-    await ask_seats(message, state, price, in_place)
+    await after_price(message, state, session, client, today, price, in_place)
 
 
-async def ask_seats(message: Message, state: FSMContext, price: PriceOption | None, in_place: bool = True) -> None:
-    fixed = fixed_group_seats(price)
-    choices = seat_choices(price)
-    if fixed is not None or choices == [1]:
-        await state.update_data(seats=fixed or 1)
-        await ask_comment(message, state, in_place)
+async def after_price(message: Message, state: FSMContext, session: AsyncSession, client: Client, today: date,
+                      price: PriceOption | None, in_place: bool = True) -> None:
+    """Тариф выбран: «Для двух коллег» - сначала данные коллеги, иначе - сразу проверка записи."""
+    if is_pair_price(price):
+        await ask_colleague_name(message, state, in_place)
         return
-    await state.set_state(Application.seats)
-    await _screen(message, texts.APPLY_CHOOSE_SEATS, keyboards.apply_seats(choices), in_place=in_place)
+    await show_confirm(message, state, session, client, today, in_place)
 
 
-async def ask_comment(message: Message, state: FSMContext, in_place: bool = True) -> None:
-    await state.set_state(Application.comment)
-    prompt = await _screen(message, texts.APPLY_ASK_COMMENT, keyboards.apply_comment(), in_place=in_place)
-    # Ответ придёт текстом ниже - тогда у этого сообщения уберём кнопки (иначе висят «Без комментария»/«Отменить»).
+async def ask_colleague_name(message: Message, state: FSMContext, in_place: bool = True) -> None:
+    await state.set_state(Application.colleague_name)
+    prompt = await _screen(message, texts.APPLY_ASK_COLLEAGUE_NAME, keyboards.apply_input_cancel(), in_place=in_place)
+    # Ответ придёт текстом ниже - тогда у этого сообщения уберём кнопку «Отмена».
+    await state.update_data({PROMPT_MESSAGE_KEY: prompt.message_id})
+
+
+async def ask_colleague_phone(message: Message, state: FSMContext) -> None:
+    """После ФИО (ответ текстом): вопрос новым сообщением, у прошлого убираем кнопку."""
+    await _strip_prompt(message, state)
+    await state.set_state(Application.colleague_phone)
+    prompt = await _screen(message, texts.APPLY_ASK_COLLEAGUE_PHONE, keyboards.apply_input_cancel(), in_place=False)
     await state.update_data({PROMPT_MESSAGE_KEY: prompt.message_id})
 
 
 async def show_confirm(message: Message, state: FSMContext, session: AsyncSession, client: Client,
                        today: date, in_place: bool = True) -> None:
+    """«Проверьте запись». Места пересчитываются заново: пока человек вводил данные, их могли занять."""
     data = await state.get_data()
     index = data.get(CAROUSEL_INDEX_KEY, 0)
     card, existing = await EnrollmentService(session).availability(client, data[PENDING_APPLY_KEY], today)
     if card is None or existing is not None:
         await start_application(message, state, session, client, today, data[PENDING_APPLY_KEY], index, in_place)
         return
-    if not in_place and data.get(PROMPT_MESSAGE_KEY):
-        await strip_keyboard(message, data[PROMPT_MESSAGE_KEY])
+    if not in_place:
+        await _strip_prompt(message, state)
     price = next((p for p in card.active_prices if p.id == data.get("price_id")), None)
-    seats = data.get("seats", 1)
+    pair = is_pair_price(price)
+    seats = PAIR_SEATS if pair else 1
     waitlist = card.goes_to_waitlist or (card.seats_left is not None and card.seats_left < seats)
     await state.set_state(Application.confirm)
-    await _screen(
-        message,
-        texts.APPLY_CONFIRM.format(
-            title=safe(render.session_title(card.session)),
-            dates=(format_range(card.session.start_date, card.session.end_date) if card.session.start_date
-                   else texts.DATES_TBD),
-            price=safe(render.price_label(price)) if price else texts.APPLY_NO_PRICE,
-            seats=seats,
-            comment=safe(data.get("comment")) if data.get("comment") else f"<i>{texts.APPLY_NO_COMMENT}</i>",
-            waitlist_note=texts.APPLY_CONFIRM_WAITLIST_NOTE if waitlist else "",
-        ),
-        keyboards.apply_confirm(),
-        in_place=in_place,
-    )
+    text = render.apply_confirm(card, price, data.get(COLLEAGUE_NAME_KEY) if pair else None,
+                                data.get(COLLEAGUE_PHONE_KEY) if pair else None, waitlist)
+    await _screen(message, text, keyboards.apply_confirm(pair, bool(data.get(COLLEAGUE_OK_KEY))), in_place=in_place)
+
+
+async def _strip_prompt(message: Message, state: FSMContext) -> None:
+    prompt_id = (await state.get_data()).get(PROMPT_MESSAGE_KEY)
+    if prompt_id:
+        await strip_keyboard(message, prompt_id)
 

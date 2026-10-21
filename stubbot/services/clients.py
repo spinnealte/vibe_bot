@@ -98,6 +98,21 @@ class ClientService:
         logger.info("Клиент #%s: /start по ссылке %s%s", client.id, shown,
                     " (источник найден)" if source_id else "")
 
+    async def find_by_phone(self, phone: str) -> Client | None:
+        return await self.clients.get_by_phone(phone)
+
+    async def add_offline(self, full_name: str, phone: str) -> Client:
+        """Клиент без Telegram - коллега, которого записали на курс вместе с собой (ФИО и телефон ввёл записавший,
+        согласие коллеги он подтвердил галочкой). Когда коллега придёт в бот и поделится этим телефоном, его аккаунт
+        свяжется с этой записью. Телефон занят (параллельная запись) - IntegrityError, его ловит вызывающий."""
+        client = await self.clients.add(Client(
+            full_name=full_name,
+            phone=phone,
+            referral_code=secrets.token_urlsafe(REFERRAL_CODE_BYTES),
+        ))
+        logger.info("Новый клиент #%s без Telegram (коллега по записи)", client.id)
+        return client
+
     async def count_referrals(self, client_id: int) -> int:
         return await self.clients.count_referrals(client_id)
 

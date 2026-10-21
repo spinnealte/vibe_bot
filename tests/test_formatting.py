@@ -4,7 +4,7 @@ from types import SimpleNamespace
 import pytest
 
 from stubbot.db.enums import PriceUnit
-from stubbot.services.enrollments import fixed_group_seats, seat_choices
+from stubbot.services.enrollments import is_pair_price
 from stubbot.tg.render import program_caption, session_caption, split_html, visible_length
 from stubbot.utils.dates import format_day, format_range, format_time_range
 from stubbot.utils.money import format_rub
@@ -42,15 +42,12 @@ def _price(unit: PriceUnit, min_seats: int = 1, max_seats: int | None = None) ->
     return SimpleNamespace(unit=unit, min_seats=min_seats, max_seats=max_seats)
 
 
-def test_seats_for_prices() -> None:
-    pair = _price(PriceUnit.PER_GROUP, 2, 2)
-    assert fixed_group_seats(pair) == 2
-    assert fixed_group_seats(_price(PriceUnit.PER_PERSON)) is None
-    assert fixed_group_seats(None) is None
-    assert seat_choices(None) == [1, 2, 3, 4, 5]
-    assert seat_choices(_price(PriceUnit.PER_PERSON)) == [1, 2, 3, 4, 5]
-    assert seat_choices(_price(PriceUnit.PER_GROUP, 3, 6)) == [3, 4, 5, 6]
-    assert seat_choices(_price(PriceUnit.PER_PERSON, 1, 50)) == list(range(1, 11))  # не больше MAX_SEATS
+def test_only_pair_tariff_takes_a_colleague() -> None:
+    """Записаться можно за себя или вдвоём с коллегой (решение 20.10.2026): групп на любое число людей нет."""
+    assert is_pair_price(_price(PriceUnit.PER_GROUP, 2, 2))
+    assert not is_pair_price(_price(PriceUnit.PER_PERSON))
+    assert not is_pair_price(_price(PriceUnit.PER_GROUP, 3, 6))
+    assert not is_pair_price(None)
 
 
 def _card(description: str | None, lecturers: int = 3, program_html: str | None = None) -> SimpleNamespace:

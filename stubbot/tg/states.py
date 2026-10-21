@@ -34,12 +34,14 @@ class EditProfile(StatesGroup):
 
 
 class Application(StatesGroup):
-    """Заявка на поток. В data: apply_session_id, price_id, seats, comment."""
+    """Запись на поток. В data: apply_session_id, price_id; для «Для двух коллег» - colleague_name, colleague_phone,
+    colleague_ok (галочка согласия коллеги); после записи юрлицом - order_id (ждём файл с реквизитами)."""
 
     price = State()
-    seats = State()
-    comment = State()
+    colleague_name = State()  # ждём текст: полные ФИО коллеги
+    colleague_phone = State()  # ждём текст: телефон коллеги
     confirm = State()
+    requisites = State()  # ждём файл с реквизитами организации
 
 
 class AdminDict(StatesGroup):

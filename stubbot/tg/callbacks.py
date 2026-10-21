@@ -110,18 +110,26 @@ class ApplyPriceCb(CallbackData, prefix="aprice"):
     price_id: int
 
 
-class ApplySeatsCb(CallbackData, prefix="aseats"):
-    seats: int
-
-
 class ApplyAction(StrEnum):
-    NO_COMMENT = "nocomment"
-    SEND = "send"
+    COLLEAGUE_OK = "colleague"  # галочка «Коллега согласен на передачу его ФИО и телефона»
+    SEND = "send"  # «✅ Записаться»
     CANCEL = "cancel"
 
 
 class ApplyCb(CallbackData, prefix="apply"):
     action: ApplyAction
+
+
+class OrderAction(StrEnum):
+    INDIVIDUAL = "ind"  # оплачиваю как физическое лицо
+    ORGANIZATION = "org"  # как юридическое лицо - пришлю реквизиты файлом
+
+
+class OrderCb(CallbackData, prefix="order"):
+    """Кнопки под «Вы записаны»: заказ оплачивает только его плательщик (id из кнопки сверяется)."""
+
+    action: OrderAction
+    order_id: int
 
 
 class MyApplicationAction(StrEnum):
