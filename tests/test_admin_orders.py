@@ -23,7 +23,7 @@ from stubbot.services.enrollments import CancelOutcome, CancelResult, MyApplicat
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import admin_orders_views as views
 from stubbot.tg import admin_views, render, texts
-from stubbot.tg.callbacks import OrderAdminAction, OrderAdminCb
+from stubbot.tg.callbacks import ClientAdminAction, ClientAdminCb, OrderAdminAction, OrderAdminCb
 from stubbot.tg.outgoing import CAPTION_LIMIT, Outgoing, OutgoingKind, SendOnce, from_message
 from stubbot.utils.money import format_rub
 
@@ -277,8 +277,11 @@ def test_card_text_and_buttons_waiting_for_payment() -> None:
     assert texts.ADMIN_ORDER_INVOICE_NONE in text and format_rub(500_000) in text
     assert _rows(markup) == [[texts.BTN_ADMIN_ORDER_INVOICE], [texts.BTN_ADMIN_ORDER_PAY],
                              [texts.BTN_ADMIN_ORDER_APPLY.format(amount=format_rub(500_000))],
-                             [texts.BTN_ADMIN_ORDER_REQUISITES], [texts.BTN_ADMIN_ORDER_WRITE],
+                             [texts.BTN_ADMIN_ORDER_REQUISITES],
+                             [texts.BTN_ADMIN_ORDER_CLIENT, texts.BTN_ADMIN_ORDER_WRITE],
                              [texts.BTN_ADMIN_ORDER_REMOVE], [texts.BTN_ADMIN_TO_ORDERS]]
+    to_client = ClientAdminCb.unpack(markup.inline_keyboard[4][0].callback_data)
+    assert (to_client.action, to_client.item_id, to_client.value) == (ClientAdminAction.VIEW, PAYER.id, "o77")
     back = OrderAdminCb.unpack(markup.inline_keyboard[-1][0].callback_data)
     assert (back.action, back.value) == (OrderAdminAction.LIST, OrderCategory.OVERDUE.value)
 
@@ -291,7 +294,7 @@ def test_card_of_order_without_amount_and_of_cancelled_paid_order() -> None:
     text, markup = views.order_card(_card(cancelled, paid=2_000_000), TZ, NOW)
     assert "Клиент выбрал: <b>оставить на аванс</b>" in text and texts.ADMIN_ORDER_MONEY_PENDING in text
     assert _rows(markup) == [[texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(2_000_000))],
-                             [texts.BTN_ADMIN_ORDER_REFUND], [texts.BTN_ADMIN_ORDER_WRITE],
+                             [texts.BTN_ADMIN_ORDER_REFUND], [texts.BTN_ADMIN_ORDER_CLIENT, texts.BTN_ADMIN_ORDER_WRITE],
                              [texts.BTN_ADMIN_TO_ORDERS]]  # бронь уже снята - снимать нечего
     text, markup = views.order_card(_card(cancelled, paid=2_000_000, settled=True), TZ, NOW)
     assert texts.ADMIN_ORDER_MONEY_SETTLED in text and texts.BTN_ADMIN_ORDER_REFUND not in str(_rows(markup))
@@ -399,10 +402,12 @@ def test_notifications_go_to_owner_and_admins_once() -> None:
 def test_admin_menu_shows_orders_only_with_enrollment(monkeypatch) -> None:
     monkeypatch.setattr(admin_views, "get_settings", lambda: SimpleNamespace(applications_enabled=True))
     text, markup = admin_views.menu()
-    assert _rows(markup)[0] == [texts.BTN_ADMIN_ORDERS] and "Заказы" in text
+    assert _rows(markup)[0] == [texts.BTN_ADMIN_ORDERS, texts.BTN_ADMIN_CLIENTS] and "Заказы" in text
+    assert "Клиенты" in text
     monkeypatch.setattr(admin_views, "get_settings", lambda: SimpleNamespace(applications_enabled=False))
     text, markup = admin_views.menu()
     assert texts.BTN_ADMIN_ORDERS not in str(_rows(markup)) and "Заказы" not in text
+    assert texts.BTN_ADMIN_CLIENTS not in str(_rows(markup))
 
 
 def test_popups_fit_telegram_limit() -> None:

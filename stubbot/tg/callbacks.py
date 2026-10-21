@@ -207,6 +207,32 @@ class OrderAdminCb(CallbackData, prefix="aord"):
     page: int = 0
 
 
+class ClientAdminAction(StrEnum):
+    """Раздел «👥 Клиенты» (полная версия, этап 1, шаг 4.2). item_id - клиент, проведение или курс (см. действие);
+    value у карточки клиента - откуда пришли (туда ведёт «⬅️ Назад»), у «Отправить» и правки аванса - ключ."""
+
+    MENU = "menu"
+    FIND = "find"  # поиск по ФИО или телефону
+    VIEW = "v"  # карточка клиента item_id
+    WRITE = "write"  # написать клиенту item_id
+    SEND = "send"  # «✅ Отправить» после предпросмотра
+    ADVANCE = "adv"  # правка аванса клиента item_id
+    ADVANCE_OK = "advok"
+    PARTICIPANTS = "part"  # участники проведения item_id
+    CANCELLED = "cnld"  # отменившие запись на проведение item_id
+    WAITLISTS = "wls"  # курсы, где кто-то ждёт нового проведения
+    WAITLIST = "wl"  # лист ожидания курса item_id
+    INVITED = "inv"  # «✔️ Пригласили всех»: вопрос
+    INVITED_OK = "invok"
+    CANCEL = "cnl"  # бросить ввод - назад к карточке клиента
+
+
+class ClientAdminCb(CallbackData, prefix="acl"):
+    action: ClientAdminAction
+    item_id: int = 0
+    value: str = ""
+
+
 class DictAction(StrEnum):
     # Список, page - страница. У проведений - месяцы раздела: value - SessionScope («» афиша, «a» архив,
     # «p» прошедшие). У курсов value «a» - курсы из архива.

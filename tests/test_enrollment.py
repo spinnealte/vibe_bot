@@ -25,7 +25,7 @@ ME = SimpleNamespace(id=10, phone="+79990000010", full_name="Петров Пёт
 
 
 def _session(prices=(FULL, PAIR), status=SessionStatus.REGISTRATION_OPEN) -> SimpleNamespace:
-    return SimpleNamespace(id=5, status=status, price_options=list(prices), registration_deadline=None)
+    return SimpleNamespace(id=5, program_id=3, status=status, price_options=list(prices), registration_deadline=None)
 
 
 class _Schedule:
@@ -41,9 +41,13 @@ class _Enrollments:
         self.active = active or {}
         self.added: list = []
         self.locked: list[int] = []
+        self.left_course_waitlist: list[tuple[list[int], int]] = []
 
     async def lock_session(self, session_id: int) -> None:
         self.locked.append(session_id)
+
+    async def leave_course_waitlist(self, client_ids: list[int], program_id: int, now) -> None:
+        self.left_course_waitlist.append((client_ids, program_id))
 
     async def active_for(self, client_id: int, session_id: int):
         return self.active.get(client_id)
@@ -130,6 +134,8 @@ def test_pair_enrolls_a_new_colleague_on_the_same_order() -> None:
     assert [(e.client_id, e.order_id) for e in service.enrollments.added] == [(10, 77), (50, 77)]
     assert [e.enrolled_by_client_id for e in service.enrollments.added] == [None, 10]  # коллегу записал плательщик
     assert result.colleague is colleague
+    # Записались - нового проведения курса больше не ждут: админ не пригласит их второй раз (решение 21.10.2026).
+    assert service.enrollments.left_course_waitlist == [([10, 50], 3)]
 
 
 def test_pair_uses_existing_client_with_that_phone() -> None:

@@ -21,13 +21,12 @@ from stubbot.db.enums import MANUAL_PAYMENT_METHODS, OrderStatus
 from stubbot.db.models import Client
 from stubbot.services.admin_log import log_admin_action
 from stubbot.services.admin_orders import ActionResult, AdminOrderCard, AdminOrderService, OrderCategory, Outcome
-from stubbot.services.clients import ClientService
 from stubbot.tg import admin_orders_views as views
 from stubbot.tg import render, texts
 from stubbot.tg.callbacks import OrderAdminAction, OrderAdminCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.tg.flows import with_notice
-from stubbot.tg.outgoing import Outgoing, OutgoingKind, deliver, from_message, send_once
+from stubbot.tg.outgoing import Delivery, Outgoing, OutgoingKind, deliver, deliver_to_client, from_message, send_once
 from stubbot.tg.render import visible_length
 from stubbot.tg.screen import send_screen, show_screen, strip_keyboard
 from stubbot.tg.states import AdminOrder
@@ -404,23 +403,12 @@ async def send_to_client(callback: CallbackQuery, callback_data: OrderAdminCb, s
         pass
     service = _service(session, client)
     card = await service.card(callback_data.order_id)
-    payer, delivered = card.payer, False
-    if payer.telegram_id is None:
-        result = texts.ADMIN_ORDER_NO_TELEGRAM
-    else:
-        try:
-            await deliver(bot, payer.telegram_id, Outgoing.from_data(draft))
-            result, delivered = texts.ADMIN_ORDER_DELIVERED, True
-            if data.get(KIND_KEY) == KIND_INVOICE:
-                await service.mark_invoice_sent(card.order.id)
-        except TelegramForbiddenError:
-            await ClientService(session).mark_bot_blocked(payer.telegram_id)
-            result = texts.ADMIN_ORDER_NOT_DELIVERED_BLOCKED
-        except TelegramBadRequest:
-            result = texts.ADMIN_ORDER_NOT_DELIVERED
+    delivery = await deliver_to_client(bot, session, card.payer, Outgoing.from_data(draft))
+    if delivery is Delivery.DELIVERED and data.get(KIND_KEY) == KIND_INVOICE:
+        await service.mark_invoice_sent(card.order.id)
     log_admin_action(client.telegram_id, "заказ", "№%s: сообщение клиенту (%s) - %s", card.order.number,
-                     data.get(KIND_KEY), "доставлено" if delivered else "не доставлено")
-    await callback.message.answer(result.format(name=views.person(payer), phone=views.phone(payer)),
+                     data.get(KIND_KEY), delivery.value)
+    await callback.message.answer(views.delivery_report(delivery, card.payer),
                                   reply_markup=views.to_card(card.order.id))
 
 

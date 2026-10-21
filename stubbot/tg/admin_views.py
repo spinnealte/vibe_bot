@@ -18,7 +18,16 @@ from stubbot.config import get_settings
 from stubbot.services.admin_dictionaries import DictField, DictionarySpec, DictKind, FieldKind
 from stubbot.services.admin_sessions import NO_DATES, SessionScope
 from stubbot.tg import texts
-from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb, OrderAdminAction, OrderAdminCb
+from stubbot.tg.callbacks import (
+    AdminAction,
+    AdminCb,
+    ClientAdminAction,
+    ClientAdminCb,
+    DictAction,
+    DictCb,
+    OrderAdminAction,
+    OrderAdminCb,
+)
 from stubbot.tg.formatting import safe
 from stubbot.tg.render import plain_excerpt, short
 from stubbot.utils.dates import format_month
@@ -27,6 +36,7 @@ from stubbot.utils.schedule_input import format_days, format_deadline
 
 PAGE_SIZE = 8
 CURRENT_EXCERPT = 200  # сколько текущей программы показывать при правке
+FROM_COURSE = "c"  # лист ожидания открыт из карточки курса (admin_clients_views.FROM_COURSE)
 
 # Запись в списке: id, название, действует ли (не в архиве).
 ListEntry = tuple[int, str, bool]
@@ -54,12 +64,17 @@ def _pager(page: int, pages: int, prev_data: str, next_data: str) -> list[Inline
 # --- Меню ------------------------------------------------------------------------------------------------------
 
 def menu() -> tuple[str, InlineKeyboardMarkup]:
-    """Меню админки. «🧾 Заказы» - первой строкой, только вместе с записью на курсы (APPLICATIONS_ENABLED)."""
+    """Меню админки. «🧾 Заказы» и «👥 Клиенты» - первой строкой, только вместе с записью на курсы
+    (APPLICATIONS_ENABLED)."""
     orders = get_settings().applications_enabled
     builder = InlineKeyboardBuilder()
     if orders:
-        builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_ORDERS,
-                                         callback_data=OrderAdminCb(action=OrderAdminAction.MENU).pack()))
+        builder.row(
+            InlineKeyboardButton(text=texts.BTN_ADMIN_ORDERS,
+                                 callback_data=OrderAdminCb(action=OrderAdminAction.MENU).pack()),
+            InlineKeyboardButton(text=texts.BTN_ADMIN_CLIENTS,
+                                 callback_data=ClientAdminCb(action=ClientAdminAction.MENU).pack()),
+        )
     kinds = [InlineKeyboardButton(text=texts.ADMIN_DICT_TITLES[kind.value], callback_data=_dict(kind, DictAction.LIST))
              for kind in (DictKind.COURSES, DictKind.SESSIONS, DictKind.LECTURERS, DictKind.VENUES,
                           DictKind.SPECIALTIES, DictKind.POSITIONS)]
@@ -68,7 +83,8 @@ def menu() -> tuple[str, InlineKeyboardMarkup]:
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_ARCHIVE_MENU, callback_data=_admin(AdminAction.ARCHIVE)))
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_EXPORT, callback_data=_admin(AdminAction.EXPORT)))
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_CLOSE, callback_data=_admin(AdminAction.CLOSE)))
-    return texts.ADMIN_MENU + (texts.ADMIN_MENU_ORDERS if orders else ""), builder.as_markup()
+    extra = texts.ADMIN_MENU_ORDERS + texts.ADMIN_MENU_CLIENTS if orders else ""
+    return texts.ADMIN_MENU + extra, builder.as_markup()
 
 
 def archive_menu(courses: int, sessions: int, past: int) -> tuple[str, InlineKeyboardMarkup]:
@@ -239,13 +255,15 @@ def card(spec: DictionarySpec, item_id: int, values: Mapping[str, Any], active: 
 
 
 def course_card_markup(spec: DictionarySpec, item_id: int, has_program: bool, index: int = 0, total: int = 1,
-                       prev_id: int = 0, next_id: int = 0, archived: bool = False) -> InlineKeyboardMarkup:
+                       prev_id: int = 0, next_id: int = 0, archived: bool = False,
+                       waiting: int = 0) -> InlineKeyboardMarkup:
     """Под карточкой курса (фото + подпись): ◀️ n/N ▶️ по курсам раздела и действия.
 
     Раздел «Курсы» (библиотека): «✏️» у каждого поля, программа, «В архив», «➕ Новый курс». Афиша отсюда не
     меняется - проведений, дат и «показывать без дат» здесь нет. В архиве (archived) карточка «как была»:
     без правки, только «Вернуть из архива» и «Удалить навсегда». index/total - место курса среди курсов
-    своего раздела, prev_id/next_id - соседи (0 - края).
+    своего раздела, prev_id/next_id - соседи (0 - края). waiting - сколько ждут нового проведения (полная
+    версия): больше нуля - кнопка «🕒 Лист ожидания · N».
     """
     builder = InlineKeyboardBuilder()
     builder.row(*_pager(index, total, _dict(spec.kind, DictAction.VIEW, prev_id),
@@ -255,6 +273,10 @@ def course_card_markup(spec: DictionarySpec, item_id: int, has_program: bool, in
     if has_program:
         builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_PROGRAM,
                                          callback_data=_dict(spec.kind, DictAction.PROGRAM, item_id, page=0)))
+    if waiting:
+        builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_COURSE_WAITLIST.format(count=waiting),
+                                         callback_data=ClientAdminCb(action=ClientAdminAction.WAITLIST,
+                                                                     item_id=item_id, value=FROM_COURSE).pack()))
     builder.row(_archive_button(spec.kind, item_id, not archived))
     if archived:
         builder.row(_delete_button(spec.kind, item_id))
@@ -268,17 +290,22 @@ def course_card_markup(spec: DictionarySpec, item_id: int, has_program: bool, in
 
 def session_card_markup(spec: DictionarySpec, item_id: int, status: str,
                         scope: SessionScope = SessionScope.ACTIVE, index: int = 0, total: int = 1,
-                        prev_id: int = 0, next_id: int = 0) -> InlineKeyboardMarkup:
+                        prev_id: int = 0, next_id: int = 0, participants: int | None = None) -> InlineKeyboardMarkup:
     """Под карточкой проведения (как в афише): ◀️ n/N ▶️ по проведениям того же месяца и раздела и действия.
 
     В афише (ACTIVE): «✏️» полей, статус в одно нажатие, «Скопировать», «В архив» - это и есть «убрать из афиши».
     В архиве (ARCHIVED): «Вернуть из архива», «Скопировать», «Удалить навсегда». В прошедших (PAST) вернуть
     нечего - только «Скопировать» (повторить с новыми датами) и «Удалить навсегда».
     index/total - место проведения среди проведений месяца, prev_id/next_id - соседи (0 - края).
+    participants - число записанных (полная версия): кнопка «👥 Участники · N» сразу под стрелками.
     """
     kind = spec.kind
     builder = InlineKeyboardBuilder()
     builder.row(*_pager(index, total, _dict(kind, DictAction.VIEW, prev_id), _dict(kind, DictAction.VIEW, next_id)))
+    if participants is not None:
+        builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_PARTICIPANTS.format(count=participants),
+                                         callback_data=ClientAdminCb(action=ClientAdminAction.PARTICIPANTS,
+                                                                     item_id=item_id).pack()))
     copy = InlineKeyboardButton(text=texts.BTN_ADMIN_COPY, callback_data=_dict(kind, DictAction.COPY, item_id))
     if scope is SessionScope.ACTIVE:
         builder.attach(_edit_buttons(spec, item_id, 0))

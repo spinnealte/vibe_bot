@@ -13,8 +13,16 @@ from stubbot.services.admin_orders import AdminOrderCard, OrderCategory
 from stubbot.services.enrollments import CancelResult, MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
-from stubbot.tg.callbacks import AdminAction, AdminCb, OrderAdminAction, OrderAdminCb
+from stubbot.tg.callbacks import (
+    AdminAction,
+    AdminCb,
+    ClientAdminAction,
+    ClientAdminCb,
+    OrderAdminAction,
+    OrderAdminCb,
+)
 from stubbot.tg.formatting import safe
+from stubbot.tg.outgoing import Delivery
 from stubbot.tg.render import dates_text, price_label, session_title
 from stubbot.utils.dates import format_moment
 from stubbot.utils.money import format_rub
@@ -23,6 +31,7 @@ from stubbot.utils.names import short_name
 PAGE_SIZE = 8
 NEW_SCREEN = "n"  # value кнопки «Открыть заказ» под уведомлением: карточку - новым сообщением
 TOKEN_SEPARATOR = "."  # value кнопки способа оплаты: «invoice.<ключ>»
+BACK_ORDER = "o"  # карточка клиента открыта из заказа: value «o<id заказа>» - туда и вернёт «Назад»
 
 Screen = tuple[str, InlineKeyboardMarkup]
 
@@ -201,7 +210,11 @@ def _card_markup(card: AdminOrderCard, now: datetime) -> InlineKeyboardMarkup:
         rows.append(_button(texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(card.paid)),
                             OrderAdminAction.CREDIT, order.id))
         rows.append(_button(texts.BTN_ADMIN_ORDER_REFUND, OrderAdminAction.REFUND, order.id))
-    rows.append(_button(texts.BTN_ADMIN_ORDER_WRITE, OrderAdminAction.WRITE, order.id))
+    rows.append([
+        InlineKeyboardButton(text=texts.BTN_ADMIN_ORDER_CLIENT, callback_data=ClientAdminCb(
+            action=ClientAdminAction.VIEW, item_id=card.payer.id, value=f"{BACK_ORDER}{order.id}").pack()),
+        InlineKeyboardButton(text=texts.BTN_ADMIN_ORDER_WRITE, callback_data=_cb(OrderAdminAction.WRITE, order.id)),
+    ])
     if order.status is not OrderStatus.CANCELLED:
         rows.append(_button(texts.BTN_ADMIN_ORDER_REMOVE, OrderAdminAction.REMOVE, order.id))
     category = card.category(now)
@@ -294,6 +307,19 @@ def preview_buttons(order_id: int, token: str) -> InlineKeyboardMarkup:
         InlineKeyboardButton(text=texts.BTN_ADMIN_SEND, callback_data=_cb(OrderAdminAction.SEND, order_id, token)),
         InlineKeyboardButton(text=texts.BTN_ADMIN_CANCEL, callback_data=_cb(OrderAdminAction.CANCEL, order_id)),
     ])
+
+
+_DELIVERY_REPORTS = {
+    Delivery.DELIVERED: texts.ADMIN_ORDER_DELIVERED,
+    Delivery.BLOCKED: texts.ADMIN_ORDER_NOT_DELIVERED_BLOCKED,
+    Delivery.FAILED: texts.ADMIN_ORDER_NOT_DELIVERED,
+    Delivery.NO_TELEGRAM: texts.ADMIN_ORDER_NO_TELEGRAM,
+}
+
+
+def delivery_report(delivery: Delivery, client: Client) -> str:
+    """«✅ Доставлено: …» или почему не дошло - с телефоном, чтобы связаться иначе."""
+    return _DELIVERY_REPORTS[delivery].format(name=person(client), phone=phone(client))
 
 
 def to_card(order_id: int) -> InlineKeyboardMarkup:

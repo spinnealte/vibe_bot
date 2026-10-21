@@ -175,6 +175,8 @@
 
 **program_interests** [MVP] - «сообщите о наборе»: client_id, program_id, created_at, notified_at, UNIQUE(client_id, program_id).
 В FULL это и лист ожидания курса: туда попадают отменившие запись без оплаты (notified_at сбрасывается), приглашает админ.
+notified_at - «больше не ждёт»: админ отметил «Пригласили всех» или человек сам записался на проведение курса
+(решение 21.10.2026); новое «Сообщить о наборе» снова сбрасывает его в NULL.
 **enrollment_status_history** [FULL] - enrollment_id, from_status, to_status, changed_by_admin_id, note, changed_at
 
 ### F. Заказы и оплаты [FULL]

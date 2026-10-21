@@ -12,7 +12,12 @@ from enum import StrEnum
 from typing import Any
 
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.types import InlineKeyboardMarkup, Message
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from stubbot.db.models import Client
+from stubbot.services.clients import ClientService
 
 TEXT_LIMIT = 4096  # лимиты Telegram на видимый текст
 CAPTION_LIMIT = 1024
@@ -63,6 +68,27 @@ async def deliver(bot: Bot, chat_id: int, outgoing: Outgoing, markup: InlineKeyb
             return await bot.send_photo(chat_id, outgoing.file_id, caption=caption, reply_markup=markup)
         case _:
             return await bot.send_message(chat_id, outgoing.text, reply_markup=markup)
+
+
+class Delivery(StrEnum):
+    DELIVERED = "delivered"
+    BLOCKED = "blocked"  # клиент заблокировал бота
+    FAILED = "failed"  # Telegram не принял (файл, разметка)
+    NO_TELEGRAM = "no_telegram"  # клиента нет в боте (коллега, которого записали)
+
+
+async def deliver_to_client(bot: Bot, session: AsyncSession, client: Client, outgoing: Outgoing) -> Delivery:
+    """Сообщение от админа клиенту. Заблокировал бота - отмечаем это у клиента."""
+    if client.telegram_id is None:
+        return Delivery.NO_TELEGRAM
+    try:
+        await deliver(bot, client.telegram_id, outgoing)
+    except TelegramForbiddenError:
+        await ClientService(session).mark_bot_blocked(client.telegram_id)
+        return Delivery.BLOCKED
+    except TelegramBadRequest:
+        return Delivery.FAILED
+    return Delivery.DELIVERED
 
 
 class SendOnce:

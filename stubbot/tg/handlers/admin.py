@@ -27,6 +27,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from stubbot.config import get_settings
 from stubbot.db.models import Client
+from stubbot.services.admin_clients import AdminClientService
 from stubbot.services.admin_courses import AdminCourseService
 from stubbot.services.admin_dictionaries import (
     BUTTON_KINDS,
@@ -907,12 +908,15 @@ async def _show_course_card(message: Message, session: AsyncSession, client: Cli
     archived = not service.is_active(item)
     siblings = await service.siblings(item)
     index = siblings.index(item.id) if item.id in siblings else 0
+    # Полная версия: кто ждёт нового проведения курса - кнопка «🕒 Лист ожидания · N».
+    waiting = (await AdminClientService(session, client.telegram_id).waiting_count(item.id)
+               if get_settings().applications_enabled else 0)
     markup = admin_views.course_card_markup(
         service.spec, item.id, bool(item.program_html),
         index=index, total=max(len(siblings), 1),
         prev_id=siblings[index - 1] if index > 0 else 0,
         next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
-        archived=archived,
+        archived=archived, waiting=waiting,
     )
     hint = texts.ADMIN_ARCHIVED_SINCE_HINT.format(date=_local_date(item.archived_at)) if archived else None
     caption = _fit_notice(hint, render.program_caption(item))
@@ -931,11 +935,15 @@ async def _show_session_card(message: Message, session: AsyncSession, client: Cl
     scope = service.scope(item)
     siblings = await service.siblings(item)
     index = siblings.index(item.id) if item.id in siblings else 0
+    # Полная версия: кто записан - кнопка «👥 Участники · N».
+    participants = (await AdminClientService(session, client.telegram_id).participants_count(item.id)
+                    if get_settings().applications_enabled else None)
     markup = admin_views.session_card_markup(
         service.spec, item.id, item.status.value, scope,
         index=index, total=max(len(siblings), 1),
         prev_id=siblings[index - 1] if index > 0 else 0,
         next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
+        participants=participants,
     )
     card = SessionCard(session=item, seats_left=None)
     caption = _session_caption(card)

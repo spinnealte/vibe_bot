@@ -1,4 +1,6 @@
-from sqlalchemy import select
+from datetime import datetime
+
+from sqlalchemy import select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -93,6 +95,16 @@ class EnrollmentRepository:
     def add(self, enrollment: Enrollment) -> None:
         self.session.add(enrollment)
 
+    async def leave_course_waitlist(self, client_ids: list[int], program_id: int, now: datetime) -> None:
+        """Записались на проведение курса - его нового проведения больше не ждут (решение 21.10.2026): админ
+        не пригласит их второй раз. notified_at - «больше не ждёт»: пригласили или записался."""
+        await self.session.execute(
+            update(ProgramInterest)
+            .where(ProgramInterest.client_id.in_(client_ids), ProgramInterest.program_id == program_id,
+                   ProgramInterest.notified_at.is_(None))
+            .values(notified_at=now)
+        )
+
     async def put_on_course_waitlist(self, client_id: int, program_id: int) -> None:
         """Лист ожидания курса (та же таблица, что «Сообщить о наборе»): админ пригласит на новое проведение.
         Уже был в списке и его приглашали - снова «ждёт приглашения»."""
@@ -104,11 +116,13 @@ class EnrollmentRepository:
         await self.session.execute(stmt)
 
     async def add_interest(self, client_id: int, program_id: int) -> bool:
-        """True - подписка создана сейчас, False - уже была."""
+        """True - подписка создана сейчас (или снова ждёт: прошлую уже закрыли приглашением или записью),
+        False - уже ждёт."""
         stmt = (
             pg_insert(ProgramInterest)
             .values(client_id=client_id, program_id=program_id)
-            .on_conflict_do_nothing(index_elements=["client_id", "program_id"])
+            .on_conflict_do_update(index_elements=["client_id", "program_id"], set_={"notified_at": None},
+                                   where=ProgramInterest.notified_at.is_not(None))
             .returning(ProgramInterest.id)
         )
         return await self.session.scalar(stmt) is not None

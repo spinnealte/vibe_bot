@@ -967,6 +967,7 @@ BTN_ADMIN_ORDER_TOTAL = "✏️ Сумма заказа"
 BTN_ADMIN_ORDER_APPLY = "🔁 Зачесть аванс · {amount}"
 BTN_ADMIN_ORDER_REQUISITES = "📎 Реквизиты"
 BTN_ADMIN_ORDER_WRITE = "✉️ Написать клиенту"
+BTN_ADMIN_ORDER_CLIENT = "👤 Клиент"
 BTN_ADMIN_ORDER_REMOVE = "🗑 Снять бронь"
 BTN_ADMIN_ORDER_CREDIT = "💰 Зачислить на аванс · {amount}"
 BTN_ADMIN_ORDER_REFUND = "↩️ Деньги вернули"
@@ -1138,6 +1139,137 @@ ADVANCE_CREDITED = (
     "💰 <b>На Ваш аванс зачислено {amount}</b>\n\n"
     "Менеджер зачтёт его в оплату любого курса. Аванс виден в личном кабинете."
 )
+
+# --- Админка: клиенты (полная версия, этап 1, шаг 4.2; тексты согласованы 21.10.2026) --------------------------
+
+BTN_ADMIN_CLIENTS = "👥 Клиенты"
+ADMIN_MENU_CLIENTS = "\n👥 <b>Клиенты</b> - поиск, карточка клиента, участники проведений, листы ожидания курсов."
+ADMIN_CLIENTS = (
+    "👥 <b>Клиенты</b>\n\n"
+    "Всего в базе: <b>{total}</b>\n\n"
+    "Найдите клиента или откройте листы ожидания курсов 👇"
+)
+BTN_ADMIN_CLIENT_FIND = "🔎 Найти клиента"
+BTN_ADMIN_WAITLISTS = "🕒 Листы ожидания курсов"
+BTN_ADMIN_TO_CLIENTS = "⬅️ К клиентам"
+BTN_ADMIN_FIND_AGAIN = "🔎 Искать ещё"
+ADMIN_CLIENT_ASK_QUERY = (
+    "🔎 <b>Поиск клиента</b>\n\n"
+    "Напишите часть ФИО (от 2 букв) или последние цифры телефона (от 4).\n\n"
+    "<i>Пример:</i> Петров или 4567"
+)
+ADMIN_CLIENT_QUERY_SHORT = "❗️ Нужно от 2 букв ФИО или от 4 цифр телефона."
+ADMIN_CLIENT_FOUND = "🔎 <b>Найдено: {count}</b> по «{query}»{more}"
+ADMIN_CLIENT_FOUND_MORE = "\n\n<i>Показаны первые {limit} - уточните запрос.</i>"
+ADMIN_CLIENT_NOT_FOUND = "🔎 Никого не нашли по «{query}». Попробуйте часть фамилии или телефона."
+BTN_ADMIN_CLIENT_ROW = "{name} · …{phone}{not_in_bot}"
+ADMIN_CLIENT_NOT_IN_BOT = " (не в боте)"
+
+# Карточка клиента.
+ADMIN_CLIENT_TITLE = "👤 <b>{name}</b>"
+ADMIN_CLIENT_PHONE = "📞 {value}"
+ADMIN_CLIENT_TELEGRAM = "💬 Telegram: {value}"
+ADMIN_CLIENT_TG_NO_USERNAME = "есть, без имени пользователя"
+ADMIN_CLIENT_TG_NONE = "не в боте"
+ADMIN_CLIENT_TG_BLOCKED = "⛔️ бот заблокирован"
+ADMIN_CLIENT_EMAIL = "📧 {value}"
+ADMIN_CLIENT_PLACE = "🏙 {value}"
+ADMIN_CLIENT_SPECIALTIES = "🩺 {value}"
+ADMIN_CLIENT_MARKETING = "🔔 Рассылки: {value}"
+ADMIN_CLIENT_MARKETING_ON = "да"
+ADMIN_CLIENT_MARKETING_OFF = "нет"
+ADMIN_CLIENT_ADVANCE = "💰 Аванс: {amount}"
+ADMIN_CLIENT_SINCE = "🕒 В базе с {date}"
+ADMIN_CLIENT_ENROLLMENTS = "📝 <b>Записи:</b>"
+ADMIN_CLIENT_ENROLLMENT = "• {title} · {dates} · {status}{order}"
+ADMIN_CLIENT_ENROLLMENT_ORDER = " · №{number}"
+ADMIN_CLIENT_ENROLLMENTS_MORE = "<i>и ещё {count}</i>"
+ADMIN_CLIENT_NO_ENROLLMENTS = "📝 Записей нет."
+ADMIN_CLIENT_WAITING = "🕒 <b>Ждёт курс:</b> {courses}"
+ADMIN_CLIENT_WAITING_COURSE = "{title} (с {date})"
+BTN_ADMIN_CLIENT_ORDER = "🧾 №{number}"
+BTN_ADMIN_CLIENT_WRITE = "✉️ Написать"
+BTN_ADMIN_CLIENT_ADVANCE = "💰 Изменить аванс"
+BTN_ADMIN_CLIENT_BACK = "⬅️ Назад"
+ADMIN_CLIENT_UNAVAILABLE = "Клиент не найден - откройте карточку заново."  # всплывающее, без HTML
+
+# Сообщение клиенту из карточки (как в заказе: предпросмотр → «Отправить»).
+ADMIN_CLIENT_ASK_MESSAGE = (
+    "✉️ <b>Сообщение клиенту</b>\n\n"
+    "Напишите текст или пришлите файл или фото с подписью.\n"
+    "Получатель: <b>{name}</b>."
+)
+BTN_ADMIN_TO_CLIENT = "⬅️ К клиенту"
+
+# Правка аванса.
+ADMIN_CLIENT_ASK_ADVANCE = (
+    "💰 <b>Аванс клиента</b> · {name}\n\n"
+    "Сейчас: <b>{balance}</b>\n\n"
+    "Напишите сумму со знаком и причину, например:\n"
+    "<code>+5000 подарок за отзыв</code>\n"
+    "<code>-5000 ошибка</code>"
+)
+ADMIN_CLIENT_ADVANCE_INVALID = "❗️ Нужен знак, сумма и причина - например: +5000 подарок за отзыв."
+ADMIN_CLIENT_ADVANCE_NO_REASON = "❗️ Добавьте причину после суммы - например: +5000 подарок за отзыв."
+ADMIN_CLIENT_ADVANCE_TOO_LONG = "❗️ Причина длинновата - до {limit} символов."
+ADMIN_CLIENT_ADVANCE_CONFIRM = (
+    "💰 <b>{action} {amount} - {name}?</b>\n\n"
+    "Причина: {reason}\n"
+    "Аванс станет: <b>{balance}</b>"
+)
+ADMIN_CLIENT_ADVANCE_ADD = "Начислить"
+ADMIN_CLIENT_ADVANCE_TAKE = "Списать"
+ADMIN_CLIENT_ADVANCE_NEGATIVE = "❗️ Списать больше аванса нельзя: сейчас {balance}."
+BTN_ADMIN_YES = "Да"
+ADMIN_CLIENT_ADVANCE_SAVED = "✅ Аванс изменён. Сейчас: {balance}."
+
+# Участники проведения.
+BTN_ADMIN_PARTICIPANTS = "👥 Участники · {count}"
+ADMIN_PARTICIPANTS = (
+    "👥 <b>Участники</b> · {title} · {dates}\n\n"
+    "✅ Место закреплено: <b>{confirmed}</b>\n"
+    "⏳ Ждём оплату: <b>{awaiting}</b>\n"
+    "🕒 Лист ожидания: <b>{waitlist}</b>"
+    "{seats}"
+)
+ADMIN_PARTICIPANTS_SEATS = "\nСвободно мест: <b>{left}</b> из {capacity}"
+ADMIN_PARTICIPANTS_EMPTY = "\n\n<i>Пока никто не записался.</i>"
+# Ключи - EnrollmentStatus: значок перед ФИО в кнопке участника.
+ADMIN_PARTICIPANT_MARKS = {
+    "confirmed": "✅", "attended": "🎓", "completed": "🎓", "no_show": "🚫", "application": "⏳", "waitlist": "🕒",
+    "cancelled_by_client": "✖️", "cancelled_by_admin": "✖️",
+}
+BTN_ADMIN_PARTICIPANT = "{mark} {name}{order}"
+BTN_ADMIN_CANCELLED_PARTICIPANTS = "✖️ Отменили · {count}"
+ADMIN_CANCELLED_PARTICIPANTS = (
+    "✖️ <b>Отменили запись</b> · {title} · {dates}\n\n"
+    "Всего: <b>{count}</b> - сами в «Моих записях» или снятием брони."
+)
+BTN_ADMIN_TO_PARTICIPANTS = "⬅️ К участникам"
+BTN_ADMIN_TO_SESSION = "⬅️ К проведению"
+
+# Листы ожидания курсов.
+BTN_ADMIN_COURSE_WAITLIST = "🕒 Лист ожидания · {count}"
+ADMIN_WAITLISTS = "🕒 <b>Листы ожидания курсов</b>\n\nКурсы, где кто-то ждёт нового проведения 👇"
+ADMIN_WAITLISTS_EMPTY = "🕒 <b>Листы ожидания курсов</b>\n\nСейчас никто не ждёт нового проведения."
+BTN_ADMIN_WAITLIST_ROW = "{title} · {count}"
+ADMIN_COURSE_WAITLIST = (
+    "🕒 <b>Лист ожидания курса</b> · {title}\n\n"
+    "Ждут нового проведения: <b>{count}</b>\n"
+    "Сюда попадают нажавшие «Сообщить о наборе» и отменившие запись без оплаты.\n\n"
+    "Откроете запись - пригласите их (напишите через карточку клиента) и нажмите «✔️ Пригласили всех»: "
+    "список очистится."
+)
+ADMIN_COURSE_WAITLIST_EMPTY = "🕒 <b>Лист ожидания курса</b> · {title}\n\nСейчас никто не ждёт."
+BTN_ADMIN_WAITLIST_CLIENT = "{name} · с {date}"
+BTN_ADMIN_INVITED = "✔️ Пригласили всех"
+ADMIN_INVITED_CONFIRM = (
+    "✔️ <b>Отметить приглашёнными всех ({count})?</b>\n\n"
+    "Курс: {title}. Они уйдут из листа ожидания - снова попадут туда, если опять нажмут «Сообщить о наборе»."
+)
+ADMIN_INVITED_DONE = "✔️ Отмечено приглашёнными: {count}."
+BTN_ADMIN_TO_WAITLISTS = "⬅️ К листам ожидания"
+BTN_ADMIN_TO_COURSE = "⬅️ К курсу"
 
 # --- Прочее ---------------------------------------------------------------------------------------------------
 

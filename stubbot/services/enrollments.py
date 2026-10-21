@@ -230,6 +230,9 @@ class EnrollmentService:
             if mine is not None:
                 return EnrollResult(EnrollOutcome.DUPLICATE, card, mine)
             return EnrollResult(EnrollOutcome.BUSY, card)
+        # Записались (или встали в лист ожидания проведения) - лист ожидания курса им больше не нужен.
+        await self.enrollments.leave_course_waitlist([person.id for person in participants],
+                                                     card.session.program_id, now)
 
         self.analytics.add_event(client.id, ClientEventType.APPLICATION_CREATED, {
             "session_id": session_id, "status": enrollments[0].status.value, "pair": pair,
