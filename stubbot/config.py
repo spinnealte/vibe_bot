@@ -55,6 +55,11 @@ class Settings(BaseSettings):
     def is_admin(self, telegram_id: int) -> bool:
         return telegram_id == self.owner_telegram_id or telegram_id in self.admin_ids
 
+    @property
+    def admin_chat_ids(self) -> list[int]:
+        """Кому уведомления о записях и заказах: владелец и все из ADMIN_IDS, без повторов."""
+        return list(dict.fromkeys([self.owner_telegram_id, *self.admin_ids]))
+
     @field_validator("manager_url", mode="before")
     @classmethod
     def _check_manager_url(cls, value: object) -> object:

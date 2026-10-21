@@ -173,6 +173,40 @@ class AdminCb(CallbackData, prefix="adm"):
     action: AdminAction
 
 
+class OrderAdminAction(StrEnum):
+    """Раздел «🧾 Заказы» (полная версия, этап 1, шаг 4). order_id - заказ; value - раздел или способ оплаты."""
+
+    MENU = "menu"  # разделы с числом заказов
+    LIST = "ls"  # заказы раздела value, страница page
+    VIEW = "v"  # карточка заказа
+    FIND = "find"  # поиск по номеру
+    PAY = "pay"  # отметить оплату: спросить сумму
+    FULL = "full"  # «Полностью» - весь остаток
+    METHOD = "m"  # способ оплаты value - он же подтверждение: оплата сохраняется
+    TOTAL = "total"  # указать сумму заказа (её не знали при записи)
+    INVOICE = "inv"  # отправить счёт плательщику
+    WRITE = "write"  # написать плательщику
+    SEND = "send"  # «✅ Отправить» после предпросмотра
+    REQUISITES = "req"  # прислать админу файл реквизитов
+    REMOVE = "rm"  # снять бронь: вопрос
+    REMOVE_OK = "rmok"
+    CREDIT = "cr"  # отменённый заказ: оплату - на аванс
+    CREDIT_OK = "crok"
+    REFUND = "rf"  # отменённый заказ: деньги вернули
+    REFUND_OK = "rfok"
+    APPLY = "ap"  # зачесть аванс в заказ
+    APPLY_OK = "apok"
+    CANCEL = "cnl"  # бросить ввод - назад к карточке
+    NOOP = "noop"  # счётчик страниц
+
+
+class OrderAdminCb(CallbackData, prefix="aord"):
+    action: OrderAdminAction
+    order_id: int = 0
+    value: str = ""
+    page: int = 0
+
+
 class DictAction(StrEnum):
     # Список, page - страница. У проведений - месяцы раздела: value - SessionScope («» афиша, «a» архив,
     # «p» прошедшие). У курсов value «a» - курсы из архива.

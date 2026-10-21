@@ -3,6 +3,7 @@ from aiogram.enums import ChatType
 
 from stubbot.tg.handlers import (
     admin,
+    admin_orders,
     application,
     cabinet,
     chats,
@@ -35,6 +36,10 @@ def build_root_router(applications_enabled: bool) -> Router:
         root.include_router(application.router)
     # Фильтр «только админ» - на всём роутере; не-админам он не мешает: их апдейты идут дальше, в fallback.
     root.include_router(admin.router)
+    if applications_enabled:
+        # Заказы есть только вместе с записью на курсы. После admin: «⚙️ Админка» посреди ввода суммы
+        # открывает меню, а не считается суммой.
+        root.include_router(admin_orders.router)
     # Всегда последним: ловит то, что не подошло остальным.
     root.include_router(fallback.router)
     return root

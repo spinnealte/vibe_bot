@@ -885,6 +885,260 @@ ADMIN_DELETE_ERRORS = {
     "in_use": "Есть заявки или подписки клиентов - удалить нельзя. Запись останется в архиве.",
 }
 
+# --- Админка: заказы (полная версия, этап 1, шаг 4; тексты согласованы 21.10.2026) -----------------------------
+
+BTN_ADMIN_ORDERS = "🧾 Заказы"
+ADMIN_MENU_ORDERS = "\n🧾 <b>Заказы</b> - записи на курсы: счета, оплата, аванс, снятие брони."
+ADMIN_ORDERS = (
+    "🧾 <b>Заказы</b>\n\n"
+    "⏳ Ждут оплаты: <b>{wait}</b>{late}\n"
+    "➗ Оплачены частично: <b>{part}</b>\n"
+    "✅ Оплачены полностью: <b>{paid}</b>\n"
+    "💸 Отменены, деньги не распределены: <b>{money}</b>\n\n"
+    "Выберите раздел или найдите заказ по номеру 👇"
+)
+ADMIN_ORDERS_LATE = " (просрочено: {count})"
+# Ключи - OrderCategory.
+BTN_ADMIN_ORDER_CATEGORIES = {
+    "wait": "⏳ Ждут оплаты · {count}",
+    "late": "⚠️ Просрочены · {count}",
+    "part": "➗ Частично · {count}",
+    "paid": "✅ Оплачены · {count}",
+    "money": "💸 Деньги после отмены · {count}",
+}
+ADMIN_ORDER_CATEGORY_TITLES = {
+    "wait": "⏳ Ждут оплаты",
+    "late": "⚠️ Просрочены",
+    "part": "➗ Оплачены частично",
+    "paid": "✅ Оплачены полностью",
+    "money": "💸 Деньги после отмены",
+}
+ADMIN_ORDER_LIST = "<b>{title}</b>\n\nЗаказов: <b>{count}</b>, старые - сверху 👇{hint}"
+ADMIN_ORDER_LIST_EMPTY = "<b>{title}</b>\n\nЗдесь пока пусто.{hint}"
+ADMIN_ORDER_LIST_PAID_HINT = "\n\n<i>Только курсы, которые ещё не прошли.</i>"
+BTN_ADMIN_ORDER_ROW = "№{number} · {name} · {amount}"
+BTN_ADMIN_ORDER_FIND = "🔎 По номеру"
+BTN_ADMIN_TO_ORDERS = "⬅️ К заказам"
+BTN_ADMIN_OPEN_ORDER = "🧾 Открыть заказ"
+ADMIN_ORDER_ASK_NUMBER = "🔎 <b>Поиск заказа</b>\n\nНапишите номер заказа - шесть цифр, например 100001."
+ADMIN_ORDER_BAD_NUMBER = "❗️ Номер заказа - шесть цифр, например 100001."
+ADMIN_ORDER_NOT_FOUND = "❗️ Заказа №{number} нет. Проверьте номер и напишите ещё раз."
+
+# Карточка заказа.
+ADMIN_ORDER_STATUS = {
+    "awaiting_payment": "⏳ ждёт оплаты",
+    "partially_paid": "➗ оплачен частично",
+    "paid": "✅ оплачен",
+    "cancelled": "✖️ отменён",
+}
+ADMIN_ORDER_TITLE = "🧾 <b>Заказ №{number}</b> · {status}"
+ADMIN_ORDER_COURSE = "🦷 {title} · 🗓 {dates}"
+ADMIN_ORDER_PAYER = "👤 {name} · {phone}"
+ADMIN_ORDER_PARTICIPANTS = "👥 Участники: {names}"
+ADMIN_ORDER_NOT_IN_BOT = " (не в боте)"
+ADMIN_ORDER_PRICE = "💳 {value}"
+ADMIN_ORDER_TOTAL_OPEN = "💳 Сумма заказа не указана"
+ADMIN_ORDER_PAID = "💰 Оплачено: {paid}, осталось {left}"
+ADMIN_ORDER_PAID_FULL = "💰 Оплачено: {paid} - полностью"
+ADMIN_ORDER_PAID_OPEN = "💰 Оплачено: {paid}"
+ADMIN_ORDER_DUE = "⏰ Оплатить до {due}"
+ADMIN_ORDER_DUE_LATE = " ⚠️ просрочен"
+ADMIN_ORDER_PAYER_TYPE_NONE = "❔ Физлицо или юрлицо - ещё не выбрал плательщик"
+ADMIN_ORDER_INDIVIDUAL = "👤 Физлицо"
+ADMIN_ORDER_ORGANIZATION = "🏢 Юрлицо, реквизиты получены"
+ADMIN_ORDER_ORGANIZATION_WAITING = "🏢 Юрлицо, ждём реквизиты"
+ADMIN_ORDER_INVOICE_SENT = "📄 Счёт: отправлен {moment}"
+ADMIN_ORDER_INVOICE_NONE = "📄 Счёт: не отправлен"
+ADMIN_ORDER_ADVANCE = "💰 Аванс плательщика: {amount}"
+ADMIN_ORDER_CREATED = "🕒 Создан {moment}"
+ADMIN_ORDER_CANCELLED = "✖️ Отменён {moment}: {reason}"
+ADMIN_ORDER_CLIENT_CHOICE = "💬 Клиент выбрал: <b>{choice}</b>"
+# Ключи - CancelChoice.
+CANCEL_CHOICE_LABELS = {
+    "transfer": "перенести на другое проведение",
+    "advance": "оставить на аванс",
+    "refund": "вернуть деньги",
+}
+ADMIN_ORDER_MONEY_PENDING = "💸 Деньги не распределены - зачислите на аванс или отметьте возврат."
+ADMIN_ORDER_MONEY_SETTLED = "✔️ Деньги по заказу распределены."
+BTN_ADMIN_ORDER_INVOICE = "📄 Отправить счёт"
+BTN_ADMIN_ORDER_PAY = "💰 Отметить оплату"
+BTN_ADMIN_ORDER_TOTAL = "✏️ Сумма заказа"
+BTN_ADMIN_ORDER_APPLY = "🔁 Зачесть аванс · {amount}"
+BTN_ADMIN_ORDER_REQUISITES = "📎 Реквизиты"
+BTN_ADMIN_ORDER_WRITE = "✉️ Написать клиенту"
+BTN_ADMIN_ORDER_REMOVE = "🗑 Снять бронь"
+BTN_ADMIN_ORDER_CREDIT = "💰 Зачислить на аванс · {amount}"
+BTN_ADMIN_ORDER_REFUND = "↩️ Деньги вернули"
+BTN_ADMIN_ORDER_TO_CARD = "⬅️ К заказу"
+
+# Оплата: сумма → способ (кнопка способа и есть подтверждение).
+ADMIN_ORDER_ASK_AMOUNT = "💰 <b>Оплата по заказу №{number}</b>\n\n{summary}\n\n{hint}"
+ADMIN_ORDER_AMOUNT_SUMMARY = "К оплате {total}, оплачено {paid}, осталось {left}."
+ADMIN_ORDER_AMOUNT_SUMMARY_OPEN = "Сумма заказа не указана, оплачено {paid}."
+ADMIN_ORDER_AMOUNT_HINT_FULL = "Нажмите «Полностью» или напишите сумму цифрами, например 20000."
+ADMIN_ORDER_AMOUNT_HINT = "Напишите сумму цифрами, например 20000."
+BTN_ADMIN_ORDER_PAY_FULL = "✅ Полностью · {amount}"
+ADMIN_ORDER_AMOUNT_INVALID = "❗️ Не получилось разобрать сумму. Напишите цифрами, например 20000."
+ADMIN_ORDER_AMOUNT_TOO_MUCH = "❗️ Это больше остатка ({left}). Переплату оформите через аванс клиента."
+ADMIN_ORDER_ASK_METHOD = (
+    "💰 <b>Отметить {amount} по заказу №{number}?</b>\n\n"
+    "Клиенту придёт «Оплата получена». Выберите, как оплатили, - оплата сразу сохранится 👇"
+)
+# Ключи - PaymentMethod (MANUAL_PAYMENT_METHODS).
+BTN_PAYMENT_METHODS = {"invoice": "🧾 По счёту", "cash": "💵 Наличные", "card": "💳 Карта, СБП"}
+ADMIN_ORDER_PAYMENT_SAVED = "✅ Оплата {amount} отмечена."
+ADMIN_ORDER_ASK_TOTAL = "✏️ <b>Сумма заказа №{number}</b>\n\nНапишите, сколько стоит заказ, цифрами - например 45000."
+ADMIN_ORDER_TOTAL_SAVED = "✅ Сумма заказа: {amount}."
+ADMIN_ORDER_TOTAL_INVALID = "❗️ Сумма заказа не может быть меньше уже оплаченного ({paid})."
+
+# Снятие брони.
+ADMIN_ORDER_REMOVE_CONFIRM = (
+    "🗑 <b>Снять бронь?</b>\n\n"
+    "Заказ №{number}, {names}. Места освободятся, клиенту придёт сообщение.\n\n"
+    "{note}"
+)
+ADMIN_ORDER_REMOVE_UNPAID = "<i>Оплаты не было - участники попадут в лист ожидания курса.</i>"
+ADMIN_ORDER_REMOVE_PAID = (
+    "<i>По заказу оплачено {paid} - после снятия брони заказ будет в «💸 Деньги после отмены»: "
+    "зачислите на аванс или отметьте возврат.</i>"
+)
+BTN_ADMIN_ORDER_REMOVE_YES = "Да, снять"
+BTN_ADMIN_ORDER_NO = "Нет"
+ADMIN_ORDER_REMOVED = "🗑 Бронь снята."
+
+# Аванс.
+ADMIN_ORDER_CREDIT_CONFIRM = (
+    "💰 <b>Зачислить {amount} на аванс?</b>\n\n"
+    "Клиент: {name}. Заказ №{number} отменён - деньги останутся у клиента авансом, их можно зачесть "
+    "в оплату другого курса."
+)
+BTN_ADMIN_ORDER_CREDIT_YES = "Да, зачислить"
+ADMIN_ORDER_CREDITED = "✅ На аванс зачислено {amount}. Аванс клиента: {balance}."
+ADMIN_ORDER_REFUND_CONFIRM = (
+    "↩️ <b>Отметить возврат {amount}?</b>\n\n"
+    "Клиент: {name}, заказ №{number}. В журнале аванса останутся обе строки - зачисление и возврат, "
+    "аванс клиента не изменится."
+)
+BTN_ADMIN_ORDER_REFUND_YES = "Да, вернули"
+ADMIN_ORDER_REFUNDED = "✅ Возврат {amount} отмечен."
+ADMIN_ORDER_APPLY_CONFIRM = (
+    "🔁 <b>Зачесть из аванса {amount} в заказ №{number}?</b>\n\n"
+    "Клиент: {name}. На авансе останется {rest}. Клиенту придёт «Оплата получена»."
+)
+BTN_ADMIN_ORDER_APPLY_YES = "Да, зачесть"
+ADMIN_ORDER_APPLIED = "✅ Из аванса зачтено {amount}."
+
+# Счёт и сообщение клиенту: файл или текст → предпросмотр → «Отправить».
+ADMIN_ORDER_ASK_INVOICE = (
+    "📄 <b>Счёт по заказу №{number}</b>\n\n"
+    "Пришлите файл счёта (PDF) одним сообщением - можно с подписью.\n"
+    "Получатель: <b>{name}</b>."
+)
+ADMIN_ORDER_ASK_MESSAGE = (
+    "✉️ <b>Сообщение клиенту</b> · заказ №{number}\n\n"
+    "Напишите текст или пришлите файл или фото с подписью.\n"
+    "Получатель: <b>{name}</b>."
+)
+ADMIN_ORDER_INVOICE_FILE_ONLY = "❗️ Счёт - это файл. Пришлите его документом (PDF) или фото."
+ADMIN_ORDER_MESSAGE_UNSUPPORTED = "❗️ Можно текст, файл или фото."
+ADMIN_ORDER_TOO_LONG = "❗️ Слишком длинно - сократите текст или подпись на {over} символов."
+ADMIN_ORDER_PREVIEW = "👇 <b>Так клиент получит сообщение.</b> Получатель: {name}. Отправить?"
+BTN_ADMIN_SEND = "✅ Отправить"
+INVOICE_CAPTION = "📄 <b>Счёт по заказу №{number}</b>\n💰 К оплате: {amount}\n⏰ Оплатить до {due}"
+ADMIN_ORDER_DELIVERED = "✅ <b>Доставлено:</b> {name}."
+ADMIN_ORDER_NOT_DELIVERED_BLOCKED = "❌ <b>Не доставлено</b> - клиент заблокировал бота. Телефон: {phone}."
+ADMIN_ORDER_NOT_DELIVERED = "❌ <b>Не доставлено</b> - Telegram не принял сообщение. Телефон: {phone}."
+ADMIN_ORDER_NO_TELEGRAM = "❌ <b>Не доставлено</b> - клиента нет в боте. Телефон: {phone}."
+
+# Всплывающие окна (без HTML, до 200 символов).
+ADMIN_ORDER_UNAVAILABLE = "Это действие для заказа уже недоступно - откройте заказ заново."
+ADMIN_ORDER_DUPLICATE = "Эта оплата уже отмечена."
+ADMIN_ORDER_NO_ADVANCE = "Зачесть нечего: аванса нет или заказ уже оплачен."
+ADMIN_ORDER_NO_REQUISITES = "Реквизитов по заказу пока нет."
+ADMIN_ORDER_EXPIRED = "Черновик устарел - откройте заказ и начните заново."
+
+# Уведомления админам и владельцу.
+ADMIN_NOTIFY_ENROLLED = (
+    "🆕 <b>Новая запись</b> · заказ №{number}\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n"
+    "👤 {name} · {phone}\n"
+    "{colleague}"
+    "💳 {price}\n"
+    "⏰ Оплатить до {due}"
+)
+ADMIN_NOTIFY_WAITLIST = (
+    "🕒 <b>Лист ожидания</b> - мест нет\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n"
+    "👤 {name} · {phone}\n"
+    "{colleague}"
+)
+ADMIN_NOTIFY_COLLEAGUE = "👥 С коллегой: {name} · {phone}{not_in_bot}\n"
+ADMIN_NOTIFY_NOT_IN_BOT = " (ещё не в боте)"
+ADMIN_NOTIFY_INDIVIDUAL = (
+    "👤 <b>Заказ №{number}</b> - оплата как физлицо ({name}). Подготовьте счёт и отправьте кнопкой "
+    "«📄 Отправить счёт» в заказе."
+)
+ADMIN_NOTIFY_ORGANIZATION = (
+    "🏢 <b>Заказ №{number}</b> - оплата как юрлицо ({name}). Ждём файл с реквизитами - он придёт сюда."
+)
+ADMIN_NOTIFY_REQUISITES = (
+    "🏢 <b>Реквизиты</b> · заказ №{number}\n"
+    "👤 {name} · {phone}\n\n"
+    "Подготовьте счёт в 1С и отправьте кнопкой «📄 Отправить счёт» в заказе."
+)
+ADMIN_NOTIFY_CANCELLED = (
+    "✖️ <b>Отмена записи</b>{order}\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n"
+    "👤 {name} · {phone}{with_colleague}\n"
+    "{money}"
+)
+ADMIN_NOTIFY_ORDER = " · заказ №{number}"
+ADMIN_NOTIFY_WITH_COLLEAGUE = " (и коллега)"
+ADMIN_NOTIFY_CANCEL_PAID = "💰 Оплачено {paid} - клиент выбрал: <b>{choice}</b>"
+ADMIN_NOTIFY_CANCEL_UNPAID = "Оплаты не было - {who} в листе ожидания курса"
+ADMIN_NOTIFY_CANCEL_UNPAID_ONE = "клиент"
+ADMIN_NOTIFY_CANCEL_UNPAID_PAIR = "оба"
+ADMIN_NOTIFY_LEFT_WAITLIST = (
+    "🕒 <b>Выход из листа ожидания</b>\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n"
+    "👤 {name} · {phone}{with_colleague}"
+)
+
+# Клиенту: оплата, снятие брони, аванс.
+PAYMENT_RECEIVED = (
+    "✅ <b>Оплата получена</b> · заказ №{number}\n\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n\n"
+    "{details}"
+)
+PAYMENT_RECEIVED_PARTIAL = "Оплачено {paid} из {total} - место закреплено за Вами."
+PAYMENT_RECEIVED_OPEN = "Оплачено {paid} - место закреплено за Вами."
+PAYMENT_RECEIVED_FULL = "Заказ оплачен полностью - место закреплено. До встречи на курсе! 🎓"
+PAYMENT_FROM_ADVANCE = "\n\n<i>{amount} зачтено из Вашего аванса.</i>"
+BOOKING_REMOVED = (
+    "✖️ <b>Бронь снята</b> · заказ №{number}\n\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n\n"
+    "{reason}"
+)
+BOOKING_REMOVED_UNPAID = "Оплата не поступила в срок. Если хотите на курс - запишитесь снова или напишите менеджеру."
+BOOKING_REMOVED_PAID = "Запись отменена менеджером. По оплате {paid} менеджер свяжется с Вами."
+BOOKING_REMOVED_COLLEAGUE = (
+    "✖️ <b>Запись отменена</b>\n\n"
+    "🦷 <b>{title}</b>\n"
+    "🗓 {dates}\n\n"
+    "Менеджер снял бронь по заказу, по которому Вас записал коллега."
+)
+ADVANCE_CREDITED = (
+    "💰 <b>На Ваш аванс зачислено {amount}</b>\n\n"
+    "Менеджер зачтёт его в оплату любого курса. Аванс виден в личном кабинете."
+)
+
 # --- Прочее ---------------------------------------------------------------------------------------------------
 
 FLOOD_WAIT = "⏳ Слишком много сообщений подряд. Подождите, пожалуйста, несколько секунд."

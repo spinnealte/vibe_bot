@@ -132,9 +132,14 @@ class PayerType(StrEnum):
 class PaymentMethod(StrEnum):
     INVOICE = "invoice"  # по счёту (банковский перевод)
     CASH = "cash"
+    CARD = "card"  # картой или по СБП - оплату отметил админ (кнопка «💳 Карта, СБП»)
     CARD_ONLINE = "card_online"  # онлайн через платёжный сервис - после договора
-    SBP = "sbp"
+    SBP = "sbp"  # СБП через платёжный сервис - после договора
     ADVANCE = "advance"  # из аванса клиента (засчитывает админ)
+
+
+# Способы, которые админ выбирает кнопкой, когда отмечает оплату (решение 21.10.2026).
+MANUAL_PAYMENT_METHODS = (PaymentMethod.INVOICE, PaymentMethod.CASH, PaymentMethod.CARD)
 
 
 class PaymentProvider(StrEnum):

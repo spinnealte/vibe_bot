@@ -212,11 +212,13 @@ def _orders(order) -> OrderService:
 
 def test_only_the_payer_chooses_how_to_pay() -> None:
     order = _order()
-    assert asyncio.run(_orders(order).choose_payer_type(99, 77, PayerType.INDIVIDUAL)) is None  # чужой заказ
-    assert asyncio.run(_orders(order).choose_payer_type(10, 77, PayerType.INDIVIDUAL)) is order
+    assert asyncio.run(_orders(order).choose_payer_type(99, 77, PayerType.INDIVIDUAL)) == (None, False)  # чужой
+    assert asyncio.run(_orders(order).choose_payer_type(10, 77, PayerType.INDIVIDUAL)) == (order, True)
     assert order.payer_type is PayerType.INDIVIDUAL
+    # Повторное нажатие той же кнопки - выбор не поменялся, админам второй раз не пишем.
+    assert asyncio.run(_orders(order).choose_payer_type(10, 77, PayerType.INDIVIDUAL)) == (order, False)
     cancelled = _order(status=OrderStatus.CANCELLED)
-    assert asyncio.run(_orders(cancelled).choose_payer_type(10, 77, PayerType.ORGANIZATION)) is None
+    assert asyncio.run(_orders(cancelled).choose_payer_type(10, 77, PayerType.ORGANIZATION)) == (None, False)
 
 
 def test_requisites_file_is_saved_to_the_order() -> None:

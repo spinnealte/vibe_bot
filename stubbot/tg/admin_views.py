@@ -18,7 +18,7 @@ from stubbot.config import get_settings
 from stubbot.services.admin_dictionaries import DictField, DictionarySpec, DictKind, FieldKind
 from stubbot.services.admin_sessions import NO_DATES, SessionScope
 from stubbot.tg import texts
-from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
+from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb, OrderAdminAction, OrderAdminCb
 from stubbot.tg.formatting import safe
 from stubbot.tg.render import plain_excerpt, short
 from stubbot.utils.dates import format_month
@@ -54,15 +54,21 @@ def _pager(page: int, pages: int, prev_data: str, next_data: str) -> list[Inline
 # --- Меню ------------------------------------------------------------------------------------------------------
 
 def menu() -> tuple[str, InlineKeyboardMarkup]:
+    """Меню админки. «🧾 Заказы» - первой строкой, только вместе с записью на курсы (APPLICATIONS_ENABLED)."""
+    orders = get_settings().applications_enabled
     builder = InlineKeyboardBuilder()
-    for kind in (DictKind.COURSES, DictKind.SESSIONS, DictKind.LECTURERS, DictKind.VENUES, DictKind.SPECIALTIES,
-                 DictKind.POSITIONS):
-        builder.button(text=texts.ADMIN_DICT_TITLES[kind.value], callback_data=_dict(kind, DictAction.LIST))
-    builder.adjust(2)
+    if orders:
+        builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_ORDERS,
+                                         callback_data=OrderAdminCb(action=OrderAdminAction.MENU).pack()))
+    kinds = [InlineKeyboardButton(text=texts.ADMIN_DICT_TITLES[kind.value], callback_data=_dict(kind, DictAction.LIST))
+             for kind in (DictKind.COURSES, DictKind.SESSIONS, DictKind.LECTURERS, DictKind.VENUES,
+                          DictKind.SPECIALTIES, DictKind.POSITIONS)]
+    for i in range(0, len(kinds), 2):
+        builder.row(*kinds[i:i + 2])
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_ARCHIVE_MENU, callback_data=_admin(AdminAction.ARCHIVE)))
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_EXPORT, callback_data=_admin(AdminAction.EXPORT)))
     builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_CLOSE, callback_data=_admin(AdminAction.CLOSE)))
-    return texts.ADMIN_MENU, builder.as_markup()
+    return texts.ADMIN_MENU + (texts.ADMIN_MENU_ORDERS if orders else ""), builder.as_markup()
 
 
 def archive_menu(courses: int, sessions: int, past: int) -> tuple[str, InlineKeyboardMarkup]:

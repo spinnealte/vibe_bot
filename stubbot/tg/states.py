@@ -51,6 +51,16 @@ class AdminDict(StatesGroup):
     confirm = State()  # предпросмотр новой записи
 
 
+class AdminOrder(StatesGroup):
+    """Заказы в админке. В data: order_id; при оплате - amount и token (одноразовый ключ отметки); при сообщении
+    клиенту - kind (счёт / сообщение), draft и token."""
+
+    number = State()  # ждём номер заказа для поиска
+    amount = State()  # ждём сумму оплаты текстом (или «Полностью»), потом - способ оплаты кнопкой
+    total = State()  # ждём сумму заказа
+    message = State()  # ждём счёт (файл) или сообщение клиенту (текст / файл / фото), потом - «Отправить»
+
+
 # Ключ в FSM data: заявка, к которой вернуться после согласия и регистрации.
 PENDING_APPLY_KEY = "apply_session_id"
 FULL_NAME_KEY = "full_name"  # введённое ФИО до подтверждения

@@ -193,7 +193,8 @@ paid_at, cancelled_at, cancel_reason, cancel_choice NULL (transfer / advance / r
 
 Участники заказа - enrollments.order_id (у каждого своя запись); отдельная order_items не нужна: сумма у заказа целиком.
 
-**payments** - id, order_id, amount (> 0), currency, method (invoice / cash / card_online / sbp / advance),
+**payments** - id, order_id, amount (> 0), currency, method (invoice / cash / card - картой или СБП, отметил админ,
+миграция 8e4f2b6d9a13 / card_online / sbp - онлайн после договора / advance),
 provider (manual / yookassa; новые - миграцией), state (pending / succeeded / canceled), provider_payment_id UNIQUE NULL,
 idempotency_key UNIQUE NULL, paid_at, created_by_telegram_id NULL (админ, отметивший оплату), comment.
 Оплачено по заказу = сумма успешных платежей; частичная оплата - несколько строк.

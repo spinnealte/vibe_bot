@@ -93,7 +93,7 @@ def _meta_lines(program: Program, format_value: str) -> list[str]:
     return lines
 
 
-def _dates_text(course_session: CourseSession) -> str:
+def dates_text(course_session: CourseSession) -> str:
     """13–14 октября 2026, 10:00–18:00 - время добавляем, если во все дни одинаковое.
     У проведения без дат - «даты уточняются»."""
     if course_session.start_date is None:
@@ -116,7 +116,7 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
         lines.append(f"<i>{safe(program.short_description)}</i>")
     lines.append("")
     lines += _lecturers_line(program)
-    lines.append(texts.CAPTION_DATES.format(value=_dates_text(s)) if s.start_date else texts.CAPTION_DATES_TBD)
+    lines.append(texts.CAPTION_DATES.format(value=dates_text(s)) if s.start_date else texts.CAPTION_DATES_TBD)
     if s.venue:
         lines.append(texts.CAPTION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
     lines += _meta_lines(program, s.format.value)
@@ -217,7 +217,7 @@ def apply_confirm(card: SessionCard, price: PriceOption | None, colleague_name: 
         note += texts.APPLY_COLLEAGUE_CONSENT_NOTE
     return texts.APPLY_CONFIRM.format(
         title=safe(session_title(card.session)),
-        dates=_dates_text(card.session),
+        dates=dates_text(card.session),
         price=safe(price_label(price)) if price else texts.APPLY_NO_PRICE,
         participants=participants,
         note=note,
@@ -232,7 +232,7 @@ def enrolled(card: SessionCard, order: Order, colleague_name: str | None, timezo
     """«Вы записаны!»: заказ, сумма, срок оплаты и вопрос «Как будете оплачивать?»."""
     return texts.APPLY_ENROLLED.format(
         title=safe(session_title(card.session)),
-        dates=_dates_text(card.session),
+        dates=dates_text(card.session),
         colleague=texts.APPLY_ENROLLED_COLLEAGUE.format(name=safe(colleague_name)) if colleague_name else "",
         number=order.number,
         amount=order_amount(order),
@@ -252,7 +252,7 @@ def colleague_enrolled(card: SessionCard, enroller_name: str | None) -> str:
     """Коллеге, который уже есть в боте: его записали вместе с собой."""
     return texts.COLLEAGUE_ENROLLED.format(
         title=safe(session_title(card.session)),
-        dates=_dates_text(card.session),
+        dates=dates_text(card.session),
         name=safe(enroller_name),
     )
 
@@ -270,7 +270,7 @@ def my_application_card(app: MyApplication, timezone: str, now: datetime) -> str
     коллеге из пары - кто его записал."""
     enrollment, s, order = app.enrollment, app.session, app.order
     lines = [texts.MY_APPLICATIONS_TITLE, "", texts.MY_APPLICATION_COURSE.format(value=safe(app.title)),
-             texts.MY_APPLICATION_DATES.format(value=_dates_text(s))]
+             texts.MY_APPLICATION_DATES.format(value=dates_text(s))]
     if s.venue:
         lines.append(texts.MY_APPLICATION_VENUE.format(value=f"{safe(s.venue.name)}, {safe(s.venue.address)}"))
     if app.price:
@@ -332,7 +332,7 @@ def _partner_short_name(app: MyApplication) -> str | None:
 
 def cancel_question(app: MyApplication) -> str:
     """«Отменить запись?» без оплаты: заказ закроется, оба - в лист ожидания курса. Или «Выйти из листа ожидания?»."""
-    title, dates = safe(app.title), _dates_text(app.session)
+    title, dates = safe(app.title), dates_text(app.session)
     name = _partner_short_name(app)
     if app.enrollment.status is EnrollmentStatus.WAITLIST:
         colleague = texts.CANCEL_WAITLIST_COLLEAGUE_LINE.format(name=name) if name else ""
@@ -351,7 +351,7 @@ def cancel_paid_question(app: MyApplication, paid: int) -> str:
     """«Отменить запись?», когда по заказу уже платили: что сделать с оплатой."""
     name = _partner_short_name(app)
     return texts.CANCEL_PAID_CONFIRM.format(
-        title=safe(app.title), dates=_dates_text(app.session),
+        title=safe(app.title), dates=dates_text(app.session),
         colleague=texts.CANCEL_COLLEAGUE_LINE.format(name=name) if name else "",
         number=app.order.number, paid=format_rub(paid),
     )
@@ -378,7 +378,7 @@ def cancelled(result: CancelResult, has_manager: bool) -> str:
 
 def colleague_cancelled(app: MyApplication, enroller_name: str | None) -> str:
     """Коллеге, который уже в боте: записавший отменил запись пары."""
-    return texts.COLLEAGUE_CANCELLED.format(title=safe(app.title), dates=_dates_text(app.session),
+    return texts.COLLEAGUE_CANCELLED.format(title=safe(app.title), dates=dates_text(app.session),
                                             name=safe(enroller_name))
 
 
@@ -392,6 +392,44 @@ def manager_cancel_draft(app: MyApplication) -> str:
 
 def manager_refund_draft(order: Order) -> str:
     return texts.MANAGER_DRAFT_REFUND.format(number=order.number)
+
+
+# --- Клиенту от админки: оплата, бронь, аванс, счёт (полная версия, этап 1, шаг 4) -------------------------------
+
+def payment_received(course_session: CourseSession, order: Order, paid: int, full: bool,
+                     from_advance: int = 0) -> str:
+    """«Оплата получена»: сколько оплачено и что место закреплено (его закрепляет любая оплата)."""
+    if full:
+        details = texts.PAYMENT_RECEIVED_FULL
+    elif order.total_amount is not None:
+        details = texts.PAYMENT_RECEIVED_PARTIAL.format(paid=format_rub(paid), total=format_rub(order.total_amount))
+    else:
+        details = texts.PAYMENT_RECEIVED_OPEN.format(paid=format_rub(paid))
+    if from_advance:
+        details += texts.PAYMENT_FROM_ADVANCE.format(amount=format_rub(from_advance))
+    return texts.PAYMENT_RECEIVED.format(number=order.number, title=safe(session_title(course_session)),
+                                         dates=dates_text(course_session), details=details)
+
+
+def booking_removed(course_session: CourseSession, order: Order, paid: int) -> str:
+    reason = texts.BOOKING_REMOVED_PAID.format(paid=format_rub(paid)) if paid else texts.BOOKING_REMOVED_UNPAID
+    return texts.BOOKING_REMOVED.format(number=order.number, title=safe(session_title(course_session)),
+                                        dates=dates_text(course_session), reason=reason)
+
+
+def booking_removed_colleague(course_session: CourseSession) -> str:
+    return texts.BOOKING_REMOVED_COLLEAGUE.format(title=safe(session_title(course_session)),
+                                                  dates=dates_text(course_session))
+
+
+def advance_credited(amount: int) -> str:
+    return texts.ADVANCE_CREDITED.format(amount=format_rub(amount))
+
+
+def invoice_caption(order: Order, left: int | None, timezone: str) -> str:
+    """Подпись к счёту: номер заказа, сколько осталось оплатить и до какого времени."""
+    return texts.INVOICE_CAPTION.format(number=order.number, amount=format_rub(left) if left is not None
+                                        else texts.APPLY_NO_PRICE, due=format_moment(order.due_at, timezone))
 
 
 def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:

@@ -35,13 +35,18 @@ class OrderService:
             return None
         return order
 
-    async def choose_payer_type(self, client_id: int, order_id: int, payer_type: PayerType) -> Order | None:
+    async def choose_payer_type(self, client_id: int, order_id: int,
+                                payer_type: PayerType) -> tuple[Order | None, bool]:
+        """Заказ (None - чужой или отменён) и поменялся ли выбор: админам сообщаем только о новом выборе,
+        повторное нажатие той же кнопки их не беспокоит."""
         order = await self.payer_order(client_id, order_id)
         if order is None:
-            return None
+            return None, False
+        changed = order.payer_type is not payer_type
         order.payer_type = payer_type
-        logger.info("Заказ №%s: плательщик - %s", order.number, payer_type.value)
-        return order
+        if changed:
+            logger.info("Заказ №%s: плательщик - %s", order.number, payer_type.value)
+        return order, changed
 
     async def save_requisites(self, client_id: int, order_id: int, file_id: str, file_name: str | None,
                               now: datetime | None = None) -> Order | None:

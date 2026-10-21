@@ -33,7 +33,8 @@ from stubbot.services.enrollments import (
 from stubbot.services.orders import OrderService
 from stubbot.services.registration import RegistrationService, RegistrationStep
 from stubbot.services.schedule import ScheduleService
-from stubbot.tg import catalog_flow, flows, keyboards, render, texts
+from stubbot.tg import admin_orders_views, catalog_flow, flows, keyboards, render, texts
+from stubbot.tg.admin_notify import notify_admins
 from stubbot.tg.callbacks import (
     ApplyAction,
     ApplyCb,
@@ -169,9 +170,11 @@ async def on_send(callback: CallbackQuery, state: FSMContext, session: AsyncSess
                               keyboards.payer_choice(result.order.id))
             if result.colleague is not None:
                 await _tell_about_colleague(message, bot, result, client)
+            await _notify_enrolled(bot, settings, result, client, data.get("price_id"))
             return
         case EnrollOutcome.WAITLIST:
             text = texts.APPLY_WAITLISTED_PAIR if colleague else texts.APPLY_WAITLISTED
+            await _notify_enrolled(bot, settings, result, client, data.get("price_id"))
         case EnrollOutcome.DUPLICATE:
             status = result.enrollment.status.value if result.enrollment else "application"
             text = texts.APPLY_DUPLICATE.format(status=texts.ENROLLMENT_STATUS_LABELS[status])
@@ -204,6 +207,15 @@ async def _tell_about_colleague(message: Message, bot: Bot, result: EnrollResult
         logger.info("Коллеге #%s не удалось сообщить о записи", colleague.id)
 
 
+async def _notify_enrolled(bot: Bot, settings: Settings, result: EnrollResult, client: Client,
+                           price_id: int | None) -> None:
+    """Админам и владельцу: новая запись (с кнопкой «Открыть заказ») или лист ожидания."""
+    price = next((p for p in result.card.active_prices if p.id == price_id), None)
+    text, markup = admin_orders_views.notify_enrolled(result.card, result.order, client, result.colleague, price,
+                                                      settings.timezone)
+    await notify_admins(bot, settings, text, markup)
+
+
 @router.message(StateFilter(Application.price, Application.confirm))
 async def application_expects_buttons(message: Message) -> None:
     await message.answer(texts.REG_USE_BUTTONS)
@@ -213,20 +225,24 @@ async def application_expects_buttons(message: Message) -> None:
 
 @router.callback_query(OrderCb.filter(F.action == OrderAction.INDIVIDUAL))
 async def pay_as_individual(callback: CallbackQuery, callback_data: OrderCb, state: FSMContext,
-                            session: AsyncSession, client: Client, settings: Settings) -> None:
-    order = await OrderService(session).choose_payer_type(client.id, callback_data.order_id, PayerType.INDIVIDUAL)
+                            session: AsyncSession, client: Client, settings: Settings, bot: Bot) -> None:
+    order, changed = await OrderService(session).choose_payer_type(client.id, callback_data.order_id,
+                                                                   PayerType.INDIVIDUAL)
     if order is None:
         await callback.answer(texts.ORDER_UNAVAILABLE, show_alert=True)  # чужой или отменённый заказ
         return
     await callback.answer()
     await state.clear()
     await show_screen(callback.message, render.pay_individual(order, client.email, settings.timezone))
+    if changed:
+        await notify_admins(bot, settings, *admin_orders_views.notify_payer_type(order, client))
 
 
 @router.callback_query(OrderCb.filter(F.action == OrderAction.ORGANIZATION))
 async def pay_as_organization(callback: CallbackQuery, callback_data: OrderCb, state: FSMContext,
-                              session: AsyncSession, client: Client) -> None:
-    order = await OrderService(session).choose_payer_type(client.id, callback_data.order_id, PayerType.ORGANIZATION)
+                              session: AsyncSession, client: Client, settings: Settings, bot: Bot) -> None:
+    order, changed = await OrderService(session).choose_payer_type(client.id, callback_data.order_id,
+                                                                   PayerType.ORGANIZATION)
     if order is None:
         await callback.answer(texts.ORDER_UNAVAILABLE, show_alert=True)
         return
@@ -235,13 +251,17 @@ async def pay_as_organization(callback: CallbackQuery, callback_data: OrderCb, s
     await state.set_state(Application.requisites)
     await state.update_data({ORDER_KEY: order.id})
     await show_screen(callback.message, texts.PAY_ORGANIZATION.format(number=order.number))
+    if changed:
+        await notify_admins(bot, settings, *admin_orders_views.notify_payer_type(order, client))
 
 
 @router.message(Application.requisites, F.document | F.photo)
-async def on_requisites(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
-    """Файл с реквизитами организации - любой документ (или фото карточки предприятия)."""
+async def on_requisites(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                        settings: Settings, bot: Bot) -> None:
+    """Файл с реквизитами организации - любой документ (или фото карточки предприятия). Админам - сам файл."""
     data = await state.get_data()
-    if message.document is not None:
+    photo = message.document is None
+    if not photo:
         file_id, file_name = message.document.file_id, message.document.file_name
     else:
         file_id, file_name = message.photo[-1].file_id, None
@@ -251,6 +271,9 @@ async def on_requisites(message: Message, state: FSMContext, session: AsyncSessi
         await message.answer(texts.ORDER_UNAVAILABLE)
         return
     await message.answer(texts.REQUISITES_RECEIVED.format(number=order.number))
+    caption, markup = admin_orders_views.notify_requisites(order, client)
+    await notify_admins(bot, settings, caption, markup, photo=file_id if photo else None,
+                        document=None if photo else file_id)
 
 
 @router.message(Application.requisites)
@@ -380,6 +403,7 @@ async def cancel_application(callback: CallbackQuery, callback_data: MyApplicati
                       keyboards.cancelled_actions(callback_data.index, schedule=result.choice is CancelChoice.TRANSFER,
                                                   manager_url=refund_url))
     await _tell_colleagues_cancelled(bot, result, app, client)
+    await notify_admins(bot, settings, *admin_orders_views.notify_cancelled(app, result, client))
 
 
 async def _tell_colleagues_cancelled(bot: Bot, result: CancelResult, app: MyApplication, client: Client) -> None:
