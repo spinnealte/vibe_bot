@@ -16,10 +16,12 @@ from stubbot.db.models.catalog import (
 from stubbot.db.models.clients import Client, Position, Specialty, client_positions, client_specialties
 from stubbot.db.models.consents import ClientConsent, LegalDocument
 from stubbot.db.models.enrollments import Enrollment, ProgramInterest
+from stubbot.db.models.orders import Advance, Order, Payment
 
 __all__ = [
     "AcquisitionSource",
     "Admin",
+    "Advance",
     "Base",
     "Client",
     "ClientConsent",
@@ -29,6 +31,8 @@ __all__ = [
     "Enrollment",
     "LegalDocument",
     "Lecturer",
+    "Order",
+    "Payment",
     "Position",
     "PriceOption",
     "Program",

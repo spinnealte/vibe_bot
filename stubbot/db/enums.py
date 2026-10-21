@@ -108,6 +108,44 @@ class PaymentStatus(StrEnum):
     REFUNDED = "refunded"
 
 
+class OrderStatus(StrEnum):
+    AWAITING_PAYMENT = "awaiting_payment"  # место занято, ждём оплату (72 часа с формирования заказа)
+    PARTIALLY_PAID = "partially_paid"  # оплачено частично - место закреплено, остаток на контроле менеджера
+    PAID = "paid"
+    CANCELLED = "cancelled"
+
+
+class PayerType(StrEnum):
+    INDIVIDUAL = "individual"  # физлицо: счёт в Telegram или на почту из кабинета
+    ORGANIZATION = "organization"  # юрлицо: реквизиты файлом, счёт из 1С
+
+
+class PaymentMethod(StrEnum):
+    INVOICE = "invoice"  # по счёту (банковский перевод)
+    CASH = "cash"
+    CARD_ONLINE = "card_online"  # онлайн через платёжный сервис - после договора
+    SBP = "sbp"
+    ADVANCE = "advance"  # из аванса клиента (засчитывает админ)
+
+
+class PaymentProvider(StrEnum):
+    MANUAL = "manual"  # оплату отметил админ
+    YOOKASSA = "yookassa"
+
+
+class PaymentState(StrEnum):
+    PENDING = "pending"  # онлайн-платёж создан, ждём оплату
+    SUCCEEDED = "succeeded"
+    CANCELED = "canceled"
+
+
+class AdvanceReason(StrEnum):
+    CANCELLED_ORDER = "cancelled_order"  # + оплаченное по отменённой записи
+    APPLIED_TO_ORDER = "applied_to_order"  # - засчитано в оплату заказа
+    REFUND = "refund"  # - вернули деньгами
+    CORRECTION = "correction"  # +/- правка админа
+
+
 class EnrollmentSource(StrEnum):
     BOT = "bot"
     ADMIN = "admin"

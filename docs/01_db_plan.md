@@ -19,11 +19,12 @@
 | 10  | Лекторы (30.09.2026)                   | Курсы авторские: курс читают только его лекторы                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | program_lecturers вместо session_lecturers (миграция 9c4f1a7e2b35)                                                                                                                                |
 | 11  | Онлайн (30.09.2026)                    | Онлайн-курсы - живые, в даты; записи не храним                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | Хватает sessions.format + online_url                                                                                                                                                              |
 | 12  | Объём MVP (30.09.2026)                 | MVP - афиша: расписание + личный кабинет, без заявок                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Таблицы заявок остаются в схеме; в боте выключены (APPLICATIONS_ENABLED=false)                                                                                                                    |
-| 13  | Оплата [FULL] (30.09.2026)             | Нет оплаты за 24–48 ч после заявки - место снимается                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | orders.expires_at + фоновая задача; тарифы «теория/практика», «для двух коллег», когда занимается место - решаем в FULL                                                                           |
+| 13  | Оплата [FULL] (30.09.2026)             | **Заменено решением 18.** Было: нет оплаты за 24–48 ч после заявки - место снимается                                                                                                                                                                                                                                                                                                                                                                                                                                                                                       | orders.expires_at + фоновая задача; тарифы «теория/практика», «для двух коллег», когда занимается место - решаем в FULL                                                                           |
 | 14  | Курс без дат в афише (02.10.2026)      | **Отменено решением 16.** Было: курс без проведений по умолчанию виден как «даты уточняются», админ может скрыть                                                                                                                                                                                                                                                                                                                                                                                                                                 | programs.show_without_dates - колонка удалена (миграция c7d2e91f4a58)                                                                                                                             |
 | 15  | Откуда пришёл клиент (05.10.2026)      | Хвост ссылки первого /start хранится текстом у клиента, даже если источник не заведён в справочнике. Аналитики в боте пока нет - только выгрузка клиентов в CSV                                                                                                                                                                                                                                                                                                                                                                                  | clients.start_param varchar(64) NULL (миграция a1f47c2d9e60); acquisition_sources и touches остаются как есть                                                                                     |
 | 16  | Афиша - только проведения (11.10.2026) | Курс - запись библиотеки, сам в афишу не попадает. В афише стоят проведения: с датами или без дат («даты уточняются»). «Скрыть» нет: убрать из афиши - отправить в архив; прошедшее по датам считается архивом само («прошедшие мероприятия»). Удаление навсегда - только из архива; с заявками или подписками клиентов удалять нельзя                                                                                                                                                                                                           | sessions.start_date / end_date NULL (оба сразу, CHECK dates_together), sessions.archived_at NULL вместо is_visible; programs.show_without_dates удалена (миграция c7d2e91f4a58, только структура) |
-| 17  | Согласия (16.10.2026)                  | Документы - на сайте заказчика (политика и согласие), заказчик одобрил их для бота. При регистрации - две отдельные галочки и «Продолжить»: 1 - «Я согласен с Политикой…, даю согласие на обработку… и на получение информационных сообщений» (обязательна), 2 - рекламные рассылки (по желанию, отдельное согласие); из кабинета рассылки включаются отдельно. Тексты, которые показывает бот, - в коде с номером версии; новую версию бот заводит в legal_documents сам при запуске. Имя и @username из Telegram - только после согласия на ПД | Схема не меняется: legal*documents.url - адрес на сайте, text_hash - sha256 текста из бота; clients.tg*\* до согласия пустые                                                                      |
+| 17  | Согласия (16.10.2026)                  | Документы - на сайте заказчика (политика и согласие), заказчик одобрил их для бота. При регистрации - две отдельные галочки и «Продолжить»: 1 - «Я согласен с Политикой…, даю согласие на обработку… и на получение информационных сообщений» (обязательна), 2 - рекламные рассылки (по желанию, отдельное согласие); из кабинета рассылки включаются отдельно. Тексты, которые показывает бот, - в коде с номером версии; новую версию бот заводит в legal_documents сам при запуске. Имя и @username из Telegram - только после согласия на ПД | Схема не меняется: legal_documents.url - адрес на сайте, text_hash - sha256 текста из бота; clients.tg_* до согласия пустые                                                                      |
+| 18  | Запись и оплата [FULL] (19-20.10.2026) | «Записаться» сразу занимает место, цена фиксируется при записи. Записаться можно за себя или вдвоём с коллегой (тариф «Для двух коллег», платит записывающий, у коллеги своя запись). Заказ: номер - шесть цифр по порядку с 100001, срок оплаты 72 часа; частичная оплата закрепляет место; оплату отмечает админ, бронь снимает только админ. Отмена оплаченной записи - деньги на аванс клиента (зачисляет админ) | orders (number из последовательности order_number_seq; total_amount NULL - «стоимость уточняется»; payer_type, due_at, отметки напоминаний, файл реквизитов юрлица), payments (каждая поступившая сумма; поля под онлайн-оплату), advances (журнал аванса, баланс - сумма строк), enrollments.order_id вместо order_items (миграция 20568b109f4b) |
 
 ---
 
@@ -162,6 +163,7 @@
 **enrollments** [MVP] - место конкретного врача на потоке
 
 - id, client_id, session_id, price_option_id NULL
+- order_id NULL [FULL] - заказ, по которому оплачивается место (у пары «для двух коллег» один заказ на двоих); NULL - лист ожидания
 - status: application / confirmed / waitlist / cancelled_by_client / cancelled_by_admin / attended / no_show / completed
 - payment_status: unpaid / partial / paid / refunded (кэш, в FULL считается из orders)
 - requested_seats smallint default 1 - MVP: «записываюсь с коллегами», менеджер обрабатывает вручную
@@ -174,23 +176,27 @@
 
 ### F. Заказы и оплаты [FULL]
 
-Единица оплаты - **заказ**, а не запись. Это покрывает и частное лицо, и клинику за нескольких врачей, и «двух коллег».
+Единица оплаты - **заказ**, а не запись. Это покрывает и частное лицо, и «двух коллег» (один заказ на две записи),
+а позже - клинику за нескольких врачей. Сделано в миграции 20568b109f4b (решение 18):
 
-**orders**
+**orders** - id, number UNIQUE (шесть цифр по порядку с 100001, последовательность order_number_seq),
+payer_client_id, session_id, price_option_id NULL, payer_type NULL (individual / organization; NULL - ещё не выбран),
+total_amount NULL (копейки, зафиксировано при записи; NULL - «стоимость уточняется»), currency,
+status (awaiting_payment / partially_paid / paid / cancelled), due_at (+72 ч), requisites_file_id / _name /
+_received_at (реквизиты юрлица файлом), invoice_sent_at, payment_reminded_at (24 ч), overdue_notified_at (срок вышел),
+paid_at, cancelled_at, cancel_reason, admin_comment.
+Позже, когда понадобится: organization_id (клиники), скидки и промокоды, email / телефон для чека.
 
-- id, number UNIQUE (человекочитаемый, напр. 2026-000123)
-- payer_type: individual / organization; payer_client_id NULL; organization_id NULL
-- created_by_client_id NULL / created_by_admin_id NULL
-- status: draft / awaiting_payment / partially_paid / paid / cancelled / refunded
-- payment_method: card_online / sbp / invoice / cash
-- subtotal, discount, total (копейки), currency, promo_code_id NULL
-- customer_email / customer_phone для чека, expires_at, paid_at
+Участники заказа - enrollments.order_id (у каждого своя запись); отдельная order_items не нужна: сумма у заказа целиком.
 
-**order_items** - id, order_id, enrollment_id UNIQUE, price_option_id, amount, discount
+**payments** - id, order_id, amount (> 0), currency, method (invoice / cash / card_online / sbp / advance),
+provider (manual / yookassa; новые - миграцией), state (pending / succeeded / canceled), provider_payment_id UNIQUE NULL,
+idempotency_key UNIQUE NULL, paid_at, created_by_telegram_id NULL (админ, отметивший оплату), comment.
+Оплачено по заказу = сумма успешных платежей; частичная оплата - несколько строк.
 
-**payments** - id, order_id, amount, method, status (pending / waiting_for_capture / succeeded / canceled / refunded),
-provider (yookassa / tbank / cloudpayments / robokassa / telegram / manual), provider_payment_id UNIQUE NULL,
-idempotency_key UNIQUE, confirmation_url NULL, paid_at, created_by_admin_id NULL (ручная отметка), comment
+**advances** - журнал аванса клиента: id, client_id, order_id NULL, amount (копейки, + зачисление / - списание, не 0),
+currency, reason (cancelled_order / applied_to_order / refund / correction), created_by_telegram_id (меняет только
+админ), comment, created_at. Баланс - сумма строк; строки не правятся, ошибку исправляет новая строка.
 
 **payment_events** - сырые вебхуки: id, provider, event_type, provider_payment_id, payload JSONB, received_at, processed_at, error
 **refunds** - id, payment_id, amount, reason, provider_refund_id UNIQUE NULL, status, created_at
@@ -229,7 +235,7 @@ enrollments, program_interests,
 admins
 
 FULL (~21 таблица, аддитивно): organizations, organization_members, client_invites, enrollment_status_history,
-orders, order_items, payments, payment_events, refunds, fiscal_receipts, invoices,
+orders, payments, advances (сделаны, решение 18; order_items не нужна), payment_events, refunds, fiscal_receipts, invoices,
 campaigns, campaign_recipients, scheduled_notifications, certificates, feedback,
 promo_codes, promo_redemptions, referral_rewards, audit_log, bot_texts.
 
