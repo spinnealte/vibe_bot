@@ -426,6 +426,18 @@ def advance_credited(amount: int) -> str:
     return texts.ADVANCE_CREDITED.format(amount=format_rub(amount))
 
 
+def payment_reminder(course_session: CourseSession, order: Order, overdue: bool, has_manager: bool,
+                     timezone: str) -> str:
+    """Клиенту: «напоминание об оплате» через сутки или «срок оплаты истёк» (полная версия, этап 1, шаг 5)."""
+    title, dates = safe(session_title(course_session)), dates_text(course_session)
+    if overdue:
+        hint = texts.PAYMENT_OVERDUE_HINT if has_manager else texts.PAYMENT_OVERDUE_HINT_NO_MANAGER
+        return texts.PAYMENT_OVERDUE.format(number=order.number, title=title, dates=dates, hint=hint)
+    hint = texts.PAYMENT_REMINDER_HINT if has_manager else texts.PAYMENT_REMINDER_HINT_NO_MANAGER
+    return texts.PAYMENT_REMINDER.format(number=order.number, title=title, dates=dates, amount=order_amount(order),
+                                         due=format_moment(order.due_at, timezone), hint=hint)
+
+
 def invoice_caption(order: Order, left: int | None, timezone: str) -> str:
     """Подпись к счёту: номер заказа, сколько осталось оплатить и до какого времени."""
     return texts.INVOICE_CAPTION.format(number=order.number, amount=format_rub(left) if left is not None

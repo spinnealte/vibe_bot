@@ -81,6 +81,30 @@ class OrderRepository:
         )
         return [tuple(row) for row in (await self.session.execute(stmt)).all()]
 
+    # --- Напоминания об оплате (фоновая задача) ------------------------------------------------------------------
+
+    async def lock_overdue(self, now: datetime, today: date, limit: int) -> list[Order]:
+        """Неоплаченные заказы с истёкшим сроком, о которых ещё не сообщали, - курс ещё не начался."""
+        return await self._lock_unpaid(today, limit, Order.overdue_notified_at.is_(None), Order.due_at <= now)
+
+    async def lock_unreminded(self, created_before: datetime, now: datetime, today: date, limit: int) -> list[Order]:
+        """Неоплаченные заказы старше суток без напоминания, срок оплаты ещё не вышел, курс не начался."""
+        return await self._lock_unpaid(today, limit, Order.payment_reminded_at.is_(None),
+                                       Order.created_at <= created_before, Order.due_at > now)
+
+    async def _lock_unpaid(self, today: date, limit: int, *conditions) -> list[Order]:
+        # SKIP LOCKED: заказ, который сейчас меняет админ или клиент, возьмём при следующей проверке.
+        stmt = (
+            select(Order)
+            .join(CourseSession, CourseSession.id == Order.session_id)
+            .where(Order.status == OrderStatus.AWAITING_PAYMENT,
+                   or_(CourseSession.start_date.is_(None), CourseSession.start_date > today), *conditions)
+            .order_by(Order.id)
+            .limit(limit)
+            .with_for_update(of=Order, skip_locked=True)
+        )
+        return list(await self.session.scalars(stmt))
+
     async def money_settled(self, order_id: int) -> bool:
         """По отменённому заказу деньги уже распределены: в журнале аванса есть зачисление по нему."""
         return bool(await self.session.scalar(select(self._settled_clause(order_id))))

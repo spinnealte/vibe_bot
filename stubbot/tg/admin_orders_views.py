@@ -11,6 +11,7 @@ from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES, MANUAL_PAYMENT_METHO
 from stubbot.db.models import Client, Order, PriceOption
 from stubbot.services.admin_orders import AdminOrderCard, OrderCategory
 from stubbot.services.enrollments import CancelResult, MyApplication
+from stubbot.services.reminders import ReminderJob, ReminderKind
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.callbacks import (
@@ -23,7 +24,7 @@ from stubbot.tg.callbacks import (
 )
 from stubbot.tg.formatting import safe
 from stubbot.tg.outgoing import Delivery
-from stubbot.tg.render import dates_text, price_label, session_title
+from stubbot.tg.render import dates_text, order_amount, price_label, session_title
 from stubbot.utils.dates import format_moment
 from stubbot.utils.money import format_rub
 from stubbot.utils.names import short_name
@@ -366,6 +367,22 @@ def notify_requisites(order: Order, payer: Client) -> tuple[str, InlineKeyboardM
     """Подпись к файлу реквизитов, который бот пересылает админам."""
     text = texts.ADMIN_NOTIFY_REQUISITES.format(number=order.number, name=person(payer), phone=safe(payer.phone))
     return text, open_order(order.id)
+
+
+def reminder_notice(job: ReminderJob, timezone: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Админам: «сутки без оплаты» или «просрочена оплата» - с кнопкой «Снять бронь» (сначала спросит)."""
+    order, payer = job.order, job.payer
+    fields = dict(number=order.number, title=safe(session_title(job.session)), dates=dates_text(job.session),
+                  name=person(payer), phone=phone(payer), amount=order_amount(order),
+                  due=format_moment(order.due_at, timezone),
+                  with_colleague=texts.ADMIN_NOTIFY_WITH_COLLEAGUE if job.participants > 1 else "")
+    if job.kind is ReminderKind.OVERDUE:
+        markup = _markup(_button(texts.BTN_ADMIN_ORDER_REMOVE, OrderAdminAction.REMOVE, order.id, NEW_SCREEN),
+                         _button(texts.BTN_ADMIN_OPEN_ORDER, OrderAdminAction.VIEW, order.id, NEW_SCREEN))
+        return texts.ADMIN_REMINDER_OVERDUE.format(**fields), markup
+    invoice = (texts.ADMIN_ORDER_INVOICE_SENT.format(moment=format_moment(order.invoice_sent_at, timezone))
+               if order.invoice_sent_at else texts.ADMIN_ORDER_INVOICE_NONE)
+    return texts.ADMIN_REMINDER_DAY.format(invoice=invoice, **fields), open_order(order.id)
 
 
 def notify_cancelled(app: MyApplication, result: CancelResult,

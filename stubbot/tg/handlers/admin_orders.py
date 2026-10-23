@@ -435,7 +435,8 @@ async def send_requisites(callback: CallbackQuery, session: AsyncSession, client
 # --- Снятие брони ----------------------------------------------------------------------------------------------
 
 @router.callback_query(_order_cb(OrderAdminAction.REMOVE))
-async def ask_remove(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
+async def ask_remove(callback: CallbackQuery, callback_data: OrderAdminCb, state: FSMContext,
+                     session: AsyncSession, client: Client) -> None:
     card = await _card(callback, session, client)
     if card is None:
         return
@@ -444,7 +445,9 @@ async def ask_remove(callback: CallbackQuery, state: FSMContext, session: AsyncS
         return
     await callback.answer()
     await state.clear()
-    await show_screen(callback.message, *views.remove_confirm(card))
+    # Из уведомления «просрочена оплата» - вопрос новым сообщением, уведомление остаётся в чате.
+    new = callback_data.value == views.NEW_SCREEN or callback.message.text is None
+    await (send_screen if new else show_screen)(callback.message, *views.remove_confirm(card))
 
 
 @router.callback_query(_order_cb(OrderAdminAction.REMOVE_OK))

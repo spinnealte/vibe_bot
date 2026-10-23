@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import sys
+from contextlib import suppress
 from datetime import UTC, datetime
 
 from stubbot.config import get_settings
@@ -11,6 +12,7 @@ from stubbot.logging_setup import setup_logging
 from stubbot.services.legal import LegalTextChanged, publish_documents
 from stubbot.tg.bot import check_telegram, create_bot
 from stubbot.tg.dispatcher import create_dispatcher
+from stubbot.tg.reminders import PaymentReminders
 
 logger = logging.getLogger("stubbot")
 
@@ -23,6 +25,7 @@ async def main() -> int:
     session_factory = create_session_factory(engine)
     bot = create_bot(settings)
     dp = create_dispatcher(settings, session_factory)
+    reminders: asyncio.Task | None = None
     try:
         try:
             # Тексты согласий - в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
@@ -36,6 +39,10 @@ async def main() -> int:
         except Exception as exc:
             logger.error("Нет связи с Telegram API (%s). Проверьте туннель: deploy/tunnel/check-tunnel.sh", type(exc).__name__)
             return 1
+        if settings.applications_enabled:
+            # Полная версия: напоминания об оплате - фоновая задача рядом с приёмом сообщений.
+            reminders = asyncio.create_task(PaymentReminders(bot, session_factory, settings).run_forever(),
+                                            name="payment-reminders")
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         return 0
     except asyncio.CancelledError:
@@ -43,6 +50,10 @@ async def main() -> int:
         logger.info("Получена команда остановки (Ctrl+C)")
         raise
     finally:
+        if reminders is not None:
+            reminders.cancel()
+            with suppress(asyncio.CancelledError):
+                await reminders
         await dp.storage.close()
         await bot.session.close()
         await engine.dispose()

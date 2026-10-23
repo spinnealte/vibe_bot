@@ -285,6 +285,14 @@ def payer_choice(order_id: int, back_index: int | None = None) -> InlineKeyboard
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
+def payment_reminder(order_id: int, choose_payer: bool, manager_url: str | None) -> InlineKeyboardMarkup | None:
+    """Под напоминанием об оплате: «Физлицо / Юрлицо», если ещё не выбрано, и чат менеджера с черновиком."""
+    rows = payer_choice(order_id).inline_keyboard if choose_payer else []
+    if manager_url:
+        rows = [*rows, [manager_button(manager_url, texts.BTN_CANCEL_VIA_MANAGER)]]
+    return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
 def _myapp(action: MyApplicationAction, enrollment_id: int = 0, index: int = 0) -> str:
     return MyApplicationCb(action=action, enrollment_id=enrollment_id, index=index).pack()
 
