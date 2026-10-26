@@ -7,7 +7,7 @@
 неподходящий ввод (фото, стикеры, голос, текст вместо кнопки).
 """
 
-from aiogram import F, Router
+from aiogram import Bot, F, Router
 from aiogram.filters import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
@@ -75,18 +75,30 @@ async def step_back(message: Message, state: FSMContext, session: AsyncSession, 
 # --- Телефон ---------------------------------------------------------------------------------------------------
 
 @router.message(Registration.phone, F.contact)
-async def on_contact(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
+async def on_contact(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                     settings: Settings, bot: Bot) -> None:
     contact = message.contact
     if contact.user_id != message.from_user.id:
         await message.answer(texts.REG_PHONE_FOREIGN_CONTACT)
         return
     service = RegistrationService(session)
-    match await service.save_phone(client, contact.phone_number):
+    saved = await service.save_phone(client, contact.phone_number)
+    match saved.result:
         case PhoneResult.INVALID:
             await message.answer(texts.REG_PHONE_INVALID)
         case PhoneResult.TAKEN:
             await state.clear()
             await message.answer(texts.REG_PHONE_TAKEN, reply_markup=keyboards.main_menu(message.chat.id))
+        case PhoneResult.LINKED:
+            # Номер был у коллеги без Telegram: его записи уже здесь - показываем их и продолжаем регистрацию,
+            # на шаге «ФИО» - сразу подтверждение того ФИО, что ввёл записавший.
+            await flows.announce_linked_records(message, session, client, settings, bot, saved.linked_name,
+                                                registration=True)
+            step = await service.next_step(client)
+            if step is RegistrationStep.NAME and saved.linked_name:
+                await flows.ask_name_from_colleague(message, state, saved.linked_name)
+            else:
+                await flows.show_registration_step(message, state, session, client, step)
         case PhoneResult.OK:
             await flows.show_registration_step(message, state, session, client, await service.next_step(client))
 

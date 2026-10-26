@@ -214,7 +214,8 @@ async def on_contact(message: Message, state: FSMContext, session: AsyncSession,
     if message.contact.user_id != message.from_user.id:
         await message.answer(texts.REG_PHONE_FOREIGN_CONTACT)
         return
-    match await RegistrationService(session).save_phone(client, message.contact.phone_number):
+    saved = await RegistrationService(session).save_phone(client, message.contact.phone_number)
+    match saved.result:
         case PhoneResult.INVALID:
             await message.answer(texts.REG_PHONE_INVALID)
             return
@@ -225,6 +226,9 @@ async def on_contact(message: Message, state: FSMContext, session: AsyncSession,
     await state.clear()
     # Новым сообщением: убираем кнопку «Поделиться номером», возвращаем клавиатуру меню.
     await message.answer(notice, reply_markup=keyboards.main_menu(message.chat.id))
+    if saved.result is PhoneResult.LINKED:  # номер коллеги без Telegram - его записи теперь здесь
+        await flows.announce_linked_records(message, session, client, settings, bot, saved.linked_name,
+                                            registration=False)
     await flows.show_cabinet(message, session, client, settings, bot)
 
 

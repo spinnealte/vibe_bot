@@ -7,7 +7,10 @@ in_place=True - экран заменяет сообщение, в которо�
 (ответ на текст пользователя или экран с reply-клавиатурой: её нельзя прикрепить правкой сообщения).
 """
 
+import logging
+
 from aiogram import Bot
+from aiogram.exceptions import TelegramBadRequest, TelegramForbiddenError
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State
 from aiogram.types import InlineKeyboardMarkup, Message
@@ -18,6 +21,7 @@ from stubbot.db.enums import ConsentType
 from stubbot.db.models import Client
 from stubbot.services.clients import ClientService
 from stubbot.services.consents import ConsentService
+from stubbot.services.enrollments import EnrollmentService
 from stubbot.services.legal import document_text
 from stubbot.services.orders import OrderService
 from stubbot.services.registration import (
@@ -26,7 +30,7 @@ from stubbot.services.registration import (
     RegistrationService,
     RegistrationStep,
 )
-from stubbot.tg import catalog_flow, keyboards, texts
+from stubbot.tg import catalog_flow, keyboards, render, texts
 from stubbot.tg.callbacks import SelectGroup
 from stubbot.tg.formatting import safe, safe_join
 from stubbot.tg.screen import send_screen, show_screen, strip_keyboard
@@ -34,6 +38,8 @@ from stubbot.tg.states import FULL_NAME_KEY, OPTIONAL_STATES, PENDING_APPLY_KEY,
 from stubbot.utils.dates import local_today
 from stubbot.utils.money import format_rub
 from stubbot.utils.profile_fields import experience_years
+
+logger = logging.getLogger(__name__)
 
 # Экран согласий при регистрации (FSM data): какие версии документов показали и какие галочки стоят.
 PD_DOCUMENT_KEY = "pd_document_id"
@@ -157,6 +163,38 @@ async def show_registration_step(message: Message, state: FSMContext, session: A
 async def ask_full_name(message: Message, state: FSMContext) -> None:
     await state.set_state(Registration.full_name)
     await message.answer(texts.REG_ASK_FULL_NAME, reply_markup=keyboards.registration_nav())
+
+
+async def announce_linked_records(message: Message, session: AsyncSession, client: Client, settings: Settings,
+                                  bot: Bot, colleague_name: str | None, registration: bool) -> None:
+    """Коллега без Telegram пришёл в бот с тем же телефоном (полная версия, этап 1, шаг 6): показать записи, куда
+    его записали, и сообщить записавшим. registration - ещё идёт регистрация: вместо кнопки «Поделиться номером»
+    ставим «Назад / Отмена», следом - шаг «ФИО»."""
+    today = local_today(settings.timezone)
+    apps = [app for app in await EnrollmentService(session).my_applications(client.id, today)
+            if app.active and not app.is_payer]
+    if apps:
+        await message.answer(render.linked_records(apps, registration),
+                             reply_markup=keyboards.registration_nav() if registration else None)
+    # Уже зарегистрирован (номер сменил в кабинете) - его собственное ФИО, иначе то, что ввёл записавший.
+    name = client.full_name or colleague_name
+    told: set[int] = set()
+    for app in apps:
+        payer = app.partner
+        if payer is None or payer.telegram_id is None or payer.id in told:
+            continue
+        told.add(payer.id)
+        try:
+            await bot.send_message(payer.telegram_id, render.colleague_joined(app, name))
+        except (TelegramForbiddenError, TelegramBadRequest):
+            logger.info("Записавшему #%s не удалось сообщить, что коллега #%s в боте", payer.id, client.id)
+
+
+async def ask_name_from_colleague(message: Message, state: FSMContext, full_name: str) -> None:
+    """Шаг «ФИО» после привязки: сразу экран подтверждения с ФИО, которое ввёл записавший коллега, -
+    «Верно» или «Исправить» (решение 24.10.2026)."""
+    await state.update_data({FULL_NAME_KEY: full_name})
+    await ask_confirm_name(message, state)
 
 
 async def ask_confirm_name(message: Message, state: FSMContext, confirm_state: State = Registration.confirm_name) -> None:

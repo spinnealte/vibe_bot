@@ -248,6 +248,27 @@ def pay_individual(order: Order, email: str | None, timezone: str) -> str:
     )
 
 
+def linked_records(apps: list[MyApplication], registration: bool) -> str:
+    """«Нашли Вашу запись!» - коллега без Telegram пришёл в бот (полная версия, этап 1, шаг 6). apps - записи,
+    куда его записали коллеги; registration - ещё идёт регистрация («Осталось закончить регистрацию 👇»)."""
+    tail = texts.LINKED_TAIL_REGISTRATION if registration else ""
+    if len(apps) == 1:
+        app = apps[0]
+        course = texts.LINKED_COURSE.format(title=safe(app.title), dates=dates_text(app.session))
+        return texts.LINKED_RECORDS.format(name=safe(app.partner.full_name if app.partner else None), courses=course,
+                                           tail=tail)
+    courses = "\n".join(texts.LINKED_COURSE_WITH.format(
+        title=safe(app.title), dates=dates_text(app.session),
+        name=safe(short_name(app.partner.full_name) if app.partner and app.partner.full_name else None),
+    ) for app in apps)
+    return texts.LINKED_RECORDS_MANY.format(courses=courses, tail=tail)
+
+
+def colleague_joined(app: MyApplication, colleague_name: str | None) -> str:
+    """Записавшему: коллега, которого он записал, теперь в боте и видит запись."""
+    return texts.COLLEAGUE_JOINED.format(name=safe(colleague_name), title=safe(app.title))
+
+
 def colleague_enrolled(card: SessionCard, enroller_name: str | None) -> str:
     """Коллеге, который уже есть в боте: его записали вместе с собой."""
     return texts.COLLEAGUE_ENROLLED.format(

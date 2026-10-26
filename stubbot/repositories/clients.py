@@ -4,9 +4,20 @@ from typing import Any
 from sqlalchemy import delete, exists, func, insert, select, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
+from sqlalchemy.orm import aliased, selectinload
 
-from stubbot.db.models import Client, Position, Specialty, client_positions, client_specialties
+from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES
+from stubbot.db.models import (
+    Advance,
+    Client,
+    Enrollment,
+    Order,
+    Position,
+    ProgramInterest,
+    Specialty,
+    client_positions,
+    client_specialties,
+)
 
 
 class ClientRepository:
@@ -23,6 +34,45 @@ class ClientRepository:
 
     async def get_by_phone(self, phone: str) -> Client | None:
         return await self.session.scalar(select(Client).where(Client.phone == phone, Client.deleted_at.is_(None)))
+
+    async def close_merged(self, ids: list[int], into_id: int, now: datetime) -> None:
+        """Профили, чьи записи перешли клиенту into_id: закрыты (как удалённые - из поиска и выгрузки уходят,
+        телефон освобождается), в заметке - с кем объединены. Строки остаются для истории."""
+        await self.session.execute(
+            update(Client).where(Client.id.in_(ids))
+            .values(deleted_at=now, admin_note=func.concat_ws("\n", Client.admin_note,
+                                                               f"Объединён с клиентом #{into_id}"))
+        )
+
+    async def all_by_phone(self, phone: str) -> list[Client]:
+        """Действующие профили с этим телефоном - не больше одного (уникальный индекс), список - для простоты."""
+        stmt = select(Client).where(Client.phone == phone, Client.deleted_at.is_(None)).order_by(Client.id)
+        return list(await self.session.scalars(stmt))
+
+    async def records_overlap(self, from_ids: list[int], to_id: int) -> bool:
+        """Есть ли у обоих неотменённая запись на одно и то же проведение - тогда объединять нельзя."""
+        theirs = aliased(Enrollment)
+        stmt = select(exists().where(
+            Enrollment.client_id.in_(from_ids),
+            Enrollment.status.not_in(CANCELLED_ENROLLMENT_STATUSES),
+            exists().where(theirs.client_id == to_id, theirs.session_id == Enrollment.session_id,
+                           theirs.status.not_in(CANCELLED_ENROLLMENT_STATUSES)),
+        ))
+        return bool(await self.session.scalar(stmt))
+
+    async def move_records(self, from_ids: list[int], to_id: int) -> None:
+        """Записи, заказы, аванс и листы ожидания курсов профилей from_ids - клиенту to_id. Подписка на тот же
+        курс у него уже есть - вторая не нужна."""
+        for column in (Enrollment.client_id, Enrollment.enrolled_by_client_id):
+            await self.session.execute(update(Enrollment).where(column.in_(from_ids)).values({column.key: to_id}))
+        await self.session.execute(update(Order).where(Order.payer_client_id.in_(from_ids))
+                                   .values(payer_client_id=to_id))
+        await self.session.execute(update(Advance).where(Advance.client_id.in_(from_ids)).values(client_id=to_id))
+        own = select(ProgramInterest.program_id).where(ProgramInterest.client_id == to_id)
+        await self.session.execute(delete(ProgramInterest).where(ProgramInterest.client_id.in_(from_ids),
+                                                                 ProgramInterest.program_id.in_(own)))
+        await self.session.execute(update(ProgramInterest).where(ProgramInterest.client_id.in_(from_ids))
+                                   .values(client_id=to_id))
 
     async def add(self, client: Client) -> Client:
         self.session.add(client)

@@ -1,4 +1,5 @@
 import logging
+from dataclasses import dataclass
 from datetime import UTC, date, datetime
 from enum import StrEnum
 
@@ -38,7 +39,14 @@ OPTIONAL_FIELDS_ORDER = list(OptionalField)
 class PhoneResult(StrEnum):
     OK = "ok"
     INVALID = "invalid"
-    TAKEN = "taken"  # номер уже у другого клиента
+    TAKEN = "taken"  # номер уже у другого клиента в боте
+    LINKED = "linked"  # номер был у коллеги без Telegram (его записали вдвоём) - его записи теперь у этого клиента
+
+
+@dataclass(frozen=True)
+class PhoneSaved:
+    result: PhoneResult
+    linked_name: str | None = None  # ФИО, которое ввёл записавший коллега, - подставим на шаге «ФИО»
 
 
 class RegistrationService:
@@ -60,19 +68,40 @@ class RegistrationService:
             return RegistrationStep.POSITIONS
         return RegistrationStep.DONE
 
-    async def save_phone(self, client: Client, raw_phone: str) -> PhoneResult:
+    async def save_phone(self, client: Client, raw_phone: str, now: datetime | None = None) -> PhoneSaved:
+        """Телефон из кнопки «Поделиться номером» - его Telegram отдаёт только со своего аккаунта, номер подтверждён.
+
+        Номер у коллеги без Telegram (его записали вдвоём, полная версия, этап 1, шаг 6) - его записи, заказы
+        и листы ожидания переходят этому клиенту, а тот профиль закрывается с пометкой «объединён». Номер
+        у другого клиента в боте или у обоих запись на одно проведение - «номер занят», разбирается менеджер.
+        """
         phone = normalize_phone(raw_phone)
         if phone is None:
-            return PhoneResult.INVALID
-        owner = await self.clients.get_by_phone(phone)
-        if owner is not None and owner.id != client.id:
-            logger.warning("Клиент #%s: телефон уже привязан к клиенту #%s", client.id, owner.id)
-            return PhoneResult.TAKEN
+            return PhoneSaved(PhoneResult.INVALID)
+        others = [owner for owner in await self.clients.all_by_phone(phone) if owner.id != client.id]
+        if any(owner.telegram_id is not None for owner in others):
+            logger.warning("Клиент #%s: телефон уже привязан к клиенту #%s", client.id,
+                           next(o.id for o in others if o.telegram_id is not None))
+            return PhoneSaved(PhoneResult.TAKEN)
+        linked_name = None
+        if others:
+            ids = [owner.id for owner in others]
+            if await self.clients.records_overlap(ids, client.id):
+                logger.warning("Клиент #%s: телефон у коллеги без Telegram (#%s), но записи пересекаются",
+                               client.id, ids)
+                return PhoneSaved(PhoneResult.TAKEN)
+            linked_name = others[0].full_name
+            await self.clients.move_records(ids, client.id)
+            # Закрываем сразу запросом: телефон у действующих клиентов уникален - номер освободится раньше,
+            # чем его получит этот клиент.
+            await self.clients.close_merged(ids, client.id, now or datetime.now(UTC))
+            self.analytics.add_event(client.id, ClientEventType.ACCOUNT_LINKED, {"from": ids})
+            logger.info("Клиент #%s: телефон коллеги без Telegram - записи профилей %s перенесены", client.id, ids)
         client.phone = phone
         client.phone_confirmed = True
         self._mark_partial(client)
         logger.info("Клиент #%s: сохранён телефон", client.id)
-        return PhoneResult.OK
+        return PhoneSaved(PhoneResult.LINKED if others else PhoneResult.OK, linked_name)
 
     def save_name(self, client: Client, full_name: str) -> None:
         client.full_name = full_name

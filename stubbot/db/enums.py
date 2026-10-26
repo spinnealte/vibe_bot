@@ -49,6 +49,7 @@ class ClientEventType(StrEnum):
     APPLICATION_CANCELLED = "application_cancelled"
     INTEREST_CREATED = "interest_created"
     PROFILE_EDITED = "profile_edited"
+    ACCOUNT_LINKED = "account_linked"  # записи коллеги без Telegram перешли его аккаунту (по телефону)
 
 
 class ProgramLevel(StrEnum):
