@@ -13,7 +13,7 @@ from stubbot.db.models import Client, Program
 from stubbot.services.admin_clients import SEARCH_LIMIT, AdminClientCard, AdvanceInput, SearchResult, SessionParticipants
 from stubbot.services.admin_dictionaries import DictKind
 from stubbot.tg import texts
-from stubbot.tg.admin_orders_views import BACK_ORDER
+from stubbot.tg.admin_orders_views import BACK_ORDER, PICK_ORDER
 from stubbot.tg.admin_views import FROM_COURSE
 from stubbot.tg.callbacks import (
     AdminAction,
@@ -26,6 +26,7 @@ from stubbot.tg.callbacks import (
     OrderAdminCb,
 )
 from stubbot.tg.formatting import safe, safe_join
+from stubbot.tg.picker import PickList
 from stubbot.tg.render import dates_text, session_title, short
 from stubbot.utils.dates import format_date, format_range_with_year
 from stubbot.utils.money import format_rub
@@ -40,9 +41,11 @@ BACK_CANCELLED = "x"  # из отменивших запись: x<id прове�
 BACK_WAITLIST = "w"  # из листа ожидания курса: w<id курса>
 # BACK_ORDER (из карточки заказа: o<id заказа>) - в admin_orders_views; FROM_COURSE (лист ожидания открыт из
 # карточки курса - назад к ней) - в admin_views: там эти кнопки и рисуются.
-MAX_ROWS = 80  # кнопок людей на экране (лимит Telegram - 100 кнопок)
 MAX_ENROLLMENTS = 10  # записей в карточке клиента
-MAX_ORDERS = 6  # кнопок заказов в карточке клиента
+MAX_ORDERS = 10  # заказов (по номерам) в карточке клиента
+# Виды пронумерованных списков (tg/picker.py): номер открывает клиента или лист ожидания курса.
+PICK_CLIENT = "client"
+PICK_WAITLIST = "course_waitlist"
 
 
 def _cb(action: ClientAdminAction, item_id: int = 0, value: str = "") -> str:
@@ -104,24 +107,34 @@ def ask_query() -> Screen:
 
 
 def client_row(client: Client) -> str:
-    """«Петров Пётр Петрович · …0010 (не в боте)» - по последним цифрам телефона тёзок не спутать."""
-    return texts.BTN_ADMIN_CLIENT_ROW.format(
-        name=short(client.full_name or texts.NOT_SET, 48), phone=(client.phone or "")[-4:],
+    """«Петров Пётр Петрович · …0010 (не в боте)» - по последним цифрам телефона тёзок не спутать. HTML."""
+    return texts.ADMIN_CLIENT_ROW.format(
+        name=safe(client.full_name), phone=safe((client.phone or "")[-4:]),
         not_in_bot="" if client.telegram_id else texts.ADMIN_CLIENT_NOT_IN_BOT,
     )
 
 
-def search_results(result: SearchResult, raw_query: str) -> Screen:
+def _cb_row(text: str, action: ClientAdminAction, item_id: int = 0, value: str = "") -> list[tuple[str, str]]:
+    """Ряд из одной кнопки для пронумерованного списка (picker хранит кнопки текстом)."""
+    return [(text, _cb(action, item_id, value))]
+
+
+def search_results(result: SearchResult, raw_query: str) -> PickList:
+    """Найденные клиенты - пронумерованным списком (правило 26.10.2026): клиента открывают его номером,
+    не номер - новый запрос. Никого - просто экран с «Искать ещё»."""
     query = safe(" ".join(raw_query.split())[:100])
-    if not result.clients:
-        text = texts.ADMIN_CLIENT_NOT_FOUND.format(query=query)
-    else:
-        more = texts.ADMIN_CLIENT_FOUND_MORE.format(limit=SEARCH_LIMIT) if result.more else ""
-        text = texts.ADMIN_CLIENT_FOUND.format(count=len(result.clients), query=query, more=more)
-    rows = [_button(client_row(client), ClientAdminAction.VIEW, client.id, BACK_FIND) for client in result.clients]
-    rows.append(_button(texts.BTN_ADMIN_FIND_AGAIN, ClientAdminAction.FIND))
-    rows.append(_to_menu())
-    return text, _markup(*rows)
+    more = texts.ADMIN_CLIENT_FOUND_MORE.format(limit=SEARCH_LIMIT) if result.more else ""
+    return PickList(
+        kind=PICK_CLIENT,
+        ids=[client.id for client in result.clients],
+        title=texts.ADMIN_CLIENT_FOUND.format(count=len(result.clients), query=query),
+        lines=[client_row(client) for client in result.clients],
+        hint=more + texts.PICK_HINT_SEARCH,
+        empty=texts.ADMIN_CLIENT_NOT_FOUND.format(query=query),
+        buttons=[_cb_row(texts.BTN_ADMIN_FIND_AGAIN, ClientAdminAction.FIND),
+                 _cb_row(texts.BTN_ADMIN_TO_CLIENTS, ClientAdminAction.MENU)],
+        context={"back": BACK_FIND, "requery": True},
+    )
 
 
 # --- Карточка клиента ------------------------------------------------------------------------------------------
@@ -149,7 +162,20 @@ def client_card(card: AdminClientCard, timezone: str, back: str) -> Screen:
             title=safe(short(program.title)), date=format_date(since.astimezone(ZoneInfo(timezone)).date()))
             for program, since in card.waiting)
         lines += ["", texts.ADMIN_CLIENT_WAITING.format(courses=courses)]
+    if card.orders:
+        # Заказы - по номерам в тексте (правило 26.10.2026): заказ открывают его номером.
+        lines += ["", texts.ADMIN_CLIENT_ORDERS]
+        lines += [texts.PICK_LINE.format(number=number, line=texts.ADMIN_CLIENT_ORDER.format(
+            number=order.number, amount=format_rub(order.total_amount) if order.total_amount is not None else "?",
+            status=texts.ADMIN_ORDER_STATUS[order.status.value]))
+            for number, order in enumerate(card.orders[:MAX_ORDERS], start=1)]
+        lines += ["", texts.ADMIN_CLIENT_ORDERS_HINT]
     return "\n".join(lines), _card_markup(card, back)
+
+
+def orders_pick(card: AdminClientCard) -> PickList:
+    """Номера заказов из карточки клиента: «1» - открыть первый. Строки уже в тексте карточки."""
+    return PickList(kind=PICK_ORDER, ids=[order.id for order in card.orders[:MAX_ORDERS]], title="")
 
 
 def _telegram(client: Client) -> str:
@@ -177,10 +203,7 @@ def _enrollment_lines(card: AdminClientCard) -> list[str]:
 
 def _card_markup(card: AdminClientCard, back: str) -> InlineKeyboardMarkup:
     client_id = card.client.id
-    orders = [InlineKeyboardButton(text=texts.BTN_ADMIN_CLIENT_ORDER.format(number=order.number),
-                                   callback_data=OrderAdminCb(action=OrderAdminAction.VIEW, order_id=order.id).pack())
-              for order in card.orders[:MAX_ORDERS]]
-    rows = [orders[i:i + 3] for i in range(0, len(orders), 3)]
+    rows = []
     rows.append([
         InlineKeyboardButton(text=texts.BTN_ADMIN_CLIENT_WRITE, callback_data=_cb(ClientAdminAction.WRITE, client_id,
                                                                                   back)),
@@ -234,75 +257,83 @@ def advance_confirm(client: Client, change: AdvanceInput, balance: int, token: s
 
 # --- Участники проведения --------------------------------------------------------------------------------------
 
-def _person_button(row, value: str) -> list[InlineKeyboardButton]:
+def _person_line(row) -> str:
+    """«✅ Петров П. П. · №100001» - участник в пронумерованном списке. HTML."""
     enrollment, client, order = row
-    text = texts.BTN_ADMIN_PARTICIPANT.format(
-        mark=texts.ADMIN_PARTICIPANT_MARKS[enrollment.status.value], name=_short(client),
+    return texts.ADMIN_PARTICIPANT_LINE.format(
+        mark=texts.ADMIN_PARTICIPANT_MARKS[enrollment.status.value], name=safe(_short(client)),
         order=texts.ADMIN_CLIENT_ENROLLMENT_ORDER.format(number=order.number) if order else "",
     )
-    return _button(text, ClientAdminAction.VIEW, client.id, value)
 
 
-def participants(view: SessionParticipants) -> Screen:
+def participants(view: SessionParticipants) -> PickList:
+    """Участники проведения - пронумерованным списком: карточку клиента открывают номером. Отменившие -
+    отдельной кнопкой (решение 21.10.2026)."""
     course_session = view.session
     seats = ""
     if view.seats_left is not None:
         seats = texts.ADMIN_PARTICIPANTS_SEATS.format(left=view.seats_left, capacity=course_session.capacity)
-    text = texts.ADMIN_PARTICIPANTS.format(
+    header = texts.ADMIN_PARTICIPANTS.format(
         title=safe(short(session_title(course_session))), dates=dates_text(course_session),
         confirmed=len(view.confirmed), awaiting=len(view.awaiting), waitlist=len(view.waitlist), seats=seats,
     )
-    if not view.active:
-        text += texts.ADMIN_PARTICIPANTS_EMPTY
-    value = f"{BACK_PARTICIPANTS}{course_session.id}"
-    rows = [_person_button(row, value) for row in view.active[:MAX_ROWS]]
+    buttons = []
     if view.cancelled:
-        rows.append(_button(texts.BTN_ADMIN_CANCELLED_PARTICIPANTS.format(count=len(view.cancelled)),
-                            ClientAdminAction.CANCELLED, course_session.id))
-    rows.append(_to_session(course_session.id))
-    return text, _markup(*rows)
+        buttons.append(_cb_row(texts.BTN_ADMIN_CANCELLED_PARTICIPANTS.format(count=len(view.cancelled)),
+                               ClientAdminAction.CANCELLED, course_session.id))
+    buttons.append([_to_session(course_session.id)])
+    return PickList(kind=PICK_CLIENT, ids=[client.id for _, client, _ in view.active], title=header,
+                    lines=[_person_line(row) for row in view.active], empty=header + texts.ADMIN_PARTICIPANTS_EMPTY,
+                    buttons=buttons, context={"back": f"{BACK_PARTICIPANTS}{course_session.id}"})
 
 
-def cancelled_participants(view: SessionParticipants) -> Screen:
+def cancelled_participants(view: SessionParticipants) -> PickList:
     course_session = view.session
-    text = texts.ADMIN_CANCELLED_PARTICIPANTS.format(
+    header = texts.ADMIN_CANCELLED_PARTICIPANTS.format(
         title=safe(short(session_title(course_session))), dates=dates_text(course_session), count=len(view.cancelled),
     )
-    value = f"{BACK_CANCELLED}{course_session.id}"
-    rows = [_person_button(row, value) for row in view.cancelled[:MAX_ROWS]]
-    rows.append(_button(texts.BTN_ADMIN_TO_PARTICIPANTS, ClientAdminAction.PARTICIPANTS, course_session.id))
-    return text, _markup(*rows)
+    return PickList(kind=PICK_CLIENT, ids=[client.id for _, client, _ in view.cancelled], title=header,
+                    lines=[_person_line(row) for row in view.cancelled], empty=header,
+                    buttons=[_cb_row(texts.BTN_ADMIN_TO_PARTICIPANTS, ClientAdminAction.PARTICIPANTS,
+                                     course_session.id)],
+                    context={"back": f"{BACK_CANCELLED}{course_session.id}"})
 
 
-def _to_session(session_id: int) -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(text=texts.BTN_ADMIN_TO_SESSION, callback_data=DictCb(
-        kind=DictKind.SESSIONS, action=DictAction.VIEW, item_id=session_id).pack())]
+def _to_session(session_id: int) -> tuple[str, str]:
+    return texts.BTN_ADMIN_TO_SESSION, DictCb(kind=DictKind.SESSIONS, action=DictAction.VIEW, item_id=session_id).pack()
 
 
 # --- Листы ожидания курсов -------------------------------------------------------------------------------------
 
-def waitlists(rows: list[tuple[Program, int]]) -> Screen:
-    buttons = [_button(texts.BTN_ADMIN_WAITLIST_ROW.format(title=short(program.title), count=count),
-                       ClientAdminAction.WAITLIST, program.id) for program, count in rows[:MAX_ROWS]]
-    buttons.append(_to_menu())
-    return (texts.ADMIN_WAITLISTS if rows else texts.ADMIN_WAITLISTS_EMPTY), _markup(*buttons)
+def waitlists(rows: list[tuple[Program, int]]) -> PickList:
+    """Курсы, где кто-то ждёт нового проведения, - по номерам: лист ожидания открывают номером курса."""
+    return PickList(kind=PICK_WAITLIST, ids=[program.id for program, _ in rows], title=texts.ADMIN_WAITLISTS,
+                    lines=[texts.ADMIN_WAITLIST_ROW.format(title=safe(program.title), count=count)
+                           for program, count in rows],
+                    empty=texts.ADMIN_WAITLISTS_EMPTY,
+                    buttons=[_cb_row(texts.BTN_ADMIN_TO_CLIENTS, ClientAdminAction.MENU)])
 
 
 def course_waitlist(program: Program, rows: list[tuple[Client, datetime]], timezone: str,
-                    from_course: bool) -> Screen:
+                    from_course: bool) -> PickList:
+    """Кто ждёт нового проведения курса - по номерам: карточку клиента открывают номером."""
     title = safe(short(program.title))
-    text = (texts.ADMIN_COURSE_WAITLIST.format(title=title, count=len(rows)) if rows
-            else texts.ADMIN_COURSE_WAITLIST_EMPTY.format(title=title))
-    value = f"{BACK_WAITLIST}{program.id}"
-    buttons = [_button(texts.BTN_ADMIN_WAITLIST_CLIENT.format(
-        name=_short(client), date=format_date(since.astimezone(ZoneInfo(timezone)).date())),
-        ClientAdminAction.VIEW, client.id, value) for client, since in rows[:MAX_ROWS]]
+    buttons = []
     if rows:
-        buttons.append(_button(texts.BTN_ADMIN_INVITED, ClientAdminAction.INVITED, program.id,
+        buttons.append(_cb_row(texts.BTN_ADMIN_INVITED, ClientAdminAction.INVITED, program.id,
                                FROM_COURSE if from_course else ""))
-    buttons.append(_to_course(program.id) if from_course
-                   else _button(texts.BTN_ADMIN_TO_WAITLISTS, ClientAdminAction.WAITLISTS))
-    return text, _markup(*buttons)
+    buttons.append([_to_course(program.id)] if from_course
+                   else _cb_row(texts.BTN_ADMIN_TO_WAITLISTS, ClientAdminAction.WAITLISTS))
+    return PickList(
+        kind=PICK_CLIENT, ids=[client.id for client, _ in rows],
+        title=texts.ADMIN_COURSE_WAITLIST.format(title=title, count=len(rows)),
+        lines=[texts.ADMIN_WAITLIST_CLIENT.format(name=safe(_short(client)),
+                                                  date=format_date(since.astimezone(ZoneInfo(timezone)).date()))
+               for client, since in rows],
+        hint=texts.ADMIN_COURSE_WAITLIST_NOTE + texts.PICK_HINT,
+        empty=texts.ADMIN_COURSE_WAITLIST_EMPTY.format(title=title), buttons=buttons,
+        context={"back": f"{BACK_WAITLIST}{program.id}"},
+    )
 
 
 def invited_confirm(program: Program, count: int, from_course: bool) -> Screen:
@@ -316,6 +347,5 @@ def invited_confirm(program: Program, count: int, from_course: bool) -> Screen:
     ])
 
 
-def _to_course(program_id: int) -> list[InlineKeyboardButton]:
-    return [InlineKeyboardButton(text=texts.BTN_ADMIN_TO_COURSE, callback_data=DictCb(
-        kind=DictKind.COURSES, action=DictAction.VIEW, item_id=program_id).pack())]
+def _to_course(program_id: int) -> tuple[str, str]:
+    return texts.BTN_ADMIN_TO_COURSE, DictCb(kind=DictKind.COURSES, action=DictAction.VIEW, item_id=program_id).pack()

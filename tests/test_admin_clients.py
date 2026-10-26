@@ -26,7 +26,7 @@ from stubbot.services.admin_clients import (
 )
 from stubbot.services.admin_dictionaries import DictKind
 from stubbot.tg import admin_clients_views as views
-from stubbot.tg import admin_orders_views, admin_views, texts
+from stubbot.tg import admin_orders_views, admin_views, picker, texts
 from stubbot.tg.callbacks import ClientAdminAction, ClientAdminCb, DictAction, DictCb, OrderAdminAction, OrderAdminCb
 from stubbot.tg.outgoing import Delivery, Outgoing, OutgoingKind, deliver_to_client
 from stubbot.utils.money import format_rub
@@ -131,9 +131,9 @@ def _service(repo: _Repo, balance: int = 0) -> AdminClientService:
 
 
 def test_search_limits_results_and_skips_short_queries() -> None:
-    repo = _Repo(found=[SimpleNamespace(id=i) for i in range(40)])
+    repo = _Repo(found=[SimpleNamespace(id=i) for i in range(SEARCH_LIMIT + 20)])
     result = asyncio.run(_service(repo).search("петр"))
-    assert len(result.clients) == SEARCH_LIMIT and result.more  # больше 30 - первые 30 и «уточните»
+    assert len(result.clients) == SEARCH_LIMIT and result.more  # больше 100 - первые 100 и «уточните»
     assert repo.calls == [("name", ["петр"], SEARCH_LIMIT + 1)]
     asyncio.run(_service(repo).search("0010"))
     assert repo.calls[-1] == ("phone", "0010", SEARCH_LIMIT + 1)
@@ -175,12 +175,16 @@ def test_menu_and_search_results() -> None:
     assert "Всего в базе: <b>152</b>" in text
     assert _rows(markup) == [[texts.BTN_ADMIN_CLIENT_FIND], [texts.BTN_ADMIN_WAITLISTS], [texts.BTN_ADMIN_BACK]]
     result = SearchResult(SearchQuery(QueryKind.NAME, ("петр",)), [PETROV, COLLEAGUE], more=True)
-    text, markup = views.search_results(result, "петр <b>")
-    assert "Найдено: 2</b> по «петр &lt;b&gt;»" in text and "первые 30" in text
-    assert _rows(markup)[:2] == [["Петров Пётр Петрович · …0010"], ["Петрова Анна Сергеевна · …4567 (не в боте)"]]
-    first = _unpack(markup.inline_keyboard[0][0])
-    assert (first.action, first.item_id, first.value) == (ClientAdminAction.VIEW, 10, views.BACK_FIND)
-    empty, _ = views.search_results(SearchResult(SearchQuery(QueryKind.PHONE, digits="9999"), []), "9999")
+    pick = views.search_results(result, "петр <b>")
+    # Найденные - пронумерованным списком: номер открывает карточку, не номер - новый запрос (правило 26.10.2026).
+    assert (pick.kind, pick.ids, pick.context) == (views.PICK_CLIENT, [10, 50], {"back": views.BACK_FIND,
+                                                                                "requery": True})
+    text, markup = picker.render(pick)
+    assert "Найдено: 2</b> по «петр &lt;b&gt;»" in text and "первые 100" in text
+    assert "<b>1.</b> Петров Пётр Петрович · …0010" in text
+    assert "<b>2.</b> Петрова Анна Сергеевна · …4567 (не в боте)" in text and texts.PICK_HINT_SEARCH in text
+    assert _rows(markup) == [[texts.BTN_ADMIN_FIND_AGAIN], [texts.BTN_ADMIN_TO_CLIENTS]]  # ни одной кнопки клиента
+    empty, _ = picker.render(views.search_results(SearchResult(SearchQuery(QueryKind.PHONE, digits="9999"), []), "9999"))
     assert "Никого не нашли по «9999»" in empty
 
 
@@ -191,7 +195,7 @@ def _session(**kw) -> SimpleNamespace:
 
 
 def _card(client=PETROV, **kw) -> AdminClientCard:
-    order = SimpleNamespace(id=77, number=100001, status=OrderStatus.PARTIALLY_PAID)
+    order = SimpleNamespace(id=77, number=100001, status=OrderStatus.PARTIALLY_PAID, total_amount=None)
     fields = dict(marketing=True, advance=2_000_000,
                   enrollments=[(SimpleNamespace(status=EnrollmentStatus.CONFIRMED), _session(), _session().program,
                                 None, order)],
@@ -206,13 +210,14 @@ def test_client_card() -> None:
                  "В базе с 12 октября 2026", "Имплантация · 13–14 ноября 2026 · ✅ Место закреплено · №100001",
                  "Ждёт курс:</b> Эндодонтия (с 20 октября)"):
         assert part in text, part
-    assert _rows(markup) == [["🧾 №100001"], [texts.BTN_ADMIN_CLIENT_WRITE, texts.BTN_ADMIN_CLIENT_ADVANCE],
+    # Заказы - по номерам в тексте карточки: «1» открывает первый (кнопок заказов нет).
+    assert "<b>1.</b> №100001 · ? · ➗ оплачен частично" in text and texts.ADMIN_CLIENT_ORDERS_HINT in text
+    assert views.orders_pick(_card()).ids == [77] and views.orders_pick(_card()).kind == views.PICK_ORDER
+    assert _rows(markup) == [[texts.BTN_ADMIN_CLIENT_WRITE, texts.BTN_ADMIN_CLIENT_ADVANCE],
                              [texts.BTN_ADMIN_CLIENT_BACK]]
-    order = OrderAdminCb.unpack(markup.inline_keyboard[0][0].callback_data)
-    assert (order.action, order.order_id) == (OrderAdminAction.VIEW, 77)
-    write = _unpack(markup.inline_keyboard[1][0])
+    write = _unpack(markup.inline_keyboard[0][0])
     assert (write.action, write.item_id, write.value) == (ClientAdminAction.WRITE, 10, "p5")  # «Назад» помнит путь
-    back = _unpack(markup.inline_keyboard[2][0])
+    back = _unpack(markup.inline_keyboard[1][0])
     assert (back.action, back.item_id) == (ClientAdminAction.PARTICIPANTS, 5)
 
 
@@ -252,38 +257,42 @@ def test_participants_screens() -> None:
         awaiting=[(SimpleNamespace(status=EnrollmentStatus.APPLICATION), COLLEAGUE, order)], waitlist=[],
         cancelled=[(SimpleNamespace(status=EnrollmentStatus.CANCELLED_BY_CLIENT), COLLEAGUE, None)],
     )
-    text, markup = views.participants(view)
+    pick = views.participants(view)
+    assert (pick.ids, pick.context) == ([10, 50], {"back": "p5"})  # «Назад» из карточки - к участникам
+    text, markup = picker.render(pick)
     assert "Место закреплено: <b>1</b>" in text and "Ждём оплату: <b>1</b>" in text
     assert "Свободно мест: <b>8</b> из 10" in text
-    assert _rows(markup) == [["✅ Петров П. П. · №100001"], ["⏳ Петрова А. С. · №100001"], ["✖️ Отменили · 1"],
-                             [texts.BTN_ADMIN_TO_SESSION]]
-    assert _unpack(markup.inline_keyboard[0][0]).value == "p5"
+    assert "<b>1.</b> ✅ Петров П. П. · №100001" in text and "<b>2.</b> ⏳ Петрова А. С. · №100001" in text
+    assert _rows(markup) == [["✖️ Отменили · 1"], [texts.BTN_ADMIN_TO_SESSION]]  # людей кнопками нет
     back = DictCb.unpack(markup.inline_keyboard[-1][0].callback_data)
     assert (back.kind, back.action, back.item_id) == (DictKind.SESSIONS, DictAction.VIEW, 5)
-    text, markup = views.cancelled_participants(view)
-    assert "Всего: <b>1</b>" in text and _rows(markup) == [["✖️ Петрова А. С."], [texts.BTN_ADMIN_TO_PARTICIPANTS]]
-    assert _unpack(markup.inline_keyboard[0][0]).value == "x5"
+    pick = views.cancelled_participants(view)
+    text, markup = picker.render(pick)
+    assert "Всего: <b>1</b>" in text and "<b>1.</b> ✖️ Петрова А. С." in text
+    assert _rows(markup) == [[texts.BTN_ADMIN_TO_PARTICIPANTS]] and pick.context == {"back": "x5"}
     empty = SessionParticipants(_session(capacity=None), [], [], [], [])
-    text, markup = views.participants(empty)
+    text, markup = picker.render(views.participants(empty))
     assert texts.ADMIN_PARTICIPANTS_EMPTY in text and "Свободно" not in text
     assert _rows(markup) == [[texts.BTN_ADMIN_TO_SESSION]]
 
 
 def test_waitlist_screens() -> None:
     program = SimpleNamespace(id=3, title="Эндодонтия")
-    text, markup = views.waitlists([(program, 4)])
-    assert _rows(markup) == [["Эндодонтия · 4"], [texts.BTN_ADMIN_TO_CLIENTS]]
-    assert texts.ADMIN_WAITLISTS_EMPTY == views.waitlists([])[0]
+    pick = views.waitlists([(program, 4)])
+    text, markup = picker.render(pick)
+    assert pick.kind == views.PICK_WAITLIST and pick.ids == [3] and "<b>1.</b> Эндодонтия · ждут: 4" in text
+    assert _rows(markup) == [[texts.BTN_ADMIN_TO_CLIENTS]]
+    assert picker.render(views.waitlists([]))[0] == texts.ADMIN_WAITLISTS_EMPTY
     rows = [(PETROV, datetime(2026, 10, 20, 9, 0, tzinfo=UTC))]
-    text, markup = views.course_waitlist(program, rows, TZ, from_course=True)
-    assert "Ждут нового проведения: <b>1</b>" in text
-    assert _rows(markup) == [["Петров П. П. · с 20 октября"], [texts.BTN_ADMIN_INVITED], [texts.BTN_ADMIN_TO_COURSE]]
-    assert _unpack(markup.inline_keyboard[0][0]).value == "w3"
+    pick = views.course_waitlist(program, rows, TZ, from_course=True)
+    text, markup = picker.render(pick)
+    assert "Ждут нового проведения: <b>1</b>" in text and "<b>1.</b> Петров П. П. · с 20 октября" in text
+    assert pick.context == {"back": "w3"} and _rows(markup) == [[texts.BTN_ADMIN_INVITED], [texts.BTN_ADMIN_TO_COURSE]]
     back = DictCb.unpack(markup.inline_keyboard[-1][0].callback_data)
     assert (back.kind, back.item_id) == (DictKind.COURSES, 3)
-    _, markup = views.course_waitlist(program, rows, TZ, from_course=False)
+    _, markup = picker.render(views.course_waitlist(program, rows, TZ, from_course=False))
     assert _rows(markup)[-1] == [texts.BTN_ADMIN_TO_WAITLISTS]
-    text, _ = views.course_waitlist(program, [], TZ, from_course=False)
+    text, _ = picker.render(views.course_waitlist(program, [], TZ, from_course=False))
     assert "никто не ждёт" in text
     text, markup = views.invited_confirm(program, 4, from_course=True)
     assert "всех (4)" in text and _unpack(markup.inline_keyboard[0][0]).action is ClientAdminAction.INVITED_OK

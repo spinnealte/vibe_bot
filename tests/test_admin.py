@@ -10,7 +10,7 @@ from docx import Document
 from stubbot.config import Settings
 from stubbot.services.admin_courses import COURSE_SPEC
 from stubbot.services.admin_dictionaries import SPECS, DictField, DictKind, FieldKind, parse_field
-from stubbot.tg import admin_views, keyboards, texts
+from stubbot.tg import admin_views, picker, keyboards, texts
 from stubbot.tg.callbacks import DictAction, DictCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.utils.documents import file_to_html
@@ -74,31 +74,22 @@ def _buttons(markup) -> list[str]:
     return [b.text for row in markup.inline_keyboard for b in row]
 
 
-def test_dict_list_pages_and_archive_mark() -> None:
-    spec = SPECS[DictKind.LECTURERS]  # длинные названия - по одной кнопке в ряд, 8 на странице
-    items = [(i, f"Лектор {i}", True) for i in range(1, 10)] + [(10, "Старый", False)]
-    text, markup = admin_views.dict_list(spec, items, page=0)
-    assert "Всего: <b>10</b>" in text and "в архиве: 1" in text
-    first = _buttons(markup)
-    assert first.count("➕ Добавить") == 1 and "1/2" in first and "▶️" in first and "◀️" not in first
-    assert [len(row) for row in markup.inline_keyboard[:8]] == [1] * 8
-    _, markup = admin_views.dict_list(spec, items, page=1)
-    second = _buttons(markup)
-    assert "🗄 Старый" in second and "◀️" in second and "▶️" not in second
-    text, markup = admin_views.dict_list(spec, [], page=0)
-    assert "Пока пусто" in text and "1/1" not in _buttons(markup)
-
-
-@pytest.mark.parametrize("kind", [DictKind.SPECIALTIES, DictKind.POSITIONS])
-def test_short_dictionaries_listed_in_two_columns(kind: DictKind) -> None:
-    """Специальности (направления) и должности - кнопками в два столбца, как в пет-проекте: 16 на странице."""
-    items = [(i, f"Запись {i}", True) for i in range(1, 14)]
-    _, markup = admin_views.dict_list(SPECS[kind], items, page=0)
-    assert [len(row) for row in markup.inline_keyboard[:7]] == [2, 2, 2, 2, 2, 2, 1]  # 13 записей - одна страница
-    assert [b.text for b in markup.inline_keyboard[0]] == ["Запись 1", "Запись 2"]
-    assert "1/1" not in _buttons(markup) and "▶️" not in _buttons(markup)
-    _, markup = admin_views.dict_list(SPECS[kind], items + [(i, f"Запись {i}", True) for i in range(14, 20)], page=1)
-    assert [b.text for b in markup.inline_keyboard[0]] == ["Запись 17", "Запись 18"] and "2/2" in _buttons(markup)
+@pytest.mark.parametrize("kind", [DictKind.LECTURERS, DictKind.VENUES, DictKind.SPECIALTIES, DictKind.POSITIONS])
+def test_dict_list_is_numbered_not_buttons(kind: DictKind) -> None:
+    """Записи справочника - пронумерованным списком, запись открывают номером (правило 26.10.2026): под
+    сообщением только стрелки, «➕ Добавить» и «В админку» - ни одной кнопки на запись."""
+    items = [(i, f"Запись <{i}>", True) for i in range(1, 12)] + [(12, "Старая", False)]
+    pick = admin_views.dict_list(SPECS[kind], items)
+    assert pick.ids == list(range(1, 13)) and pick.context == {"kind": kind.value}
+    text, markup = picker.render(pick, page=0)
+    assert "Всего: <b>12</b>" in text and "в архиве: 1" in text and "Страница 1 из 2" in text
+    assert "<b>1.</b> Запись &lt;1&gt;" in text and "<b>10.</b> Запись &lt;10&gt;" in text and "11." not in text
+    assert _buttons(markup) == ["1/2", "▶️", texts.BTN_ADMIN_ADD, texts.BTN_ADMIN_BACK]
+    text, markup = picker.render(pick, page=1)
+    assert "<b>11.</b> Запись &lt;11&gt;" in text and "<b>12.</b> 🗄 Старая" in text  # номера сквозные
+    assert "◀️" in _buttons(markup) and "▶️" not in _buttons(markup)
+    text, markup = picker.render(admin_views.dict_list(SPECS[kind], []))
+    assert "Пока пусто" in text and _buttons(markup) == [texts.BTN_ADMIN_ADD, texts.BTN_ADMIN_BACK]
 
 
 def test_card_escapes_values_and_keeps_bio_html() -> None:
@@ -132,9 +123,14 @@ def test_course_choice_and_multi_prompts() -> None:
     assert texts.BTN_ADMIN_CLEAR not in _buttons(markup)  # формат обязателен - очищать нельзя
     _, markup = admin_views.field_prompt(spec, spec.field("level"), "h", None)
     assert texts.BTN_ADMIN_SKIP in _buttons(markup)  # уровень необязателен
+    # Лекторы - номерами через запятую из списка в вопросе, не кнопками; отмеченные - с ✅.
     text, markup = admin_views.field_prompt(spec, spec.field("lecturers"), "h", None,
-                                            options=[(1, "Иванов С. П."), (2, "Смирнова А. О.")], selected=[2])
-    assert _buttons(markup) == ["Иванов С. П.", "✅ Смирнова А. О.", texts.BTN_ADMIN_DONE, texts.BTN_ADMIN_CANCEL]
+                                            options=[(1, "Иванов С. П."), (2, "Смирнова <А. О.>")], selected=[2])
+    assert "<b>1.</b> Иванов С. П." in text and "<b>2.</b> ✅ Смирнова &lt;А. О.&gt;" in text
+    assert texts.PICK_FIELD_HINT_MANY in text
+    assert _buttons(markup) == [texts.BTN_ADMIN_KEEP, texts.BTN_ADMIN_CANCEL]  # «оставить отмеченных как есть»
+    _, markup = admin_views.field_prompt(spec, spec.field("lecturers"), "h", None, options=[(1, "Иванов С. П.")])
+    assert _buttons(markup) == [texts.BTN_ADMIN_CANCEL]  # ничего не отмечено - оставлять нечего
     assert "Лекторы" in text and "необязательно" not in text
     # У курса своя подсказка к «Названию» - не та, что у специальностей.
     title_hint = admin_views.field_prompt(spec, spec.field("title"), "h", None)[0]

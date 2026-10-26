@@ -233,6 +233,14 @@ class ClientAdminCb(CallbackData, prefix="acl"):
     value: str = ""
 
 
+class PickCb(CallbackData, prefix="pick"):
+    """◀️ ▶️ под пронумерованным списком админки (tg/picker.py). token - какой это список: стрелки под старым
+    списком (уже открыт другой) не листают новый."""
+
+    token: str
+    page: int = -1  # -1 - счётчик «2/5» между стрелками
+
+
 class DictAction(StrEnum):
     # Список, page - страница. У проведений - месяцы раздела: value - SessionScope («» афиша, «a» архив,
     # «p» прошедшие). У курсов value «a» - курсы из архива.

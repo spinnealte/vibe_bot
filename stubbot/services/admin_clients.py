@@ -21,7 +21,7 @@ from stubbot.repositories.orders import AdvanceRepository
 from stubbot.services.admin_log import log_admin_action
 from stubbot.services.consents import ConsentService
 
-SEARCH_LIMIT = 30
+SEARCH_LIMIT = 100  # пронумерованным списком по 10 на странице - листать можно; больше - уточнить запрос
 MIN_NAME_LETTERS = 2
 MIN_PHONE_DIGITS = 4
 MAX_QUERY = 100

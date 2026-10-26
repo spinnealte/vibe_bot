@@ -2,8 +2,9 @@
 сообщение клиенту, правка аванса, участники проведения, листы ожидания курсов. Проверки - в AdminClientService.
 
 Только для админов: IsAdmin на весь роутер. Подключается вместе с записью на курсы (APPLICATIONS_ENABLED), после
-admin.router - «⚙️ Админка» посреди ввода открывает меню. После результатов поиска можно сразу написать новый
-запрос: ожидание запроса остаётся.
+admin.router - «⚙️ Админка» посреди ввода открывает меню. Списки (найденные, участники, листы ожидания, заказы
+клиента) - пронумерованные (tg/picker.py, правило 26.10.2026): номер открывает строку, в результатах поиска
+другой текст - новый запрос.
 """
 
 import secrets
@@ -27,7 +28,7 @@ from stubbot.services.admin_clients import (
 )
 from stubbot.services.admin_log import log_admin_action
 from stubbot.tg import admin_clients_views as views
-from stubbot.tg import admin_orders_views, texts
+from stubbot.tg import admin_orders_views, picker, texts
 from stubbot.tg.callbacks import ClientAdminAction, ClientAdminCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.tg.flows import with_notice
@@ -58,13 +59,16 @@ def _cb(action: ClientAdminAction):
     return ClientAdminCb.filter(F.action == action)
 
 
-async def _show_client(message: Message, session: AsyncSession, admin: Client, settings: Settings, client_id: int,
-                       back: str, notice: str | None = None, in_place: bool = True) -> bool:
+async def _show_client(message: Message, state: FSMContext, session: AsyncSession, admin: Client,
+                       settings: Settings, client_id: int, back: str, notice: str | None = None,
+                       in_place: bool = True) -> bool:
     card = await _service(session, admin).card(client_id)
     if card is None:
         return False
     text, markup = views.client_card(card, settings.timezone, back)
     await (show_screen if in_place else send_screen)(message, with_notice(notice, text), markup)
+    # Заказы клиента перечислены в карточке по номерам - номер открывает заказ.
+    await picker.remember(state, views.orders_pick(card))
     return True
 
 
@@ -98,13 +102,40 @@ async def ask_query(callback: CallbackQuery, state: FSMContext) -> None:
 
 @router.message(AdminClient.query, F.text)
 async def on_query(message: Message, state: FSMContext, session: AsyncSession, client: Client) -> None:
-    result = await _service(session, client).search(message.text)
+    await _search(message, state, session, client, message.text)
+
+
+@picker.requery(views.PICK_CLIENT)
+async def search_again(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                       settings: Settings, text: str, context: dict) -> None:
+    """В результатах поиска написан не номер из списка - это новый запрос."""
+    await _search(message, state, session, client, text)
+
+
+async def _search(message: Message, state: FSMContext, session: AsyncSession, client: Client, text: str) -> None:
+    result = await _service(session, client).search(text)
     if result.query.kind is QueryKind.TOO_SHORT:
         await message.answer(texts.ADMIN_CLIENT_QUERY_SHORT)
         return
     await _strip_prompt(message, state)
-    # Ждём запрос дальше: не нашли нужного - можно сразу написать другой; экран результатов - новый «вопрос».
-    await _ask(message, state, *views.search_results(result, message.text), in_place=False)
+    pick = views.search_results(result, text)
+    if not result.clients:
+        # Никого - ждём следующий запрос; у этого экрана кнопки уберём, когда он придёт.
+        await state.set_state(AdminClient.query)
+        await _ask(message, state, *picker.render(pick), in_place=False)
+        return
+    # Найденные - по номерам: номер открывает карточку, другой текст - новый запрос (search_again).
+    screen = await picker.show(message, state, pick, in_place=False)
+    await state.update_data({PROMPT_KEY: screen.message_id})
+
+
+@picker.opener(views.PICK_CLIENT)
+async def open_client(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                      settings: Settings, client_id: int, context: dict) -> None:
+    """Номер из пронумерованного списка клиентов (поиск, участники, лист ожидания) - карточка клиента."""
+    if not await _show_client(message, state, session, client, settings, client_id, context.get("back", ""),
+                              in_place=False):
+        await message.answer(texts.ADMIN_CLIENT_UNAVAILABLE)
 
 
 @router.message(AdminClient.query)
@@ -120,7 +151,7 @@ async def view_client(callback: CallbackQuery, callback_data: ClientAdminCb, sta
                       session: AsyncSession, client: Client, settings: Settings) -> None:
     """Карточка клиента; «✖️ Отмена» сообщения или правки аванса - назад к ней."""
     await state.clear()
-    if not await _show_client(callback.message, session, client, settings, callback_data.item_id,
+    if not await _show_client(callback.message, state, session, client, settings, callback_data.item_id,
                               callback_data.value):
         await callback.answer(texts.ADMIN_CLIENT_UNAVAILABLE, show_alert=True)
         return
@@ -261,7 +292,8 @@ async def save_advance(callback: CallbackQuery, callback_data: ClientAdminCb, st
         await callback.answer(texts.ADMIN_CLIENT_UNAVAILABLE, show_alert=True)
         return
     await callback.answer()
-    await _show_client(callback.message, session, client, settings, callback_data.item_id, data.get(BACK_KEY, ""),
+    await _show_client(callback.message, state, session, client, settings, callback_data.item_id,
+                       data.get(BACK_KEY, ""),
                        notice=texts.ADMIN_CLIENT_ADVANCE_SAVED.format(balance=format_rub(result.balance)))
 
 
@@ -283,8 +315,8 @@ async def show_participants(callback: CallbackQuery, callback_data: ClientAdminC
     await callback.answer()
     await state.clear()
     cancelled = callback_data.action is ClientAdminAction.CANCELLED
-    await show_screen(callback.message, *(views.cancelled_participants(view) if cancelled
-                                          else views.participants(view)))
+    await picker.show(callback.message, state,
+                      views.cancelled_participants(view) if cancelled else views.participants(view))
 
 
 # --- Листы ожидания курсов -------------------------------------------------------------------------------------
@@ -293,7 +325,19 @@ async def show_participants(callback: CallbackQuery, callback_data: ClientAdminC
 async def show_waitlists(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client) -> None:
     await callback.answer()
     await state.clear()
-    await show_screen(callback.message, *views.waitlists(await _service(session, client).waitlists()))
+    await picker.show(callback.message, state, views.waitlists(await _service(session, client).waitlists()))
+
+
+@picker.opener(views.PICK_WAITLIST)
+async def open_course_waitlist(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                               settings: Settings, program_id: int, context: dict) -> None:
+    """Номер курса из «Листов ожидания курсов» - кто его ждёт."""
+    program, rows = await _service(session, client).course_waitlist(program_id)
+    if program is None:
+        await message.answer(texts.ADMIN_NOT_FOUND)
+        return
+    await picker.show(message, state, views.course_waitlist(program, rows, settings.timezone, from_course=False),
+                      in_place=False)
 
 
 @router.callback_query(_cb(ClientAdminAction.WAITLIST))
@@ -306,7 +350,7 @@ async def show_course_waitlist(callback: CallbackQuery, callback_data: ClientAdm
     await callback.answer()
     await state.clear()
     from_course = callback_data.value == views.FROM_COURSE
-    await show_screen(callback.message, *views.course_waitlist(program, rows, settings.timezone, from_course))
+    await picker.show(callback.message, state, views.course_waitlist(program, rows, settings.timezone, from_course))
 
 
 @router.callback_query(_cb(ClientAdminAction.INVITED))
@@ -322,8 +366,8 @@ async def ask_invited(callback: CallbackQuery, callback_data: ClientAdminCb, ses
 
 
 @router.callback_query(_cb(ClientAdminAction.INVITED_OK))
-async def mark_invited(callback: CallbackQuery, callback_data: ClientAdminCb, session: AsyncSession,
-                       client: Client, settings: Settings) -> None:
+async def mark_invited(callback: CallbackQuery, callback_data: ClientAdminCb, state: FSMContext,
+                       session: AsyncSession, client: Client, settings: Settings) -> None:
     service = _service(session, client)
     count = await service.mark_invited(callback_data.item_id)
     program, rows = await service.course_waitlist(callback_data.item_id)
@@ -331,5 +375,6 @@ async def mark_invited(callback: CallbackQuery, callback_data: ClientAdminCb, se
         await callback.answer(texts.ADMIN_NOT_FOUND, show_alert=True)
         return
     await callback.answer()
-    text, markup = views.course_waitlist(program, rows, settings.timezone, callback_data.value == views.FROM_COURSE)
-    await show_screen(callback.message, with_notice(texts.ADMIN_INVITED_DONE.format(count=count), text), markup)
+    await picker.show(callback.message, state,
+                      views.course_waitlist(program, rows, settings.timezone, callback_data.value == views.FROM_COURSE),
+                      notice=texts.ADMIN_INVITED_DONE.format(count=count))

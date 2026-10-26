@@ -25,7 +25,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import BufferedInputFile, CallbackQuery, InlineKeyboardMarkup, Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.config import get_settings
+from stubbot.config import Settings, get_settings
 from stubbot.db.models import Client
 from stubbot.services.admin_clients import AdminClientService
 from stubbot.services.admin_courses import AdminCourseService
@@ -51,7 +51,7 @@ from stubbot.services.admin_sessions import (
 )
 from stubbot.services.client_export import ClientExportService
 from stubbot.services.schedule import SessionCard
-from stubbot.tg import admin_views, catalog_flow, render, texts
+from stubbot.tg import admin_views, catalog_flow, picker, render, texts
 from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.tg.flows import with_notice
@@ -67,6 +67,7 @@ router.message.filter(IsAdmin())
 router.callback_query.filter(IsAdmin())
 
 PROMPT_KEY = "admin_prompt_id"
+CHOICE_IDS_KEY = "choice_ids"  # варианты поля по порядку номеров в вопросе (площадка, лекторы, направления)
 
 _SAVE_ERRORS = {
     SaveResult.DUPLICATE: texts.ADMIN_DUPLICATE,
@@ -168,7 +169,7 @@ async def show_list(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
                     client: Client) -> None:
     await callback.answer()
     await state.clear()
-    await _show_list(callback.message, session, client, callback_data.kind, callback_data.page,
+    await _show_list(callback.message, session, client, callback_data.kind, callback_data.page, state,
                      scope=_scope(callback_data.value))
 
 
@@ -182,7 +183,7 @@ async def show_month(callback: CallbackQuery, callback_data: DictCb, state: FSMC
     if not items:
         # Проведения месяца перенесли, убрали или кнопка подделана - показываем актуальные месяцы.
         await callback.answer(texts.ADMIN_MONTH_EMPTY)
-        await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, scope=scope)
+        await _show_list(callback.message, session, client, DictKind.SESSIONS, 0, state, scope=scope)
         return
     await callback.answer()
     await _show_card(callback.message, session, client, DictKind.SESSIONS, items[0].id, 0)
@@ -459,16 +460,13 @@ async def on_browse(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
 @router.callback_query(AdminDict.value, DictCb.filter(F.action == DictAction.TOGGLE))
 async def on_toggle(callback: CallbackQuery, callback_data: DictCb, state: FSMContext, session: AsyncSession,
                     client: Client) -> None:
-    """Галочка в мультивыборе (направления, лекторы) или в категориях тарифов."""
+    """Галочка в категориях тарифов - короткий постоянный набор (лекторы и направления - номерами, _numbers_given)."""
     data = await state.get_data()
     field = _matching_field(data, callback_data)
     current = list(data.get("selected", []))
     spec = ADMIN_SPECS[callback_data.kind]
     service = _service(session, spec.kind, client)
-    if field is not None and field.kind is FieldKind.MULTI and callback_data.value.isdigit():
-        toggled: Any = int(callback_data.value)
-        allowed = {option_id for option_id, _ in await service.options(field, current)}
-    elif field is not None and field.kind is FieldKind.PRICES and not data.get("price_stage"):
+    if field is not None and field.kind is FieldKind.PRICES and not data.get("price_stage"):
         toggled, allowed = callback_data.value, set(PRICE_KINDS)
     else:
         await callback.answer(texts.UNKNOWN_CALLBACK)
@@ -552,7 +550,7 @@ async def on_cancel(callback: CallbackQuery, callback_data: DictCb, state: FSMCo
                                                   callback_data.item_id, callback_data.page,
                                                   notice=texts.ADMIN_CANCELLED):
         return
-    await _show_list(callback.message, session, client, callback_data.kind, callback_data.page,
+    await _show_list(callback.message, session, client, callback_data.kind, callback_data.page, state,
                      notice=texts.ADMIN_CANCELLED)
 
 
@@ -565,6 +563,9 @@ async def on_text(message: Message, state: FSMContext, session: AsyncSession, cl
     if field.kind is FieldKind.PRICES and data.get("price_stage"):
         await _price_text(message, state, session, client, data)
         return
+    if field.kind in (FieldKind.REF, FieldKind.MULTI):
+        await _numbers_given(message, state, session, client, data, field)
+        return
     if field.kind in BUTTON_KINDS or field.kind in (FieldKind.PHOTO, FieldKind.PRICES):
         await message.answer(texts.ADMIN_FIELD_ERRORS[field.kind.value])
         return
@@ -574,6 +575,31 @@ async def on_text(message: Message, state: FSMContext, session: AsyncSession, cl
                         ZoneInfo(get_settings().timezone))
     if value is None:
         await message.answer(_input_error(field) + texts.ADMIN_ERROR_HINT)
+        return
+    await _reply_result(message, await _accept(message, state, session, client, value, in_place=False))
+
+
+async def _numbers_given(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                         data: dict[str, Any], field: DictField) -> None:
+    """Площадка - номером, лекторы и направления - номерами через запятую из списка в вопросе."""
+    ids = list(data.get(CHOICE_IDS_KEY) or [])
+    if field.kind is FieldKind.REF:
+        number = picker.parse_number(message.text, len(ids))
+        if number is None:
+            await message.answer(texts.PICK_FIELD_INVALID_ONE.format(count=max(len(ids), 1)))
+            return
+        value: Any = ids[number - 1]
+    else:
+        numbers = picker.parse_numbers(message.text, len(ids))
+        if numbers is None:
+            await message.answer(texts.PICK_FIELD_INVALID_MANY.format(count=max(len(ids), 1)))
+            return
+        value = [ids[number - 1] for number in numbers]
+    # Варианты могли смениться, пока админ отвечал (запись ушла в архив) - берём только действующие.
+    service = _service(session, DictKind(data["kind"]), client)
+    allowed = {option_id for option_id, _ in await service.options(field, data.get("selected", []))}
+    if not set([value] if field.kind is FieldKind.REF else value) <= allowed:
+        await message.answer(texts.ADMIN_NOT_FOUND)
         return
     await _reply_result(message, await _accept(message, state, session, client, value, in_place=False))
 
@@ -737,7 +763,9 @@ async def _ask_field(message: Message, state: FSMContext, session: AsyncSession,
     text, markup = admin_views.field_prompt(spec, field, header, current, item_id, data.get("page", 0),
                                             options, selected)
     prompt = await _screen(message, text, markup, in_place)
-    await state.update_data({"selected": selected, PROMPT_KEY: prompt.message_id})
+    # choice_ids - варианты по порядку номеров в вопросе: номер из ответа относится именно к ним.
+    await state.update_data({"selected": selected, PROMPT_KEY: prompt.message_id,
+                             CHOICE_IDS_KEY: [option_id for option_id, _ in options or []]})
 
 
 async def _ask_course(message: Message, state: FSMContext, session: AsyncSession, client: Client, course_id: int,
@@ -789,7 +817,7 @@ async def _accept(message: Message, state: FSMContext, session: AsyncSession, cl
     await state.clear()
     if not await _show_card(message, session, client, spec.kind, data["item_id"], data.get("page", 0),
                             notice=texts.ADMIN_SAVED, in_place=in_place):
-        await _show_list(message, session, client, spec.kind, data.get("page", 0), in_place=in_place)
+        await _show_list(message, session, client, spec.kind, data.get("page", 0), state, in_place=in_place)
     return SaveResult.OK
 
 
@@ -838,10 +866,12 @@ async def _show_archive(message: Message, session: AsyncSession, client: Client,
 
 
 async def _show_list(message: Message, session: AsyncSession, client: Client, kind: DictKind, page: int,
-                     notice: str | None = None, in_place: bool = True,
+                     state: FSMContext | None = None, notice: str | None = None, in_place: bool = True,
                      scope: SessionScope = SessionScope.ACTIVE) -> None:
     """Список записей. Проведения - не списком, а по месяцам своего раздела (scope: афиша, архив, прошедшие).
-    Курсы - тоже не списком: сразу карточка первого курса с листанием (scope не «афиша» - курсы из архива)."""
+    Курсы - тоже не списком: сразу карточка первого курса с листанием (scope не «афиша» - курсы из архива).
+    Справочники - пронумерованным списком: запись открывают её номером (state ждёт номер; для курсов
+    и проведений он не нужен)."""
     if kind is DictKind.SESSIONS:
         text, markup = admin_views.session_months(await _sessions(session, client).months(scope), scope, page)
         # После мастера или карточки с фото этот текстовый экран заменит фото: screen.py удалит и пришлёт заново.
@@ -860,8 +890,17 @@ async def _show_list(message: Message, session: AsyncSession, client: Client, ki
             return
     service = _service(session, kind, client)
     entries = [(item.id, service.title(item), service.is_active(item)) for item in await service.items()]
-    text, markup = admin_views.dict_list(service.spec, entries, page)
-    await _screen(message, with_notice(notice, text), markup, in_place)
+    await picker.show(message, state, admin_views.dict_list(service.spec, entries), page, in_place, notice)
+
+
+@picker.opener(admin_views.PICK_DICT)
+async def open_dict_item(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                         settings: Settings, item_id: int, context: dict[str, Any]) -> None:
+    """Номер из списка справочника - карточка записи новым сообщением. Список ждёт номер дальше: можно сразу
+    написать другой."""
+    if not await _show_card(message, session, client, DictKind(context["kind"]), item_id, context.get("page", 0),
+                            in_place=False):
+        await message.answer(texts.ADMIN_NOT_FOUND)
 
 
 async def _show_neighbour(message: Message, session: AsyncSession, client: Client, kind: DictKind,

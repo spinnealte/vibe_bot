@@ -24,15 +24,16 @@ from stubbot.tg.callbacks import (
 )
 from stubbot.tg.formatting import safe
 from stubbot.tg.outgoing import Delivery
+from stubbot.tg.picker import PickList
 from stubbot.tg.render import dates_text, order_amount, price_label, session_title
 from stubbot.utils.dates import format_moment
 from stubbot.utils.money import format_rub
 from stubbot.utils.names import short_name
 
-PAGE_SIZE = 8
 NEW_SCREEN = "n"  # value кнопки «Открыть заказ» под уведомлением: карточку - новым сообщением
 TOKEN_SEPARATOR = "."  # value кнопки способа оплаты: «invoice.<ключ>»
 BACK_ORDER = "o"  # карточка клиента открыта из заказа: value «o<id заказа>» - туда и вернёт «Назад»
+PICK_ORDER = "order"  # вид пронумерованного списка (tg/picker.py): номер открывает заказ
 
 Screen = tuple[str, InlineKeyboardMarkup]
 
@@ -92,37 +93,22 @@ def orders_menu(counts: dict[OrderCategory, int]) -> Screen:
     return text, _markup(*rows)
 
 
-def order_list(category: OrderCategory, rows: list[tuple[Order, Client]], page: int) -> Screen:
-    """Заказы раздела кнопками «№100001 · Петров П. П. · 80 000 ₽», по PAGE_SIZE на странице."""
+def order_list(category: OrderCategory, rows: list[tuple[Order, Client]]) -> PickList:
+    """Заказы раздела - пронумерованным списком «№100001 · Петров П. П. · 80 000 ₽» (правило 26.10.2026):
+    заказ открывают номером строки."""
     title = texts.ADMIN_ORDER_CATEGORY_TITLES[category.value]
     hint = texts.ADMIN_ORDER_LIST_PAID_HINT if category is OrderCategory.PAID else ""
-    pages = max((len(rows) + PAGE_SIZE - 1) // PAGE_SIZE, 1)
-    page = min(max(page, 0), pages - 1)
-    if rows:
-        text = texts.ADMIN_ORDER_LIST.format(title=title, count=len(rows), hint=hint)
-    else:
-        text = texts.ADMIN_ORDER_LIST_EMPTY.format(title=title, hint=hint)
-    buttons = [
-        _button(texts.BTN_ADMIN_ORDER_ROW.format(
-            number=order.number, name=short_name(payer.full_name) if payer.full_name else texts.NOT_SET,
+    return PickList(
+        kind=PICK_ORDER,
+        ids=[order.id for order, _ in rows],
+        title=texts.ADMIN_ORDER_LIST.format(title=title, count=len(rows), hint=hint),
+        lines=[texts.ADMIN_ORDER_ROW.format(
+            number=order.number, name=safe(short_name(payer.full_name)) if payer.full_name else texts.NOT_SET,
             amount=format_rub(order.total_amount) if order.total_amount is not None else "?",
-        ), OrderAdminAction.VIEW, order.id)
-        for order, payer in rows[page * PAGE_SIZE:(page + 1) * PAGE_SIZE]
-    ]
-    if pages > 1:
-        pager = []
-        if page > 0:
-            pager.append(InlineKeyboardButton(text=texts.BTN_PREV_PAGE,
-                                              callback_data=_cb(OrderAdminAction.LIST, value=category.value,
-                                                                page=page - 1)))
-        pager.append(InlineKeyboardButton(text=f"{page + 1}/{pages}", callback_data=_cb(OrderAdminAction.NOOP)))
-        if page + 1 < pages:
-            pager.append(InlineKeyboardButton(text=texts.BTN_NEXT_PAGE,
-                                              callback_data=_cb(OrderAdminAction.LIST, value=category.value,
-                                                                page=page + 1)))
-        buttons.append(pager)
-    buttons.append(_button(texts.BTN_ADMIN_TO_ORDERS, OrderAdminAction.MENU))
-    return text, _markup(*buttons)
+        ) for order, payer in rows],
+        empty=texts.ADMIN_ORDER_LIST_EMPTY.format(title=title, hint=hint),
+        buttons=[[(texts.BTN_ADMIN_TO_ORDERS, _cb(OrderAdminAction.MENU))]],
+    )
 
 
 def ask_number() -> Screen:

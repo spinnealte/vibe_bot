@@ -5,6 +5,7 @@ from stubbot.tg.handlers import (
     admin,
     admin_clients,
     admin_orders,
+    admin_pick,
     application,
     cabinet,
     chats,
@@ -37,6 +38,8 @@ def build_root_router(applications_enabled: bool) -> Router:
         root.include_router(application.router)
     # Фильтр «только админ» - на всём роутере; не-админам он не мешает: их апдейты идут дальше, в fallback.
     root.include_router(admin.router)
+    # Номер строки из пронумерованного списка админки - после admin: «⚙️ Админка» открывает меню.
+    root.include_router(admin_pick.router)
     if applications_enabled:
         # Заказы и клиенты есть только вместе с записью на курсы. После admin: «⚙️ Админка» посреди ввода суммы
         # или поиска открывает меню, а не считается ответом.

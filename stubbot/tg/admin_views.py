@@ -29,6 +29,7 @@ from stubbot.tg.callbacks import (
     OrderAdminCb,
 )
 from stubbot.tg.formatting import safe
+from stubbot.tg.picker import PickList
 from stubbot.tg.render import plain_excerpt, short
 from stubbot.utils.dates import format_month
 from stubbot.utils.money import format_rub
@@ -112,32 +113,27 @@ def archive_section_empty(title: str) -> tuple[str, InlineKeyboardMarkup]:
 
 # --- Список ----------------------------------------------------------------------------------------------------
 
-def dict_list(spec: DictionarySpec, entries: list[ListEntry], page: int) -> tuple[str, InlineKeyboardMarkup]:
-    """Список записей справочника. Курсы и проведения показываются иначе: курсы листаются стрелками
-    (course_card_markup; сюда попадает только пустой раздел курсов), проведения - по месяцам (session_months)."""
+PICK_DICT = "dict"  # вид пронумерованного списка: записи справочника (context["kind"] - какого)
+
+
+def dict_list(spec: DictionarySpec, entries: list[ListEntry]) -> PickList:
+    """Список записей справочника - пронумерованный, запись открывают её номером (правило 26.10.2026).
+    Курсы и проведения показываются иначе: курсы листаются стрелками (course_card_markup; сюда попадает только
+    пустой раздел курсов), проведения - по месяцам (session_months)."""
     kind = spec.kind
     title = texts.ADMIN_DICT_TITLES[kind.value]
-    columns = spec.list_columns
-    page_size = PAGE_SIZE * columns  # строк на странице столько же, кнопок - по числу столбцов
-    pages = max((len(entries) + page_size - 1) // page_size, 1)
-    page = min(max(page, 0), pages - 1)
     hidden = sum(1 for _, _, active in entries if not active)
-    if entries:
-        text = texts.ADMIN_LIST.format(title=title, total=len(entries),
-                                       archived=texts.ADMIN_LIST_ARCHIVED.format(count=hidden) if hidden else "")
-    else:
-        text = texts.ADMIN_LIST_EMPTY.format(title=title)
-
-    items = [InlineKeyboardButton(text=("" if active else texts.ADMIN_ARCHIVED_MARK) + short(item_title),
-                                  callback_data=_dict(kind, DictAction.VIEW, item_id, page=page))
-             for item_id, item_title, active in entries[page * page_size:(page + 1) * page_size]]
-    rows = [items[i:i + columns] for i in range(0, len(items), columns)]
-    if pages > 1:
-        rows.append(_pager(page, pages, _dict(kind, DictAction.LIST, page=page - 1),
-                           _dict(kind, DictAction.LIST, page=page + 1)))
-    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_ADD, callback_data=_dict(kind, DictAction.ADD))])
-    rows.append([InlineKeyboardButton(text=texts.BTN_ADMIN_BACK, callback_data=_admin(AdminAction.MENU))])
-    return text, InlineKeyboardMarkup(inline_keyboard=rows)
+    header = texts.ADMIN_LIST.format(title=title, total=len(entries),
+                                     archived=texts.ADMIN_LIST_ARCHIVED.format(count=hidden) if hidden else "")
+    return PickList(
+        kind=PICK_DICT,
+        ids=[item_id for item_id, _, _ in entries],
+        title=header,
+        lines=[("" if active else texts.ADMIN_ARCHIVED_MARK) + safe(item_title) for _, item_title, active in entries],
+        empty=texts.ADMIN_LIST_EMPTY.format(title=title),
+        buttons=[[(texts.BTN_ADMIN_ADD, _dict(kind, DictAction.ADD))], [(texts.BTN_ADMIN_BACK, _admin(AdminAction.MENU))]],
+        context={"kind": kind.value},
+    )
 
 
 def session_months(months: list[tuple[int, int]], scope: SessionScope = SessionScope.ACTIVE,
@@ -357,8 +353,10 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
                  selected: list[Any] | None = None) -> tuple[str, InlineKeyboardMarkup]:
     """Вопрос в мастере новой записи (item_id=0: «Пропустить») или при правке поля (item_id: «Очистить»).
 
-    Выбор и запись справочника - кнопки вариантов (✅ у текущего); мультивыбор и категории тарифов -
-    кнопки с ✅ у selected и «Готово». Курс проведения спрашивается не здесь, а карточками: course_pick.
+    Короткий постоянный выбор (формат, уровень, статус) и категории тарифов - кнопки с ✅. Запись справочника
+    (площадка) и мультивыбор (лекторы, направления) - пронумерованный список в тексте, ответ - номер или номера
+    через запятую (правило 26.10.2026: не кнопкой на каждую запись); у мультивыбора с отмеченными - «Оставить как
+    есть». Курс проведения спрашивается не здесь, а карточками: course_pick.
     """
     kind = spec.kind
     shows_current = current not in (None, "", []) and field.kind is not FieldKind.MULTI
@@ -376,17 +374,16 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
             builder.button(text=mark + texts.ADMIN_CHOICE_LABELS[field.name][choice],
                            callback_data=_dict(kind, DictAction.PICK, item_id, field.name, page, value=choice))
         builder.adjust(2)
-    elif field.kind is FieldKind.REF:
-        for option_id, title in options or []:
-            mark = "✅ " if option_id == current else ""
-            builder.button(text=mark + short(title),
-                           callback_data=_dict(kind, DictAction.PICK, item_id, field.name, page, str(option_id)))
-        builder.adjust(1)
-    elif field.kind in (FieldKind.MULTI, FieldKind.PRICES):
+    elif field.kind in (FieldKind.REF, FieldKind.MULTI):
+        chosen = {current} if field.kind is FieldKind.REF else set(selected or [])
+        text += "\n\n" + numbered_options(options or [], chosen)
+        text += "\n\n" + (texts.PICK_FIELD_HINT_ONE if field.kind is FieldKind.REF else texts.PICK_FIELD_HINT_MANY)
+        if field.kind is FieldKind.MULTI and chosen:
+            builder.row(InlineKeyboardButton(text=texts.BTN_ADMIN_KEEP,
+                                             callback_data=_dict(kind, DictAction.DONE, item_id, field.name, page)))
+    elif field.kind is FieldKind.PRICES:
         chosen = set(selected or [])
-        if field.kind is FieldKind.PRICES:
-            options = list(texts.PRICE_KIND_LABELS.items())
-        for option_id, title in options or []:
+        for option_id, title in texts.PRICE_KIND_LABELS.items():
             mark = "✅ " if option_id in chosen else ""
             builder.button(text=mark + short(title),
                            callback_data=_dict(kind, DictAction.TOGGLE, item_id, field.name, page, str(option_id)))
@@ -405,6 +402,13 @@ def field_prompt(spec: DictionarySpec, field: DictField, header: str, current: A
                                          callback_data=_dict(kind, DictAction.CANCEL, item_id, page=page)))
     builder.row(*controls)
     return text, builder.as_markup()
+
+
+def numbered_options(options: list[tuple[int, str]], chosen: set[Any]) -> str:
+    """«1. ✅ Иванов С. П.» - варианты поля мастера по номерам (номер пишут в ответ)."""
+    return "\n".join(texts.PICK_LINE.format(number=number, line=(texts.PICK_CHOSEN_MARK if option_id in chosen
+                                                                 else "") + safe(title))
+                     for number, (option_id, title) in enumerate(options, start=1))
 
 
 def course_pick(spec: DictionarySpec, field: DictField, header: str, course_id: int, index: int, total: int,

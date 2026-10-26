@@ -22,7 +22,7 @@ from stubbot.db.models import Client
 from stubbot.services.admin_log import log_admin_action
 from stubbot.services.admin_orders import ActionResult, AdminOrderCard, AdminOrderService, OrderCategory, Outcome
 from stubbot.tg import admin_orders_views as views
-from stubbot.tg import render, texts
+from stubbot.tg import picker, render, texts
 from stubbot.tg.callbacks import OrderAdminAction, OrderAdminCb
 from stubbot.tg.filters import IsAdmin
 from stubbot.tg.flows import with_notice
@@ -126,7 +126,14 @@ async def orders_list(callback: CallbackQuery, callback_data: OrderAdminCb, stat
     await callback.answer()
     await state.clear()
     rows = await _service(session, client).category(category, local_today(settings.timezone), _now())
-    await show_screen(callback.message, *views.order_list(category, rows, callback_data.page))
+    await picker.show(callback.message, state, views.order_list(category, rows), callback_data.page)
+
+
+@picker.opener(views.PICK_ORDER)
+async def open_order(message: Message, state: FSMContext, session: AsyncSession, client: Client,
+                     settings: Settings, order_id: int, context: dict) -> None:
+    """Номер строки из списка заказов (или из карточки клиента) - карточка заказа новым сообщением."""
+    await _show_card(message, session, client, settings, order_id, in_place=False)
 
 
 @router.callback_query(_order_cb(OrderAdminAction.NOOP))

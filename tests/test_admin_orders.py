@@ -22,7 +22,7 @@ from stubbot.services.admin_orders import AdminOrderCard, AdminOrderService, Ord
 from stubbot.services.enrollments import CancelOutcome, CancelResult, MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import admin_orders_views as views
-from stubbot.tg import admin_views, render, texts
+from stubbot.tg import admin_views, picker, render, texts
 from stubbot.tg.callbacks import ClientAdminAction, ClientAdminCb, OrderAdminAction, OrderAdminCb
 from stubbot.tg.outgoing import CAPTION_LIMIT, Outgoing, OutgoingKind, SendOnce, from_message
 from stubbot.utils.money import format_rub
@@ -259,12 +259,16 @@ def test_orders_menu_and_list() -> None:
     assert "Ждут оплаты: <b>5</b> (просрочено: 2)" in text and "не распределены: <b>1</b>" in text
     assert _rows(markup)[0] == ["⏳ Ждут оплаты · 5"] and _rows(markup)[-2] == [texts.BTN_ADMIN_ORDER_FIND]
     assert "просрочено" not in views.orders_menu({**counts, OrderCategory.OVERDUE: 0})[0]
-    orders = [(_order(id=i, number=100000 + i), PAYER) for i in range(1, 11)]
-    text, markup = views.order_list(OrderCategory.PAID, orders, page=1)
-    assert "Заказов: <b>10</b>" in text and "ещё не прошли" in text
-    rows = _rows(markup)
-    assert rows[0] == [f"№100009 · Петров П. П. · {format_rub(8_000_000)}"] and rows[2] == ["◀️", "2/2"]
-    assert rows[-1] == [texts.BTN_ADMIN_TO_ORDERS]
+    orders = [(_order(id=i, number=100000 + i), PAYER) for i in range(1, 13)]
+    pick = views.order_list(OrderCategory.PAID, orders)
+    assert pick.kind == views.PICK_ORDER and pick.ids == list(range(1, 13))
+    # Заказы - пронумерованным списком (правило 26.10.2026): номер строки открывает заказ, кнопок заказов нет.
+    text, markup = picker.render(pick, page=1)
+    assert "Заказов: <b>12</b>" in text and "ещё не прошли" in text and "Страница 2 из 2" in text
+    assert f"<b>11.</b> №100011 · Петров П. П. · {format_rub(8_000_000)}" in text and "<b>1.</b>" not in text
+    assert _rows(markup) == [["◀️", "2/2"], [texts.BTN_ADMIN_TO_ORDERS]]
+    text, _ = picker.render(views.order_list(OrderCategory.PAID, []))
+    assert "Здесь пока пусто" in text
 
 
 def test_card_text_and_buttons_waiting_for_payment() -> None:

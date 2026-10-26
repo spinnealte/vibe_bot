@@ -451,8 +451,10 @@ def test_session_prompts_ref_and_prices() -> None:
     venue = SESSION_SPEC.field("venue_id")
     text, markup = admin_views.field_prompt(SESSION_SPEC, venue, "h", 2, item_id=7,
                                             options=[(1, "Учебный класс"), (2, "Клиника <на Мира>")])
-    assert "Клиника &lt;на Мира&gt;" in text  # «Сейчас:» - название площадки, экранированное
-    assert _buttons(markup)[:2] == ["Учебный класс", "✅ Клиника <на Мира>"]
+    assert "Сейчас:</i> Клиника &lt;на Мира&gt;" in text  # название площадки, экранированное
+    # Площадка - номером из списка в вопросе (правило 26.10.2026), кнопок площадок нет.
+    assert "<b>1.</b> Учебный класс" in text and "<b>2.</b> ✅ Клиника &lt;на Мира&gt;" in text
+    assert texts.PICK_FIELD_HINT_ONE in text and "Учебный класс" not in _buttons(markup)
     prices = SESSION_SPEC.field("prices")
     assert prices.kind is FieldKind.PRICES
     _, markup = admin_views.field_prompt(SESSION_SPEC, prices, "h", None, selected=["group"])

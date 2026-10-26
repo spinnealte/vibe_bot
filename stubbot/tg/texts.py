@@ -753,7 +753,7 @@ ADMIN_PRICE_UNIT = {"per_person": "за одного участника", "per_g
 ADMIN_PRICE_ERROR = "❗️ Нужна цена числом, например 45000."
 ADMIN_PRICE_LABEL_ERROR = "❗️ Подпись - одна строка до 128 символов."
 
-ADMIN_LIST = "<b>{title}</b>\n\nВсего: <b>{total}</b>{archived}\n\nВыберите запись или добавьте новую 👇"
+ADMIN_LIST = "<b>{title}</b>\n\nВсего: <b>{total}</b>{archived}"
 ADMIN_LIST_ARCHIVED = " · в архиве: {count}"
 ADMIN_LIST_EMPTY = "<b>{title}</b>\n\nПока пусто. Нажмите <b>«➕ Добавить»</b> 👇"
 ADMIN_ARCHIVED_MARK = "🗄 "
@@ -814,9 +814,9 @@ ADMIN_FIELD_HINTS = {
     "short_description": (
         "Одна строка курсивом под названием.\n\n<i>Пример:</i> Двухдневный курс с практикой на фантомах"
     ),
-    "specialties": "Для кого курс: отметьте направления и нажмите <b>«Готово»</b>.",
+    "specialties": "Для кого курс: направления из списка ниже.",
     "lecturers": (
-        "Отметьте лекторов курса и нажмите <b>«Готово»</b>.\n"
+        "Лекторы курса из списка ниже.\n"
         "<i>Нужного нет - сначала добавьте его в «🧑‍🏫 Лекторы».</i>"
     ),
     "level": "Выберите уровень курса.",
@@ -870,10 +870,10 @@ ADMIN_FIELD_ERRORS = {
     "url": "❗️ Нужна ссылка, которая начинается с https://",
     "number": "❗️ Нужно целое число от {min} до {max}.",
     "choice": "👆 Выберите вариант кнопками под вопросом.",
-    "multi": "👆 Отметьте варианты кнопками под вопросом и нажмите «Готово».",
+    "multi": "❗️ Напишите номера из списка в вопросе через запятую, например: 1, 3.",
     "photo": "❗️ Пришлите, пожалуйста, фото.",
     "document": "❗️ Слишком длинно - до {max} символов.",
-    "ref": "👆 Выберите вариант кнопками под вопросом.",
+    "ref": "❗️ Напишите номер из списка в вопросе.",
     "course": "👆 Листайте курсы стрелками под карточкой и нажмите «✅ Выбрать этот курс».",
     "days": (
         "❗️ Не получилось разобрать дни. Каждый день - строкой «дата время-время», даты - не прошедшие.\n\n"
@@ -905,6 +905,22 @@ ADMIN_DELETE_ERRORS = {
     "in_use": "Есть заявки или подписки клиентов - удалить нельзя. Запись останется в архиве.",
 }
 
+# --- Админка: выбор из списка по номеру (правило 26.10.2026: не кнопкой на каждую строку) -----------------------
+
+PICK_PAGE = "\n<i>Страница {page} из {pages}</i>"
+PICK_LINE = "<b>{number}.</b> {line}"
+PICK_HINT = "<i>Напишите номер, чтобы открыть 👇</i>"
+PICK_HINT_SEARCH = "<i>Напишите номер, чтобы открыть, или новый запрос 👇</i>"
+PICK_INVALID = "❗️ Напишите номер из списка - от 1 до {count}."
+PICK_EXPIRED = "Список устарел - откройте его заново."  # всплывающее, без HTML
+# Мастер: площадка и мультивыбор (лекторы, направления) - тоже по номерам.
+PICK_FIELD_HINT_ONE = "<i>Напишите номер 👇</i>"
+PICK_FIELD_HINT_MANY = "<i>Напишите номера через запятую, например: 1, 3 👇</i>"
+PICK_FIELD_INVALID_ONE = "❗️ Напишите номер из списка - от 1 до {count}."
+PICK_FIELD_INVALID_MANY = "❗️ Напишите номера из списка через запятую - от 1 до {count}, например: 1, 3."
+PICK_CHOSEN_MARK = "✅ "
+BTN_ADMIN_KEEP = "✅ Оставить как есть"
+
 # --- Админка: заказы (полная версия, этап 1, шаг 4; тексты согласованы 21.10.2026) -----------------------------
 
 BTN_ADMIN_ORDERS = "🧾 Заказы"
@@ -933,10 +949,10 @@ ADMIN_ORDER_CATEGORY_TITLES = {
     "paid": "✅ Оплачены полностью",
     "money": "💸 Деньги после отмены",
 }
-ADMIN_ORDER_LIST = "<b>{title}</b>\n\nЗаказов: <b>{count}</b>, старые - сверху 👇{hint}"
+ADMIN_ORDER_LIST = "<b>{title}</b>\n\nЗаказов: <b>{count}</b>, старые - сверху.{hint}"
 ADMIN_ORDER_LIST_EMPTY = "<b>{title}</b>\n\nЗдесь пока пусто.{hint}"
-ADMIN_ORDER_LIST_PAID_HINT = "\n\n<i>Только курсы, которые ещё не прошли.</i>"
-BTN_ADMIN_ORDER_ROW = "№{number} · {name} · {amount}"
+ADMIN_ORDER_LIST_PAID_HINT = "\n<i>Только курсы, которые ещё не прошли.</i>"
+ADMIN_ORDER_ROW = "№{number} · {name} · {amount}"
 BTN_ADMIN_ORDER_FIND = "🔎 По номеру"
 BTN_ADMIN_TO_ORDERS = "⬅️ К заказам"
 BTN_ADMIN_OPEN_ORDER = "🧾 Открыть заказ"
@@ -1216,10 +1232,10 @@ ADMIN_CLIENT_ASK_QUERY = (
     "<i>Пример:</i> Петров или 4567"
 )
 ADMIN_CLIENT_QUERY_SHORT = "❗️ Нужно от 2 букв ФИО или от 4 цифр телефона."
-ADMIN_CLIENT_FOUND = "🔎 <b>Найдено: {count}</b> по «{query}»{more}"
-ADMIN_CLIENT_FOUND_MORE = "\n\n<i>Показаны первые {limit} - уточните запрос.</i>"
+ADMIN_CLIENT_FOUND = "🔎 <b>Найдено: {count}</b> по «{query}»"
+ADMIN_CLIENT_FOUND_MORE = "<i>Показаны первые {limit} - уточните запрос.</i>\n"
 ADMIN_CLIENT_NOT_FOUND = "🔎 Никого не нашли по «{query}». Попробуйте часть фамилии или телефона."
-BTN_ADMIN_CLIENT_ROW = "{name} · …{phone}{not_in_bot}"
+ADMIN_CLIENT_ROW = "{name} · …{phone}{not_in_bot}"
 ADMIN_CLIENT_NOT_IN_BOT = " (не в боте)"
 
 # Карточка клиента.
@@ -1244,7 +1260,9 @@ ADMIN_CLIENT_ENROLLMENTS_MORE = "<i>и ещё {count}</i>"
 ADMIN_CLIENT_NO_ENROLLMENTS = "📝 Записей нет."
 ADMIN_CLIENT_WAITING = "🕒 <b>Ждёт курс:</b> {courses}"
 ADMIN_CLIENT_WAITING_COURSE = "{title} (с {date})"
-BTN_ADMIN_CLIENT_ORDER = "🧾 №{number}"
+ADMIN_CLIENT_ORDERS = "🧾 <b>Заказы:</b>"
+ADMIN_CLIENT_ORDER = "№{number} · {amount} · {status}"
+ADMIN_CLIENT_ORDERS_HINT = "<i>Напишите номер, чтобы открыть заказ 👇</i>"
 BTN_ADMIN_CLIENT_WRITE = "✉️ Написать"
 BTN_ADMIN_CLIENT_ADVANCE = "💰 Изменить аванс"
 BTN_ADMIN_CLIENT_BACK = "⬅️ Назад"
@@ -1291,12 +1309,12 @@ ADMIN_PARTICIPANTS = (
 )
 ADMIN_PARTICIPANTS_SEATS = "\nСвободно мест: <b>{left}</b> из {capacity}"
 ADMIN_PARTICIPANTS_EMPTY = "\n\n<i>Пока никто не записался.</i>"
-# Ключи - EnrollmentStatus: значок перед ФИО в кнопке участника.
+# Ключи - EnrollmentStatus: значок перед ФИО в строке участника.
 ADMIN_PARTICIPANT_MARKS = {
     "confirmed": "✅", "attended": "🎓", "completed": "🎓", "no_show": "🚫", "application": "⏳", "waitlist": "🕒",
     "cancelled_by_client": "✖️", "cancelled_by_admin": "✖️",
 }
-BTN_ADMIN_PARTICIPANT = "{mark} {name}{order}"
+ADMIN_PARTICIPANT_LINE = "{mark} {name}{order}"
 BTN_ADMIN_CANCELLED_PARTICIPANTS = "✖️ Отменили · {count}"
 ADMIN_CANCELLED_PARTICIPANTS = (
     "✖️ <b>Отменили запись</b> · {title} · {dates}\n\n"
@@ -1307,18 +1325,16 @@ BTN_ADMIN_TO_SESSION = "⬅️ К проведению"
 
 # Листы ожидания курсов.
 BTN_ADMIN_COURSE_WAITLIST = "🕒 Лист ожидания · {count}"
-ADMIN_WAITLISTS = "🕒 <b>Листы ожидания курсов</b>\n\nКурсы, где кто-то ждёт нового проведения 👇"
+ADMIN_WAITLISTS = "🕒 <b>Листы ожидания курсов</b>\n\nКурсы, где кто-то ждёт нового проведения:"
 ADMIN_WAITLISTS_EMPTY = "🕒 <b>Листы ожидания курсов</b>\n\nСейчас никто не ждёт нового проведения."
-BTN_ADMIN_WAITLIST_ROW = "{title} · {count}"
-ADMIN_COURSE_WAITLIST = (
-    "🕒 <b>Лист ожидания курса</b> · {title}\n\n"
-    "Ждут нового проведения: <b>{count}</b>\n"
-    "Сюда попадают нажавшие «Сообщить о наборе» и отменившие запись без оплаты.\n\n"
-    "Откроете запись - пригласите их (напишите через карточку клиента) и нажмите «✔️ Пригласили всех»: "
-    "список очистится."
+ADMIN_WAITLIST_ROW = "{title} · ждут: {count}"
+ADMIN_COURSE_WAITLIST = "🕒 <b>Лист ожидания курса</b> · {title}\n\nЖдут нового проведения: <b>{count}</b>"
+ADMIN_COURSE_WAITLIST_NOTE = (
+    "<i>Сюда попадают нажавшие «Сообщить о наборе» и отменившие запись без оплаты. Откроете запись - "
+    "пригласите их (напишите через карточку клиента) и нажмите «✔️ Пригласили всех»: список очистится.</i>\n"
 )
 ADMIN_COURSE_WAITLIST_EMPTY = "🕒 <b>Лист ожидания курса</b> · {title}\n\nСейчас никто не ждёт."
-BTN_ADMIN_WAITLIST_CLIENT = "{name} · с {date}"
+ADMIN_WAITLIST_CLIENT = "{name} · с {date}"
 BTN_ADMIN_INVITED = "✔️ Пригласили всех"
 ADMIN_INVITED_CONFIRM = (
     "✔️ <b>Отметить приглашёнными всех ({count})?</b>\n\n"

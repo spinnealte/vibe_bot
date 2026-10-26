@@ -51,6 +51,12 @@ class AdminDict(StatesGroup):
     confirm = State()  # предпросмотр новой записи
 
 
+class AdminPick(StatesGroup):
+    """Пронумерованный список в админке (tg/picker.py): ждём номер строки. В data - сам список."""
+
+    number = State()
+
+
 class AdminOrder(StatesGroup):
     """Заказы в админке. В data: order_id; при оплате - amount и token (одноразовый ключ отметки); при сообщении
     клиенту - kind (счёт / сообщение), draft и token."""
