@@ -4,10 +4,17 @@
 """
 
 from datetime import datetime
+from zoneinfo import ZoneInfo
 
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
-from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES, MANUAL_PAYMENT_METHODS, OrderStatus, PayerType
+from stubbot.db.enums import (
+    CANCELLED_ENROLLMENT_STATUSES,
+    MANUAL_PAYMENT_METHODS,
+    InvoiceChannel,
+    OrderStatus,
+    PayerType,
+)
 from stubbot.db.models import Client, Order, PriceOption
 from stubbot.services.admin_orders import AdminOrderCard, OrderCategory
 from stubbot.services.enrollments import CancelResult, MyApplication
@@ -28,7 +35,7 @@ from stubbot.tg.formatting import safe
 from stubbot.tg.outgoing import Delivery
 from stubbot.tg.picker import PickList
 from stubbot.tg.render import dates_text, order_amount, price_label, session_title
-from stubbot.utils.dates import format_moment
+from stubbot.utils.dates import format_moment, format_short
 from stubbot.utils.money import format_rub
 from stubbot.utils.names import short_name
 
@@ -82,10 +89,12 @@ def _yes_no(yes: str, action: OrderAdminAction, order_id: int) -> InlineKeyboard
 
 # --- Разделы и список ------------------------------------------------------------------------------------------
 
-def orders_menu(counts: dict[OrderCategory, int]) -> Screen:
-    late = counts[OrderCategory.OVERDUE]
+def orders_menu(counts: dict[OrderCategory, int], waiting: int = 0) -> Screen:
+    """Разделы с числом заказов. waiting - сколько из «Нужен счёт» ждут клиента (выбор или реквизиты)."""
     text = texts.ADMIN_ORDERS.format(
-        wait=counts[OrderCategory.AWAITING], late=texts.ADMIN_ORDERS_LATE.format(count=late) if late else "",
+        need=counts[OrderCategory.NEED_INVOICE],
+        waiting=texts.ADMIN_ORDERS_WAITING.format(count=waiting) if waiting else "",
+        sent=counts[OrderCategory.INVOICE_SENT], late=counts[OrderCategory.OVERDUE],
         part=counts[OrderCategory.PARTIAL], paid=counts[OrderCategory.PAID], money=counts[OrderCategory.MONEY],
     )
     rows = [_button(texts.BTN_ADMIN_ORDER_CATEGORIES[category.value].format(count=counts[category]),
@@ -95,22 +104,43 @@ def orders_menu(counts: dict[OrderCategory, int]) -> Screen:
     return text, _markup(*rows)
 
 
-def order_list(category: OrderCategory, rows: list[tuple[Order, Client]]) -> PickList:
+def order_list(category: OrderCategory, rows: list[tuple[Order, Client]], timezone: str) -> PickList:
     """Заказы раздела - пронумерованным списком «№100001 · Петров П. П. · 80 000 ₽» (правило 26.10.2026):
-    заказ открывают номером строки."""
+    заказ открывают номером строки. В «Нужен счёт» в конце строки - кто платит или кого ждём, в «Счёт отправлен» -
+    когда ушёл счёт."""
     title = texts.ADMIN_ORDER_CATEGORY_TITLES[category.value]
-    hint = texts.ADMIN_ORDER_LIST_PAID_HINT if category is OrderCategory.PAID else ""
+    template, hint, empty_hint = texts.ADMIN_ORDER_LIST, "", ""
+    match category:
+        case OrderCategory.PAID:
+            hint = empty_hint = texts.ADMIN_ORDER_LIST_PAID_HINT
+        case OrderCategory.NEED_INVOICE:
+            hint = texts.ADMIN_ORDER_LIST_INVOICE_HINT
+        case OrderCategory.INVOICE_SENT:
+            template = texts.ADMIN_ORDER_LIST_SENT
     return PickList(
         kind=PICK_ORDER,
         ids=[order.id for order, _ in rows],
-        title=texts.ADMIN_ORDER_LIST.format(title=title, count=len(rows), hint=hint),
+        title=template.format(title=title, count=len(rows), hint=hint),
         lines=[texts.ADMIN_ORDER_ROW.format(
             number=order.number, name=safe(short_name(payer.full_name)) if payer.full_name else texts.NOT_SET,
             amount=format_rub(order.total_amount) if order.total_amount is not None else "?",
-        ) for order, payer in rows],
-        empty=texts.ADMIN_ORDER_LIST_EMPTY.format(title=title, hint=hint),
+        ) + _row_mark(category, order, timezone) for order, payer in rows],
+        empty=texts.ADMIN_ORDER_LIST_EMPTY.format(title=title, hint=empty_hint),
         buttons=[[(texts.BTN_ADMIN_TO_ORDERS, _cb(OrderAdminAction.MENU))]],
     )
+
+
+def _row_mark(category: OrderCategory, order: Order, timezone: str) -> str:
+    if category is OrderCategory.INVOICE_SENT and order.invoice_sent_at is not None:
+        return texts.ADMIN_ORDER_ROW_SENT.format(
+            date=format_short(order.invoice_sent_at.astimezone(ZoneInfo(timezone)).date()))
+    if category is not OrderCategory.NEED_INVOICE:
+        return ""
+    if order.payer_type is None:
+        return texts.ADMIN_ORDER_ROW_NO_PAYER
+    if order.payer_type is PayerType.INDIVIDUAL:
+        return texts.ADMIN_ORDER_ROW_INDIVIDUAL
+    return texts.ADMIN_ORDER_ROW_ORGANIZATION if order.requisites_file_id else texts.ADMIN_ORDER_ROW_REQUISITES
 
 
 def ask_number() -> Screen:
@@ -133,8 +163,7 @@ def order_card(card: AdminOrderCard, timezone: str, now: datetime) -> Screen:
     lines += _money_lines(card, timezone, now)
     if order.status is not OrderStatus.CANCELLED:
         lines.append(_payer_type_line(order))
-        lines.append(texts.ADMIN_ORDER_INVOICE_SENT.format(moment=format_moment(order.invoice_sent_at, timezone))
-                     if order.invoice_sent_at else texts.ADMIN_ORDER_INVOICE_NONE)
+        lines.append(invoice_line(order, timezone))
         if card.online_pending is not None:
             lines.append(texts.ADMIN_ORDER_ONLINE_PENDING.format(
                 amount=format_rub(card.online_pending.amount),
@@ -165,6 +194,15 @@ def _money_lines(card: AdminOrderCard, timezone: str, now: datetime) -> list[str
     return lines
 
 
+def invoice_line(order: Order, timezone: str) -> str:
+    """«📄 Счёт: …» - отправлен через бот, вне бота (отмечено вручную) или ещё нет. Так же - в напоминании."""
+    if order.invoice_sent_at is None:
+        return texts.ADMIN_ORDER_INVOICE_NONE
+    template = (texts.ADMIN_ORDER_INVOICE_MANUAL if order.invoice_channel is InvoiceChannel.MANUAL
+                else texts.ADMIN_ORDER_INVOICE_SENT)
+    return template.format(moment=format_moment(order.invoice_sent_at, timezone))
+
+
 def _payer_type_line(order: Order) -> str:
     if order.payer_type is PayerType.INDIVIDUAL:
         return texts.ADMIN_ORDER_INDIVIDUAL
@@ -191,6 +229,11 @@ def _card_markup(card: AdminOrderCard, now: datetime) -> InlineKeyboardMarkup:
     rows = []
     if card.payable:
         rows.append(_button(texts.BTN_ADMIN_ORDER_INVOICE, OrderAdminAction.INVOICE, order.id))
+        # Счёт ушёл не через бота (почта, 1С) - отметить; отметку вручную можно снять, отправку через бот - нет.
+        if order.invoice_sent_at is None:
+            rows.append(_button(texts.BTN_ADMIN_ORDER_INVOICE_MANUAL, OrderAdminAction.INVOICE_MANUAL, order.id))
+        elif order.invoice_channel is InvoiceChannel.MANUAL:
+            rows.append(_button(texts.BTN_ADMIN_ORDER_INVOICE_UNDO, OrderAdminAction.INVOICE_UNDO, order.id))
         if order.total_amount is None:
             rows.append(_button(texts.BTN_ADMIN_ORDER_TOTAL, OrderAdminAction.TOTAL, order.id))
         rows.append(_button(texts.BTN_ADMIN_ORDER_PAY, OrderAdminAction.PAY, order.id))
@@ -375,9 +418,7 @@ def reminder_notice(job: ReminderJob, timezone: str) -> tuple[str, InlineKeyboar
         markup = _markup(_button(texts.BTN_ADMIN_ORDER_REMOVE, OrderAdminAction.REMOVE, order.id, NEW_SCREEN),
                          _button(texts.BTN_ADMIN_OPEN_ORDER, OrderAdminAction.VIEW, order.id, NEW_SCREEN))
         return texts.ADMIN_REMINDER_OVERDUE.format(**fields), markup
-    invoice = (texts.ADMIN_ORDER_INVOICE_SENT.format(moment=format_moment(order.invoice_sent_at, timezone))
-               if order.invoice_sent_at else texts.ADMIN_ORDER_INVOICE_NONE)
-    return texts.ADMIN_REMINDER_DAY.format(invoice=invoice, **fields), open_order(order.id)
+    return texts.ADMIN_REMINDER_DAY.format(invoice=invoice_line(order, timezone), **fields), open_order(order.id)
 
 
 def notify_online_paid(applied: OnlinePaymentApplied, timezone: str) -> tuple[str, InlineKeyboardMarkup]:

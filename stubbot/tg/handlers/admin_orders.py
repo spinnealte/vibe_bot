@@ -111,8 +111,8 @@ async def orders_menu(callback: CallbackQuery, state: FSMContext, session: Async
                       settings: Settings) -> None:
     await callback.answer()
     await state.clear()
-    counts = await _service(session, client).counts(local_today(settings.timezone), _now())
-    await show_screen(callback.message, *views.orders_menu(counts))
+    counts, waiting = await _service(session, client).counts(local_today(settings.timezone), _now())
+    await show_screen(callback.message, *views.orders_menu(counts, waiting))
 
 
 @router.callback_query(_order_cb(OrderAdminAction.LIST))
@@ -126,7 +126,7 @@ async def orders_list(callback: CallbackQuery, callback_data: OrderAdminCb, stat
     await callback.answer()
     await state.clear()
     rows = await _service(session, client).category(category, local_today(settings.timezone), _now())
-    await picker.show(callback.message, state, views.order_list(category, rows), callback_data.page)
+    await picker.show(callback.message, state, views.order_list(category, rows, settings.timezone), callback_data.page)
 
 
 @picker.opener(views.PICK_ORDER)
@@ -341,6 +341,37 @@ async def ask_invoice(callback: CallbackQuery, state: FSMContext, session: Async
         await callback.answer(texts.ADMIN_ORDER_UNAVAILABLE, show_alert=True)
         return
     await _start_message(callback, state, card, KIND_INVOICE)
+
+
+@router.callback_query(_order_cb(OrderAdminAction.INVOICE_MANUAL))
+async def mark_invoice_manual(callback: CallbackQuery, callback_data: OrderAdminCb, state: FSMContext,
+                              session: AsyncSession, client: Client, settings: Settings) -> None:
+    """«✔️ Счёт отправлен вне бота» (почта, 1С): заказ переходит в «📨 Счёт отправлен». Без вопроса «точно?» -
+    отметку можно снять."""
+    result = await _service(session, client).mark_invoice_manual(callback_data.order_id)
+    await _after_invoice_mark(callback, state, session, client, settings, result, texts.ADMIN_ORDER_INVOICE_MARKED)
+
+
+@router.callback_query(_order_cb(OrderAdminAction.INVOICE_UNDO))
+async def unmark_invoice(callback: CallbackQuery, callback_data: OrderAdminCb, state: FSMContext,
+                         session: AsyncSession, client: Client, settings: Settings) -> None:
+    result = await _service(session, client).unmark_invoice(callback_data.order_id)
+    await _after_invoice_mark(callback, state, session, client, settings, result, texts.ADMIN_ORDER_INVOICE_UNMARKED)
+
+
+async def _after_invoice_mark(callback: CallbackQuery, state: FSMContext, session: AsyncSession, client: Client,
+                              settings: Settings, result: ActionResult, notice: str) -> None:
+    if result.order is None:
+        await callback.answer(texts.ADMIN_ORDER_UNAVAILABLE, show_alert=True)
+        return
+    if result.outcome is not Outcome.DONE:
+        popup = texts.ADMIN_ORDER_INVOICE_ALREADY if result.outcome is Outcome.ALREADY else texts.ADMIN_ORDER_UNAVAILABLE
+        await callback.answer(popup, show_alert=True)
+        await _show_card(callback.message, session, client, settings, result.order.id)
+        return
+    await callback.answer()
+    await state.clear()
+    await _show_card(callback.message, session, client, settings, result.order.id, notice=notice)
 
 
 @router.callback_query(_order_cb(OrderAdminAction.WRITE))

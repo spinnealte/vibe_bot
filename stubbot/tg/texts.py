@@ -928,34 +928,50 @@ BTN_ADMIN_KEEP = "✅ Оставить как есть"
 
 BTN_ADMIN_ORDERS = "🧾 Заказы"
 ADMIN_MENU_ORDERS = "\n🧾 <b>Заказы</b> - записи на курсы: счета, оплата, аванс, снятие брони."
+# Ждущие оплаты - по счёту: «Нужен счёт» и «Счёт отправлен» (тексты согласованы 27.10.2026).
 ADMIN_ORDERS = (
     "🧾 <b>Заказы</b>\n\n"
-    "⏳ Ждут оплаты: <b>{wait}</b>{late}\n"
+    "📄 Нужен счёт: <b>{need}</b>{waiting}\n"
+    "📨 Счёт отправлен, ждём оплату: <b>{sent}</b>\n"
+    "⚠️ Просрочена оплата: <b>{late}</b>\n"
     "➗ Оплачены частично: <b>{part}</b>\n"
     "✅ Оплачены полностью: <b>{paid}</b>\n"
     "💸 Отменены, деньги не распределены: <b>{money}</b>\n\n"
     "Выберите раздел или найдите заказ по номеру 👇"
 )
-ADMIN_ORDERS_LATE = " (просрочено: {count})"
+ADMIN_ORDERS_WAITING = " (из них ждём клиента: {count})"
 # Ключи - OrderCategory.
 BTN_ADMIN_ORDER_CATEGORIES = {
-    "wait": "⏳ Ждут оплаты · {count}",
+    "inv": "📄 Нужен счёт · {count}",
+    "sent": "📨 Счёт отправлен · {count}",
     "late": "⚠️ Просрочены · {count}",
     "part": "➗ Частично · {count}",
     "paid": "✅ Оплачены · {count}",
     "money": "💸 Деньги после отмены · {count}",
 }
 ADMIN_ORDER_CATEGORY_TITLES = {
-    "wait": "⏳ Ждут оплаты",
+    "inv": "📄 Нужен счёт",
+    "sent": "📨 Счёт отправлен - ждём оплату",
     "late": "⚠️ Просрочены",
     "part": "➗ Оплачены частично",
     "paid": "✅ Оплачены полностью",
     "money": "💸 Деньги после отмены",
 }
 ADMIN_ORDER_LIST = "<b>{title}</b>\n\nЗаказов: <b>{count}</b>, старые - сверху.{hint}"
+ADMIN_ORDER_LIST_SENT = "<b>{title}</b>\n\nЗаказов: <b>{count}</b>. Сверху - у кого срок оплаты ближе.{hint}"
 ADMIN_ORDER_LIST_EMPTY = "<b>{title}</b>\n\nЗдесь пока пусто.{hint}"
 ADMIN_ORDER_LIST_PAID_HINT = "\n<i>Только курсы, которые ещё не прошли.</i>"
+ADMIN_ORDER_LIST_INVOICE_HINT = (
+    "\n<i>Сверху - кому можно выставить счёт. В конце - кто ещё не выбрал «физлицо / юрлицо» или не прислал "
+    "реквизиты.</i>"
+)
 ADMIN_ORDER_ROW = "№{number} · {name} · {amount}"
+# Пометка в конце строки «Нужен счёт»: кто плательщик или кого ждём.
+ADMIN_ORDER_ROW_INDIVIDUAL = " · 👤 физлицо"
+ADMIN_ORDER_ROW_ORGANIZATION = " · 🏢 юрлицо"
+ADMIN_ORDER_ROW_REQUISITES = " · 🕒 ждём реквизиты"
+ADMIN_ORDER_ROW_NO_PAYER = " · ❔ не выбрал физ/юрлицо"
+ADMIN_ORDER_ROW_SENT = " · 📨 {date}"  # «Счёт отправлен»: когда
 BTN_ADMIN_ORDER_FIND = "🔎 По номеру"
 BTN_ADMIN_TO_ORDERS = "⬅️ К заказам"
 BTN_ADMIN_OPEN_ORDER = "🧾 Открыть заказ"
@@ -986,8 +1002,14 @@ ADMIN_ORDER_PAYER_TYPE_NONE = "❔ Физлицо или юрлицо - ещё �
 ADMIN_ORDER_INDIVIDUAL = "👤 Физлицо"
 ADMIN_ORDER_ORGANIZATION = "🏢 Юрлицо, реквизиты получены"
 ADMIN_ORDER_ORGANIZATION_WAITING = "🏢 Юрлицо, ждём реквизиты"
-ADMIN_ORDER_INVOICE_SENT = "📄 Счёт: отправлен {moment}"
+ADMIN_ORDER_INVOICE_SENT = "📄 Счёт: отправлен {moment} через бот"
+ADMIN_ORDER_INVOICE_MANUAL = "📄 Счёт: отправлен {moment} вне бота (отмечено вручную)"
 ADMIN_ORDER_INVOICE_NONE = "📄 Счёт: не отправлен"
+BTN_ADMIN_ORDER_INVOICE_MANUAL = "✔️ Счёт отправлен вне бота"
+BTN_ADMIN_ORDER_INVOICE_UNDO = "↩️ Счёт ещё не отправлен"
+ADMIN_ORDER_INVOICE_MARKED = "✅ Отмечено: счёт отправлен вне бота. Заказ - в «📨 Счёт отправлен»."
+ADMIN_ORDER_INVOICE_UNMARKED = "↩️ Отметка снята: заказ снова в «📄 Нужен счёт»."
+ADMIN_ORDER_INVOICE_ALREADY = "Счёт по этому заказу уже отмечен."  # всплывающее
 # Онлайн-оплата (шаг 7, черновик).
 ADMIN_ORDER_ONLINE_PENDING = "💳 Ссылка на онлайн-оплату {amount} выдана {moment} - оплаты пока нет"
 ADMIN_ORDER_ONLINE_WARNING = (

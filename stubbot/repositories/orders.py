@@ -79,11 +79,12 @@ class OrderRepository:
     # --- Админка ------------------------------------------------------------------------------------------------
 
     async def with_payers(self, statuses: tuple[OrderStatus, ...], due_before: datetime | None = None,
-                          not_past: date | None = None) -> list[tuple[Order, Client]]:
+                          not_past: date | None = None,
+                          invoice_sent: bool | None = None) -> list[tuple[Order, Client]]:
         """Заказы со статусами и их плательщики; старые первыми.
 
         due_before - только просроченные (срок оплаты раньше); not_past - только курсы, которые ещё не прошли
-        (начало не раньше этого дня или дат нет).
+        (начало не раньше этого дня или дат нет); invoice_sent - только со счётом (True) или без счёта (False).
         """
         stmt = (
             select(Order, Client)
@@ -93,6 +94,8 @@ class OrderRepository:
         )
         if due_before is not None:
             stmt = stmt.where(Order.due_at < due_before)
+        if invoice_sent is not None:
+            stmt = stmt.where(Order.invoice_sent_at.is_not(None) if invoice_sent else Order.invoice_sent_at.is_(None))
         if not_past is not None:
             stmt = stmt.join(CourseSession, CourseSession.id == Order.session_id).where(
                 or_(CourseSession.start_date.is_(None), CourseSession.start_date >= not_past)

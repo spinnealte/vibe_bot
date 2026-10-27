@@ -20,7 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from stubbot.db.enums import (
     AdvanceReason,
     EnrollmentStatus,
+    InvoiceChannel,
     OrderStatus,
+    PayerType,
     PaymentMethod,
     PaymentProvider,
     PaymentStatus,
@@ -38,10 +40,16 @@ ADMIN_REMOVE_REASON = "Бронь снята менеджером"
 LOG_SECTION = "заказ"
 
 
-class OrderCategory(StrEnum):
-    """Разделы «🧾 Заказы»."""
+def waits_for_client(order: Order) -> bool:
+    """Счёт пока не сделать: клиент не выбрал «физлицо / юрлицо» или юрлицо не прислало реквизиты."""
+    return order.payer_type is None or (order.payer_type is PayerType.ORGANIZATION and not order.requisites_file_id)
 
-    AWAITING = "wait"  # ждут оплаты (вместе с просроченными)
+
+class OrderCategory(StrEnum):
+    """Разделы «🧾 Заказы». Ждущие оплаты делятся по счёту (решение 27.10.2026); просроченные - ещё и отдельно."""
+
+    NEED_INVOICE = "inv"  # ждут оплаты, счёт ещё не отправлен - работа менеджера (вместе с просроченными)
+    INVOICE_SENT = "sent"  # ждут оплаты, счёт у клиента (вместе с просроченными)
     OVERDUE = "late"  # ждут оплаты, срок вышел
     PARTIAL = "part"  # оплачены частично - место закреплено, остаток на контроле
     PAID = "paid"  # оплачены полностью - только курсы, которые ещё не прошли
@@ -90,7 +98,9 @@ class AdminOrderCard:
         """Раздел, где заказ сейчас лежит, - туда ведёт «⬅️ К заказам». None - ни в одном (всё закрыто)."""
         status = self.order.status
         if status is OrderStatus.AWAITING_PAYMENT:
-            return OrderCategory.OVERDUE if self.overdue(now) else OrderCategory.AWAITING
+            if self.overdue(now):
+                return OrderCategory.OVERDUE
+            return OrderCategory.INVOICE_SENT if self.order.invoice_sent_at else OrderCategory.NEED_INVOICE
         if status is OrderStatus.PARTIALLY_PAID:
             return OrderCategory.PARTIAL
         if status is OrderStatus.PAID:
@@ -102,6 +112,7 @@ class Outcome(StrEnum):
     DONE = "done"
     DUPLICATE = "duplicate"  # та же отметка оплаты уже сохранена (двойное нажатие)
     NOT_ALLOWED = "not_allowed"  # заказ не в том состоянии (уже оплачен, отменён, деньги распределены)
+    ALREADY = "already"  # счёт уже отмечен (двойное нажатие) или отметку уже сняли
     TOO_MUCH = "too_much"  # больше остатка
     NO_ADVANCE = "no_advance"  # зачесть из аванса нечего
 
@@ -130,8 +141,12 @@ class AdminOrderService:
 
     async def category(self, category: OrderCategory, today: date, now: datetime) -> list[tuple[Order, Client]]:
         match category:
-            case OrderCategory.AWAITING:
-                return await self.orders.with_payers((OrderStatus.AWAITING_PAYMENT,))
+            case OrderCategory.NEED_INVOICE:
+                rows = await self.orders.with_payers((OrderStatus.AWAITING_PAYMENT,), invoice_sent=False)
+                # Сверху - кому можно выставить счёт, в конце - кого ждём (порядок внутри групп - старые первыми).
+                return sorted(rows, key=lambda row: waits_for_client(row[0]))
+            case OrderCategory.INVOICE_SENT:
+                return await self.orders.with_payers((OrderStatus.AWAITING_PAYMENT,), invoice_sent=True)
             case OrderCategory.OVERDUE:
                 return await self.orders.with_payers((OrderStatus.AWAITING_PAYMENT,), due_before=now)
             case OrderCategory.PARTIAL:
@@ -141,8 +156,11 @@ class AdminOrderService:
             case OrderCategory.MONEY:
                 return await self.orders.money_pending()
 
-    async def counts(self, today: date, now: datetime) -> dict[OrderCategory, int]:
-        return {category: len(await self.category(category, today, now)) for category in OrderCategory}
+    async def counts(self, today: date, now: datetime) -> tuple[dict[OrderCategory, int], int]:
+        """Сколько заказов в каждом разделе и сколько из «Нужен счёт» ждут клиента."""
+        rows = {category: await self.category(category, today, now) for category in OrderCategory}
+        waiting = sum(1 for order, _ in rows[OrderCategory.NEED_INVOICE] if waits_for_client(order))
+        return {category: len(found) for category, found in rows.items()}, waiting
 
     async def card(self, order_id: int) -> AdminOrderCard | None:
         order = await self.orders.get(order_id)
@@ -198,10 +216,37 @@ class AdminOrderService:
         return order
 
     async def mark_invoice_sent(self, order_id: int, now: datetime | None = None) -> None:
+        """Счёт доставлен через бота. Заменяет и ручную отметку: теперь известно, что счёт у клиента в чате."""
         order = await self.orders.get(order_id)
         if order is not None:
             order.invoice_sent_at = now or datetime.now(UTC)
+            order.invoice_channel = InvoiceChannel.BOT
             log_admin_action(self.admin_id, LOG_SECTION, "№%s: счёт отправлен клиенту", order.number)
+
+    async def mark_invoice_manual(self, order_id: int, now: datetime | None = None) -> ActionResult:
+        """Счёт отправлен вне бота (почта, 1С): заказ переходит в «📨 Счёт отправлен»."""
+        order = await self.orders.lock(order_id)
+        if order is None or order.status not in PAYABLE_ORDER_STATUSES:
+            return ActionResult(Outcome.NOT_ALLOWED, order)
+        if order.invoice_sent_at is not None:
+            return ActionResult(Outcome.ALREADY, order)  # двойное нажатие или счёт уже ушёл через бот
+        order.invoice_sent_at = now or datetime.now(UTC)
+        order.invoice_channel = InvoiceChannel.MANUAL
+        log_admin_action(self.admin_id, LOG_SECTION, "№%s: счёт отмечен отправленным вне бота", order.number)
+        return ActionResult(Outcome.DONE, order)
+
+    async def unmark_invoice(self, order_id: int) -> ActionResult:
+        """Снять ручную отметку (поставили по ошибке): заказ снова в «📄 Нужен счёт». Счёт через бот уже у клиента -
+        его отметку не снять."""
+        order = await self.orders.lock(order_id)
+        if order is None or order.status not in PAYABLE_ORDER_STATUSES or order.invoice_channel is InvoiceChannel.BOT:
+            return ActionResult(Outcome.NOT_ALLOWED, order)
+        if order.invoice_sent_at is None:
+            return ActionResult(Outcome.ALREADY, order)
+        order.invoice_sent_at = None
+        order.invoice_channel = None
+        log_admin_action(self.admin_id, LOG_SECTION, "№%s: снята отметка «счёт отправлен вне бота»", order.number)
+        return ActionResult(Outcome.DONE, order)
 
     # --- Снятие брони ------------------------------------------------------------------------------------------
 

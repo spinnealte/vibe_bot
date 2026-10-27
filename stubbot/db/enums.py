@@ -130,6 +130,13 @@ class PayerType(StrEnum):
     ORGANIZATION = "organization"  # юрлицо: реквизиты файлом, счёт из 1С
 
 
+class InvoiceChannel(StrEnum):
+    """Как ушёл счёт клиенту (решение 27.10.2026): заказ с отметкой - в разделе «📨 Счёт отправлен»."""
+
+    BOT = "bot"  # админ прислал файл счёта через бота, и Telegram его доставил
+    MANUAL = "manual"  # счёт отправлен вне бота (почта, 1С) - админ отметил кнопкой; отметку можно снять
+
+
 class PaymentMethod(StrEnum):
     INVOICE = "invoice"  # по счёту (банковский перевод)
     CASH = "cash"

@@ -21,6 +21,7 @@ from stubbot.db.base import Base, CreatedAtMixin, IntPK, TimestampMixin, str_enu
 from stubbot.db.enums import (
     AdvanceReason,
     CancelChoice,
+    InvoiceChannel,
     OrderStatus,
     PayerType,
     PaymentMethod,
@@ -62,6 +63,8 @@ class Order(TimestampMixin, Base):
     requisites_file_name: Mapped[str | None] = mapped_column(String(256))
     requisites_received_at: Mapped[datetime | None]
     invoice_sent_at: Mapped[datetime | None]
+    # Как ушёл счёт: через бот или отмечен вручную (почта, 1С). NULL - счёт ещё не отправлен.
+    invoice_channel: Mapped[InvoiceChannel | None] = mapped_column(str_enum(InvoiceChannel, "invoice_channel"))
     # Напоминания фоновой задачи: отметка - чтобы после перезапуска бота не прислать то же ещё раз.
     payment_reminded_at: Mapped[datetime | None]  # через 24 часа без оплаты - клиенту и админам
     overdue_notified_at: Mapped[datetime | None]  # срок вышел - админам «просрочено» (бронь снимает админ)

@@ -12,13 +12,20 @@ from stubbot.db.enums import (
     AdvanceReason,
     CancelChoice,
     EnrollmentStatus,
+    InvoiceChannel,
     OrderStatus,
     PayerType,
     PaymentMethod,
     PaymentStatus,
     PriceUnit,
 )
-from stubbot.services.admin_orders import AdminOrderCard, AdminOrderService, OrderCategory, Outcome
+from stubbot.services.admin_orders import (
+    AdminOrderCard,
+    AdminOrderService,
+    OrderCategory,
+    Outcome,
+    waits_for_client,
+)
 from stubbot.services.enrollments import CancelOutcome, CancelResult, MyApplication
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import admin_orders_views as views
@@ -241,7 +248,10 @@ def _rows(markup) -> list[list[str]]:
 
 
 def test_card_category_and_amounts() -> None:
-    assert _card().category(NOW) is OrderCategory.AWAITING
+    # Ждёт оплаты: без счёта - «Нужен счёт», со счётом (через бот или вручную) - «Счёт отправлен» (27.10.2026).
+    assert _card().category(NOW) is OrderCategory.NEED_INVOICE
+    sent = _order(invoice_sent_at=NOW, invoice_channel=InvoiceChannel.MANUAL)
+    assert _card(sent).category(NOW) is OrderCategory.INVOICE_SENT
     assert _card(_order(due_at=NOW - timedelta(minutes=1))).category(NOW) is OrderCategory.OVERDUE
     assert _card(_order(status=OrderStatus.PARTIALLY_PAID), paid=1).category(NOW) is OrderCategory.PARTIAL
     assert _card(_order(status=OrderStatus.PAID), paid=8_000_000).category(NOW) is OrderCategory.PAID
@@ -253,22 +263,95 @@ def test_card_category_and_amounts() -> None:
 
 
 def test_orders_menu_and_list() -> None:
-    counts = {OrderCategory.AWAITING: 5, OrderCategory.OVERDUE: 2, OrderCategory.PARTIAL: 1, OrderCategory.PAID: 12,
-              OrderCategory.MONEY: 1}
-    text, markup = views.orders_menu(counts)
-    assert "Ждут оплаты: <b>5</b> (просрочено: 2)" in text and "не распределены: <b>1</b>" in text
-    assert _rows(markup)[0] == ["⏳ Ждут оплаты · 5"] and _rows(markup)[-2] == [texts.BTN_ADMIN_ORDER_FIND]
-    assert "просрочено" not in views.orders_menu({**counts, OrderCategory.OVERDUE: 0})[0]
+    counts = {OrderCategory.NEED_INVOICE: 7, OrderCategory.INVOICE_SENT: 12, OrderCategory.OVERDUE: 3,
+              OrderCategory.PARTIAL: 4, OrderCategory.PAID: 20, OrderCategory.MONEY: 1}
+    text, markup = views.orders_menu(counts, waiting=2)
+    assert "Нужен счёт: <b>7</b> (из них ждём клиента: 2)" in text
+    assert "Счёт отправлен, ждём оплату: <b>12</b>" in text and "Просрочена оплата: <b>3</b>" in text
+    assert "не распределены: <b>1</b>" in text
+    assert _rows(markup)[:2] == [["📄 Нужен счёт · 7"], ["📨 Счёт отправлен · 12"]]
+    assert _rows(markup)[-2] == [texts.BTN_ADMIN_ORDER_FIND]
+    assert "ждём клиента" not in views.orders_menu(counts)[0]
     orders = [(_order(id=i, number=100000 + i), PAYER) for i in range(1, 13)]
-    pick = views.order_list(OrderCategory.PAID, orders)
+    pick = views.order_list(OrderCategory.PAID, orders, TZ)
     assert pick.kind == views.PICK_ORDER and pick.ids == list(range(1, 13))
     # Заказы - пронумерованным списком (правило 26.10.2026): номер строки открывает заказ, кнопок заказов нет.
     text, markup = picker.render(pick, page=1)
     assert "Заказов: <b>12</b>" in text and "ещё не прошли" in text and "Страница 2 из 2" in text
     assert f"<b>11.</b> №100011 · Петров П. П. · {format_rub(8_000_000)}" in text and "<b>1.</b>" not in text
     assert _rows(markup) == [["◀️", "2/2"], [texts.BTN_ADMIN_TO_ORDERS]]
-    text, _ = picker.render(views.order_list(OrderCategory.PAID, []))
+    text, _ = picker.render(views.order_list(OrderCategory.PAID, [], TZ))
     assert "Здесь пока пусто" in text
+
+
+def test_invoice_lists_mark_who_pays_and_when_sent() -> None:
+    rows = [(_order(id=1, number=100123, payer_type=PayerType.INDIVIDUAL), PAYER),
+            (_order(id=2, number=100125, payer_type=PayerType.ORGANIZATION, requisites_file_id="F"), PAYER),
+            (_order(id=3, number=100130, payer_type=PayerType.ORGANIZATION), PAYER),
+            (_order(id=4, number=100131), PAYER)]
+    text, _ = picker.render(views.order_list(OrderCategory.NEED_INVOICE, rows, TZ))
+    assert "Заказов: <b>4</b>, старые - сверху." in text and "кто ещё не выбрал «физлицо / юрлицо»" in text
+    assert "№100123 · Петров П. П. · " + format_rub(8_000_000) + " · 👤 физлицо" in text
+    assert "№100125" in text and "· 🏢 юрлицо" in text
+    assert "№100130 · Петров П. П. · " + format_rub(8_000_000) + " · 🕒 ждём реквизиты" in text
+    assert "· ❔ не выбрал физ/юрлицо" in text
+    assert "кто ещё не выбрал" not in picker.render(views.order_list(OrderCategory.NEED_INVOICE, [], TZ))[0]
+    sent = [(_order(invoice_sent_at=datetime(2026, 10, 27, 22, 30, tzinfo=UTC), invoice_channel=InvoiceChannel.BOT),
+             PAYER)]
+    text, _ = picker.render(views.order_list(OrderCategory.INVOICE_SENT, sent, TZ))
+    # 22:30 UTC - уже 28.10 по Москве: дата - в часовом поясе центра.
+    assert "Сверху - у кого срок оплаты ближе." in text and "· 📨 28.10" in text
+
+
+class _InvoiceOrders:
+    def __init__(self, rows) -> None:
+        self.rows = rows
+        self.calls: list = []
+
+    async def with_payers(self, statuses, due_before=None, not_past=None, invoice_sent=None):
+        self.calls.append((statuses, invoice_sent))
+        return self.rows
+
+
+def test_need_invoice_puts_waiting_clients_last() -> None:
+    waiting = (_order(id=1), PAYER)  # не выбрал «физлицо / юрлицо»
+    no_requisites = (_order(id=2, payer_type=PayerType.ORGANIZATION), PAYER)
+    ready = (_order(id=3, payer_type=PayerType.INDIVIDUAL), PAYER)
+    organization = (_order(id=4, payer_type=PayerType.ORGANIZATION, requisites_file_id="F"), PAYER)
+    service = AdminOrderService.__new__(AdminOrderService)
+    service.orders = _InvoiceOrders([waiting, no_requisites, ready, organization])
+    rows = _run(service.category(OrderCategory.NEED_INVOICE, TODAY, NOW))
+    assert [order.id for order, _ in rows] == [3, 4, 1, 2]  # внутри групп - как пришли (старые первыми)
+    assert service.orders.calls == [((OrderStatus.AWAITING_PAYMENT,), False)]
+    _run(service.category(OrderCategory.INVOICE_SENT, TODAY, NOW))
+    assert service.orders.calls[-1] == ((OrderStatus.AWAITING_PAYMENT,), True)
+    assert waits_for_client(waiting[0]) and waits_for_client(no_requisites[0]) and not waits_for_client(ready[0])
+
+
+def test_manual_invoice_mark_and_undo() -> None:
+    order = _order()
+    service = _service(order)
+    result = _run(service.mark_invoice_manual(77, NOW))
+    assert result.outcome is Outcome.DONE and (order.invoice_sent_at, order.invoice_channel) == (
+        NOW, InvoiceChannel.MANUAL)
+    assert _run(service.mark_invoice_manual(77, NOW)).outcome is Outcome.ALREADY  # двойное нажатие
+    text, markup = views.order_card(_card(order), TZ, NOW)
+    assert "отправлен 21 октября, 12:00 вне бота (отмечено вручную)" in text
+    assert [texts.BTN_ADMIN_ORDER_INVOICE_UNDO] in _rows(markup)
+    assert _run(service.unmark_invoice(77)).outcome is Outcome.DONE
+    assert (order.invoice_sent_at, order.invoice_channel) == (None, None)
+    assert _run(service.unmark_invoice(77)).outcome is Outcome.ALREADY
+    # Через бот счёт уже у клиента: отметку не снять, кнопки снятия нет.
+    _run(service.mark_invoice_sent(77, NOW))
+    assert order.invoice_channel is InvoiceChannel.BOT
+    assert _run(service.unmark_invoice(77)).outcome is Outcome.NOT_ALLOWED
+    text, markup = views.order_card(_card(order), TZ, NOW)
+    assert "отправлен 21 октября, 12:00 через бот" in text
+    assert [texts.BTN_ADMIN_ORDER_INVOICE_UNDO] not in _rows(markup)
+    assert [texts.BTN_ADMIN_ORDER_INVOICE_MANUAL] not in _rows(markup)
+    # Отменённый или оплаченный заказ не отмечается.
+    for status in (OrderStatus.CANCELLED, OrderStatus.PAID):
+        assert _run(_service(_order(status=status)).mark_invoice_manual(77, NOW)).outcome is Outcome.NOT_ALLOWED
 
 
 def test_card_text_and_buttons_waiting_for_payment() -> None:
@@ -279,12 +362,13 @@ def test_card_text_and_buttons_waiting_for_payment() -> None:
     assert "Петров Пётр Петрович · +79990000010" in text and "Петрова А. С. (не в боте)" in text
     assert texts.ADMIN_ORDER_DUE_LATE in text and texts.ADMIN_ORDER_ORGANIZATION in text
     assert texts.ADMIN_ORDER_INVOICE_NONE in text and format_rub(500_000) in text
-    assert _rows(markup) == [[texts.BTN_ADMIN_ORDER_INVOICE], [texts.BTN_ADMIN_ORDER_PAY],
+    assert _rows(markup) == [[texts.BTN_ADMIN_ORDER_INVOICE], [texts.BTN_ADMIN_ORDER_INVOICE_MANUAL],
+                             [texts.BTN_ADMIN_ORDER_PAY],
                              [texts.BTN_ADMIN_ORDER_APPLY.format(amount=format_rub(500_000))],
                              [texts.BTN_ADMIN_ORDER_REQUISITES],
                              [texts.BTN_ADMIN_ORDER_CLIENT, texts.BTN_ADMIN_ORDER_WRITE],
                              [texts.BTN_ADMIN_ORDER_REMOVE], [texts.BTN_ADMIN_TO_ORDERS]]
-    to_client = ClientAdminCb.unpack(markup.inline_keyboard[4][0].callback_data)
+    to_client = ClientAdminCb.unpack(markup.inline_keyboard[5][0].callback_data)
     assert (to_client.action, to_client.item_id, to_client.value) == (ClientAdminAction.VIEW, PAYER.id, "o77")
     back = OrderAdminCb.unpack(markup.inline_keyboard[-1][0].callback_data)
     assert (back.action, back.value) == (OrderAdminAction.LIST, OrderCategory.OVERDUE.value)

@@ -40,6 +40,7 @@ from stubbot.db.enums import (
     DeliveryFormat,
     EnrollmentSource,
     EnrollmentStatus,
+    InvoiceChannel,
     LegalDocumentType,
     OrderStatus,
     PayerType,
@@ -489,6 +490,7 @@ class Seeder:
                 moment += timedelta(days=rng.randint(1, 5))
             order.payer_type = order.payer_type or PayerType.INDIVIDUAL
             order.invoice_sent_at = created + timedelta(hours=1)
+            order.invoice_channel = InvoiceChannel.BOT
             paid = sum(p.amount for p in payments)
             order.status = OrderStatus.PAID if paid >= total else OrderStatus.PARTIALLY_PAID
             if order.status is OrderStatus.PAID:
@@ -497,6 +499,8 @@ class Seeder:
             paid = 0
             if payer_type is not None and rng.random() < 0.4:
                 order.invoice_sent_at = created + timedelta(hours=3)
+                # Часть счетов «ушла на почту» - отмечена вручную (раздел «📨 Счёт отправлен», решение 27.10.2026).
+                order.invoice_channel = InvoiceChannel.MANUAL if rng.random() < 0.3 else InvoiceChannel.BOT
         # Напоминания по демо-заказам - «уже отправлены», в том числе будущие: иначе свежие заказы сами дошли бы
         # до 24 и 72 часов и завалили админов. Для проверки напоминаний - два заказа из reminder_checks.
         order.payment_reminded_at = created + timedelta(hours=24)
