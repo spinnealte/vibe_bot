@@ -1,12 +1,13 @@
 """Запись через менеджера: ссылка с черновиком сообщения и «О центре»."""
 
+import asyncio
 from datetime import date
 from types import SimpleNamespace
 
 import pytest
 
 from stubbot.config import Settings
-from stubbot.tg import keyboards, texts
+from stubbot.tg import catalog_flow, keyboards, texts
 from stubbot.tg.render import about_text, manager_draft, question_draft
 from stubbot.utils.links import with_draft_text
 
@@ -103,6 +104,41 @@ def test_manager_button_under_program_and_empty_schedule() -> None:
     # Под пустым расписанием кнопка называется по делу: «Узнать о ближайших курсах».
     button = keyboards.contact_manager(link, texts.BTN_MANAGER_COURSES).inline_keyboard[0][0]
     assert (button.text, button.url) == (texts.BTN_MANAGER_COURSES, link)
+
+
+@pytest.mark.parametrize(("applications", "has_manager"), [(False, True), (True, False)], ids=["mvp", "full"])
+def test_manager_button_under_course_card_only_in_mvp(monkeypatch: pytest.MonkeyPatch, applications: bool,
+                                                      has_manager: bool) -> None:
+    """MVP: записываются через менеджера - «💬 Менеджер» под карточкой афиши. Полная версия: под карточкой
+    «📝 Записаться», кнопки менеджера нет (решение 27.10.2026)."""
+    card = SimpleNamespace(session=SimpleNamespace(id=8, status=None, cover_file_id=None, registration_deadline=None),
+                           accepts_applications=True, goes_to_waitlist=False)
+    slide = SimpleNamespace(program=SimpleNamespace(id=3, program_html=None, cover_file_id="COVER"), card=card,
+                            index=0, total=1)
+
+    class _Schedule:
+        def __init__(self, session) -> None:
+            pass
+
+        async def slide(self, today, index):
+            return slide
+
+    shown: list = []
+
+    async def screen(message, text, markup=None, photo=None, in_place=True):
+        shown.append(markup)
+
+    monkeypatch.setattr(catalog_flow, "ScheduleService", _Schedule)
+    monkeypatch.setattr(catalog_flow, "get_settings",
+                        lambda: _settings(manager_url=MANAGER, applications_enabled=applications))
+    monkeypatch.setattr(catalog_flow, "_screen", screen)
+    monkeypatch.setattr(catalog_flow.render, "session_caption", lambda *args, **kwargs: "caption")
+    monkeypatch.setattr(catalog_flow.render, "manager_draft", lambda card: "Черновик")
+    message = SimpleNamespace(chat=SimpleNamespace(id=500))
+    asyncio.run(catalog_flow.show_course(message, None, date(2026, 10, 27), 0, "Europe/Moscow"))
+    labels = [b.text for row in shown[0].inline_keyboard for b in row]
+    assert (texts.BTN_MANAGER in labels) is has_manager
+    assert (texts.BTN_APPLY in labels) is applications
 
 
 def test_question_draft_takes_what_person_wrote_to_bot() -> None:

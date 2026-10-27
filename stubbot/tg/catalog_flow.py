@@ -63,9 +63,10 @@ async def show_course(message: Message, session: AsyncSession, today: date, inde
         apply_text=_apply_button(card) if applications else None,
         notify=card.session.status is SessionStatus.ANNOUNCED and applications,
         has_program_text=bool(program.program_html),
-        # Запись в MVP - через менеджера: чат откроется с готовым черновиком про этот курс.
+        # Запись в MVP - через менеджера: чат откроется с готовым черновиком про этот курс. В полной версии под
+        # карточкой «📝 Записаться» - кнопки менеджера нет (решение пользователя 27.10.2026).
         manager_url=with_draft_text(settings.manager_url, render.manager_draft(card))
-        if settings.manager_url else None,
+        if settings.manager_url and not applications else None,
         admin=settings.is_admin(message.chat.id),  # в личке chat.id = id пользователя
     )
     caption = render.session_caption(card, deadline_text(card, timezone), show_seats=applications)
