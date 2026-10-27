@@ -18,6 +18,7 @@ from aiogram.types import InlineKeyboardMarkup
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from stubbot.config import Settings
+from stubbot.db.enums import PayerType
 from stubbot.services.clients import ClientService
 from stubbot.services.reminders import ReminderJob, ReminderKind, ReminderService
 from stubbot.tg import admin_orders_views, keyboards, render, texts
@@ -46,8 +47,11 @@ def letters(job: ReminderJob, settings: Settings) -> list[Letter]:
     result = []
     if payer.telegram_id is not None:
         text = render.payment_reminder(job.session, order, overdue, bool(manager_url), settings.timezone)
-        # Ещё не выбрал «Физлицо / Юрлицо» - кнопки выбора прямо в напоминании (решение 22.10.2026).
-        markup = keyboards.payment_reminder(order.id, order.payer_type is None and not overdue, manager_url)
+        # Ещё не выбрал «Физлицо / Юрлицо» - кнопки выбора прямо в напоминании (решение 22.10.2026). Физлицу
+        # с известной суммой - «Оплатить онлайн», если онлайн-оплата включена (шаг 7).
+        online = (settings.online_payments_enabled and order.payer_type is PayerType.INDIVIDUAL
+                  and order.total_amount is not None)
+        markup = keyboards.payment_reminder(order.id, order.payer_type is None and not overdue, manager_url, online)
         result.append(Letter(payer.telegram_id, text, markup, payer.telegram_id))
     admin_text, admin_markup = admin_orders_views.reminder_notice(job, settings.timezone)
     result += [Letter(chat_id, admin_text, admin_markup) for chat_id in settings.admin_chat_ids]

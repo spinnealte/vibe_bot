@@ -4,7 +4,7 @@ from sqlalchemy import exists, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from stubbot.db.enums import AdvanceReason, OrderStatus, PaymentState
+from stubbot.db.enums import AdvanceReason, OrderStatus, PaymentProvider, PaymentState
 from stubbot.db.models import Advance, Client, CourseSession, Enrollment, Order, Payment, PriceOption
 
 
@@ -46,6 +46,35 @@ class OrderRepository:
 
     def add_payment(self, payment: Payment) -> None:
         self.session.add(payment)
+
+    # --- Онлайн-оплата (шаг 7) -----------------------------------------------------------------------------------
+
+    async def get_payment(self, payment_id: int) -> Payment | None:
+        return await self.session.get(Payment, payment_id)
+
+    async def lock_payment(self, payment_id: int) -> Payment | None:
+        """Платёж с блокировкой строки - после строки заказа: итог одного платежа применяется один раз, даже если
+        его одновременно проверяют кнопкой и фоновой сверкой."""
+        stmt = (select(Payment).where(Payment.id == payment_id).with_for_update()
+                .execution_options(populate_existing=True))
+        return await self.session.scalar(stmt)
+
+    async def pending_online(self, order_id: int) -> Payment | None:
+        """Последняя выданная, но ещё не оплаченная ссылка на онлайн-оплату заказа."""
+        stmt = (
+            select(Payment)
+            .where(Payment.order_id == order_id, Payment.state == PaymentState.PENDING,
+                   Payment.provider != PaymentProvider.MANUAL)
+            .order_by(Payment.id.desc())
+            .limit(1)
+        )
+        return await self.session.scalar(stmt)
+
+    async def pending_payments(self, provider: PaymentProvider) -> list[Payment]:
+        """Все онлайн-платежи провайдера, которые ждут итога, - для фоновой сверки (их единицы)."""
+        stmt = (select(Payment).where(Payment.state == PaymentState.PENDING, Payment.provider == provider)
+                .order_by(Payment.id))
+        return list(await self.session.scalars(stmt))
 
     # --- Админка ------------------------------------------------------------------------------------------------
 

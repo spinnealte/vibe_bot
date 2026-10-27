@@ -16,6 +16,7 @@ from stubbot.tg.middlewares import (
     ThrottlingMiddleware,
     UnhandledLogMiddleware,
 )
+from stubbot.tg.online_payments import OnlinePayments
 
 FSM_TTL = timedelta(days=2)
 
@@ -31,6 +32,7 @@ def create_dispatcher(
     settings: Settings,
     session_factory: async_sessionmaker[AsyncSession],
     storage: BaseStorage | None = None,
+    online_payments: OnlinePayments | None = None,
 ) -> Dispatcher:
     # Обращения одного человека обрабатываются строго по очереди (events_isolation): иначе два быстрых нажатия
     # «Сохранить» идут одновременно, оба видят один и тот же шаг и создают две одинаковые записи.
@@ -38,6 +40,7 @@ def create_dispatcher(
     dp = Dispatcher(storage=storage or create_storage(settings.redis_url), events_isolation=SimpleEventIsolation())
     dp["settings"] = settings  # доступно в хендлерах аргументом `settings`
     dp["session_factory"] = session_factory  # для работы с БД вне транзакции апдейта (обработчик ошибок)
+    dp["online_payments"] = online_payments  # None - онлайн-оплата выключена (ONLINE_PAYMENTS=off)
     dp.errors.register(on_error)
 
     dp.update.outer_middleware(DbSessionMiddleware(session_factory))

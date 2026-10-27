@@ -37,6 +37,8 @@ from stubbot.tg.callbacks import (
     ConsentFormCb,
     OrderAction,
     OrderCb,
+    PayAction,
+    PayCb,
     SelectDoneCb,
     SelectGroup,
     SkipOptionalCb,
@@ -285,12 +287,61 @@ def payer_choice(order_id: int, back_index: int | None = None) -> InlineKeyboard
     return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def payment_reminder(order_id: int, choose_payer: bool, manager_url: str | None) -> InlineKeyboardMarkup | None:
-    """Под напоминанием об оплате: «Физлицо / Юрлицо», если ещё не выбрано, и чат менеджера с черновиком."""
+def payment_reminder(order_id: int, choose_payer: bool, manager_url: str | None,
+                     online: bool = False) -> InlineKeyboardMarkup | None:
+    """Под напоминанием об оплате: «Физлицо / Юрлицо», если ещё не выбрано, «Оплатить онлайн» (физлицу, когда
+    онлайн-оплата включена) и чат менеджера с черновиком."""
     rows = payer_choice(order_id).inline_keyboard if choose_payer else []
+    if online:
+        rows = [*rows, [pay_online_button(order_id)]]
     if manager_url:
         rows = [*rows, [manager_button(manager_url, texts.BTN_CANCEL_VIA_MANAGER)]]
     return InlineKeyboardMarkup(inline_keyboard=rows) if rows else None
+
+
+# --- Онлайн-оплата (полная версия, этап 1, шаг 7) -----------------------------------------------------------------
+
+def _pay(action: PayAction, item_id: int, index: int = 0) -> str:
+    return PayCb(action=action, item_id=item_id, index=index).pack()
+
+
+def pay_online_button(order_id: int, index: int = 0, label: str = texts.BTN_PAY_ONLINE) -> InlineKeyboardButton:
+    return InlineKeyboardButton(text=label, callback_data=_pay(PayAction.START, order_id, index))
+
+
+def pay_individual(order_id: int) -> InlineKeyboardMarkup:
+    """Под «Оплата как физическое лицо», когда онлайн-оплата включена."""
+    return InlineKeyboardMarkup(inline_keyboard=[[pay_online_button(order_id)]])
+
+
+def pay_online(payment_id: int, url: str | None, index: int, payment_page: bool = True) -> InlineKeyboardMarkup:
+    """Под ссылкой на оплату: страница ЮKassa (у тестовой оплаты вместо неё - «прошла / не прошла»), проверка,
+    назад к записям."""
+    rows = []
+    if not payment_page:
+        rows.append([
+            InlineKeyboardButton(text=texts.BTN_PAY_FAKE_OK, callback_data=_pay(PayAction.FAKE_OK, payment_id, index)),
+            InlineKeyboardButton(text=texts.BTN_PAY_FAKE_FAIL,
+                                 callback_data=_pay(PayAction.FAKE_FAIL, payment_id, index)),
+        ])
+    elif url:
+        rows.append([InlineKeyboardButton(text=texts.BTN_PAY_ONLINE_GO, url=url)])
+    rows.append([InlineKeyboardButton(text=texts.BTN_PAY_ONLINE_CHECK,
+                                      callback_data=_pay(PayAction.CHECK, payment_id, index))])
+    rows.append([_to_my_applications(index)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
+
+
+def pay_online_retry(order_id: int, index: int) -> InlineKeyboardMarkup:
+    """Оплата не прошла или ссылку открыть не удалось: попробовать снова (новая ссылка) или назад к записям."""
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [pay_online_button(order_id, index, texts.BTN_PAY_ONLINE_RETRY)],
+        [_to_my_applications(index)],
+    ])
+
+
+def to_my_applications(index: int = 0) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[[_to_my_applications(index)]])
 
 
 def _myapp(action: MyApplicationAction, enrollment_id: int = 0, index: int = 0) -> str:
@@ -309,10 +360,11 @@ def back_to_cabinet() -> InlineKeyboardMarkup:
 
 
 def my_application_card(app: MyApplication, index: int, total: int,
-                        manager_url: str | None = None) -> InlineKeyboardMarkup:
-    """◀️ n/N ▶️ / как оплатить (плательщику) / отменить или «Написать менеджеру» / ⬅️ В кабинет.
+                        manager_url: str | None = None, online: bool = False) -> InlineKeyboardMarkup:
+    """◀️ n/N ▶️ / как оплатить или «Оплатить онлайн» (плательщику) / отменить или «Написать менеджеру» / ⬅️ В кабинет.
 
     manager_url - чат менеджера с черновиком об отмене: под записью, которую самому отменить уже нельзя.
+    online - онлайн-оплата включена: физлицу с известной суммой и остатком - «💳 Оплатить онлайн».
     """
     enrollment, order = app.enrollment, app.order
     rows = []
@@ -328,6 +380,9 @@ def my_application_card(app: MyApplication, index: int, total: int,
                 text=texts.BTN_ORDER_REQUISITES,
                 callback_data=OrderCb(action=OrderAction.ORGANIZATION, order_id=order.id).pack(),
             )])
+        elif (online and order.payer_type is PayerType.INDIVIDUAL and order.total_amount is not None
+              and app.paid < order.total_amount):
+            rows.append([pay_online_button(order.id, index)])
     if app.self_cancel:
         waitlist = enrollment.status is EnrollmentStatus.WAITLIST
         label = texts.BTN_LEAVE_WAITLIST if waitlist else texts.BTN_CANCEL_APPLICATION

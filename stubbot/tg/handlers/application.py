@@ -233,7 +233,10 @@ async def pay_as_individual(callback: CallbackQuery, callback_data: OrderCb, sta
         return
     await callback.answer()
     await state.clear()
-    await show_screen(callback.message, render.pay_individual(order, client.email, settings.timezone))
+    # Онлайн-оплата включена и сумма известна - «💳 Оплатить онлайн» прямо здесь (шаг 7).
+    online = settings.online_payments_enabled and order.total_amount is not None
+    await show_screen(callback.message, render.pay_individual(order, client.email, settings.timezone, online),
+                      keyboards.pay_individual(order.id) if online else None)
     if changed:
         await notify_admins(bot, settings, *admin_orders_views.notify_payer_type(order, client))
 
@@ -435,4 +438,5 @@ async def _show_application(message: Message, session: AsyncSession, client: Cli
     manager_url = (with_draft_text(settings.manager_url, render.manager_cancel_draft(app))
                    if settings.manager_url else None)
     await show_screen(message, render.my_application_card(app, settings.timezone, datetime.now(UTC)),
-                      keyboards.my_application_card(app, index, len(apps), manager_url))
+                      keyboards.my_application_card(app, index, len(apps), manager_url,
+                                                    online=settings.online_payments_enabled))

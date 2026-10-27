@@ -11,6 +11,8 @@ from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES, MANUAL_PAYMENT_METHO
 from stubbot.db.models import Client, Order, PriceOption
 from stubbot.services.admin_orders import AdminOrderCard, OrderCategory
 from stubbot.services.enrollments import CancelResult, MyApplication
+from stubbot.services.online_payments import Applied as OnlinePaymentApplied
+from stubbot.services.online_payments import Problem as OnlineProblem
 from stubbot.services.reminders import ReminderJob, ReminderKind
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
@@ -133,6 +135,10 @@ def order_card(card: AdminOrderCard, timezone: str, now: datetime) -> Screen:
         lines.append(_payer_type_line(order))
         lines.append(texts.ADMIN_ORDER_INVOICE_SENT.format(moment=format_moment(order.invoice_sent_at, timezone))
                      if order.invoice_sent_at else texts.ADMIN_ORDER_INVOICE_NONE)
+        if card.online_pending is not None:
+            lines.append(texts.ADMIN_ORDER_ONLINE_PENDING.format(
+                amount=format_rub(card.online_pending.amount),
+                moment=format_moment(card.online_pending.created_at, timezone)))
     if card.advance > 0:
         lines.append(texts.ADMIN_ORDER_ADVANCE.format(amount=format_rub(card.advance)))
     lines.append(texts.ADMIN_ORDER_CREATED.format(moment=format_moment(order.created_at, timezone)))
@@ -225,6 +231,9 @@ def ask_amount(card: AdminOrderCard) -> Screen:
                             OrderAdminAction.FULL, order.id))
     rows.append(_cancel(order.id))
     hint = texts.ADMIN_ORDER_AMOUNT_HINT_FULL if card.left else texts.ADMIN_ORDER_AMOUNT_HINT
+    if card.online_pending is not None:
+        # Ссылку уже не отозвать (ЮKassa отменит её сама через час) - предупреждаем о возможной переплате.
+        hint += texts.ADMIN_ORDER_ONLINE_WARNING.format(amount=format_rub(card.online_pending.amount))
     return texts.ADMIN_ORDER_ASK_AMOUNT.format(number=order.number, summary=summary, hint=hint), _markup(*rows)
 
 
@@ -369,6 +378,28 @@ def reminder_notice(job: ReminderJob, timezone: str) -> tuple[str, InlineKeyboar
     invoice = (texts.ADMIN_ORDER_INVOICE_SENT.format(moment=format_moment(order.invoice_sent_at, timezone))
                if order.invoice_sent_at else texts.ADMIN_ORDER_INVOICE_NONE)
     return texts.ADMIN_REMINDER_DAY.format(invoice=invoice, **fields), open_order(order.id)
+
+
+def notify_online_paid(applied: OnlinePaymentApplied, timezone: str) -> tuple[str, InlineKeyboardMarkup]:
+    """Клиент оплатил онлайн: сколько, чем, что с заказом; переплата или оплата после отмены - предупреждение."""
+    order, payer = applied.order, applied.payer
+    if applied.problem is OnlineProblem.ORDER_CANCELLED:
+        result = texts.ADMIN_ONLINE_RESULT_CANCELLED
+    elif applied.full:
+        result = texts.ADMIN_ONLINE_RESULT_FULL
+    else:
+        result = texts.ADMIN_ONLINE_RESULT_PARTIAL.format(paid=format_rub(applied.paid), total=order_amount(order))
+    problem = ""
+    if applied.problem is not None:
+        problem = texts.ADMIN_ONLINE_PROBLEMS[applied.problem.value].format(extra=format_rub(applied.extra))
+    text = texts.ADMIN_NOTIFY_ONLINE_PAID.format(
+        number=order.number, title=safe(session_title(applied.course_session)),
+        dates=dates_text(applied.course_session), name=person(payer), phone=phone(payer),
+        amount=format_rub(applied.payment.amount),
+        method=texts.ADMIN_ONLINE_METHODS.get(applied.method_type or "", texts.ADMIN_ONLINE_METHOD_OTHER),
+        result=result, test=texts.ADMIN_ONLINE_TEST if applied.test else "", problem=problem,
+    )
+    return text, open_order(order.id)
 
 
 def notify_cancelled(app: MyApplication, result: CancelResult,

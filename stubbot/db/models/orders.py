@@ -4,8 +4,9 @@
 со ссылкой на заказ (своя строка у каждого, у коллеги тоже), платит плательщик заказа. Сумма фиксируется при записи
 и больше не меняется, даже если тариф подорожает.
 
-Оплата бывает частями: каждая поступившая сумма - строка payments, оплачено = сумма успешных платежей. Пока платежи
-отмечает админ вручную; поля под онлайн-оплату (провайдер, его номер платежа) - на будущее, после договора.
+Оплата бывает частями: каждая поступившая сумма - строка payments, оплачено = сумма успешных платежей. Платежи
+отмечает админ вручную; онлайн-оплата (шаг 7, выключена до договора с ЮKassa) - строка pending с номером платежа
+у провайдера и ссылкой на оплату, после оплаты она становится succeeded (services/online_payments.py).
 
 Аванс клиента - журнал advances: + зачисление (оплаченное по отменённой записи), - списание (в оплату другого заказа,
 возврат деньгами), правки админа. Баланс - сумма строк. Меняет аванс только админ, сам по себе он не тратится.
@@ -74,7 +75,8 @@ class Order(TimestampMixin, Base):
 
 
 class Payment(TimestampMixin, Base):
-    """Поступившая сумма по заказу. Ручная оплата (отметил админ) сразу succeeded."""
+    """Поступившая сумма по заказу. Ручная оплата (отметил админ) сразу succeeded; онлайн - pending, пока провайдер
+    не сообщит итог."""
 
     __tablename__ = "payments"
     __table_args__ = (CheckConstraint("amount > 0", name="amount_positive"),)
@@ -90,9 +92,13 @@ class Payment(TimestampMixin, Base):
     state: Mapped[PaymentState] = mapped_column(
         str_enum(PaymentState, "payment_state"), server_default=PaymentState.SUCCEEDED.value
     )
-    # Онлайн-оплата (после договора): номер платежа у провайдера и ключ от повторного создания.
+    # Онлайн-оплата: номер платежа у провайдера и ключ от повторного создания (Idempotence-Key ЮKassa).
     provider_payment_id: Mapped[str | None] = mapped_column(String(128), unique=True)
     idempotency_key: Mapped[str | None] = mapped_column(String(64), unique=True)
+    # Ссылка на страницу оплаты: повторное «Оплатить онлайн» в течение часа выдаёт ту же, а не новый платёж.
+    confirmation_url: Mapped[str | None] = mapped_column(String(512))
+    checked_at: Mapped[datetime | None]  # когда последний раз спрашивали статус у провайдера (фоновая сверка)
+    cancel_reason: Mapped[str | None] = mapped_column(String(64))  # почему не прошёл: причина от провайдера
     paid_at: Mapped[datetime | None]
     # Telegram ID админа, отметившего оплату (таблица admins пока не используется).
     created_by_telegram_id: Mapped[int | None] = mapped_column(BigInteger)

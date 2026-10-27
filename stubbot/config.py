@@ -1,3 +1,4 @@
+from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
@@ -5,6 +6,14 @@ from typing import Annotated
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy import URL
+
+
+class OnlinePayments(StrEnum):
+    """Онлайн-оплата заказов (полная версия, этап 1, шаг 7). Проверка настроек - payments.create_gateway."""
+
+    OFF = "off"  # кнопки «Оплатить онлайн» нет: оплату отмечает админ
+    FAKE = "fake"  # без ЮKassa: бот сам изображает оплату кнопками - только для проверки на локальной базе
+    YOOKASSA = "yookassa"  # ЮKassa; тестовый магазин или боевой - по ключам YOOKASSA_*
 
 
 class Settings(BaseSettings):
@@ -44,6 +53,30 @@ class Settings(BaseSettings):
     # Чат менеджера для записи: https://t.me/<username>. Пусто - кнопки «Менеджер» нет.
     # Короткие записи «t.me/<username>» и «@<username>» тоже принимаются - приводятся к полной ссылке.
     manager_url: str | None = None
+
+    # Онлайн-оплата. Ключи магазина ЮKassa вписываются прямо в настройки сервера, в чат и в репозиторий - никогда.
+    online_payments: OnlinePayments = OnlinePayments.OFF
+    yookassa_shop_id: str | None = None
+    yookassa_secret_key: SecretStr | None = None
+    # Чек 54-ФЗ в запросе платежа (касса подключена в ЮKassa: «Чеки от ЮKassa» или касса партнёра). Значения даёт
+    # бухгалтер заказчика: ставка НДС (vat_code 1-12), система налогообложения (1-6, нужна, если их несколько),
+    # признак способа расчёта (весь остаток до курса - full_prepayment) и предмета расчёта (курс - service).
+    yookassa_receipts: bool = False
+    yookassa_vat_code: int | None = None
+    yookassa_tax_system_code: int | None = None
+    yookassa_payment_mode: str = "full_prepayment"
+    yookassa_payment_subject: str = "service"
+
+    @property
+    def online_payments_enabled(self) -> bool:
+        return self.online_payments is not OnlinePayments.OFF
+
+    @field_validator("yookassa_shop_id", "yookassa_secret_key", "yookassa_vat_code", "yookassa_tax_system_code",
+                     mode="before")
+    @classmethod
+    def _empty_is_none(cls, value: object) -> object:
+        # В образце .env эти строки стоят пустыми, пока заказчик не дал значения.
+        return None if isinstance(value, str) and not value.strip() else value
 
     @field_validator("admin_ids", mode="before")
     @classmethod

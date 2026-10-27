@@ -7,6 +7,8 @@ from html import escape, unescape
 from stubbot.db.enums import CancelChoice, EnrollmentStatus, OrderStatus, PayerType
 from stubbot.db.models import CourseSession, Order, PriceOption, Program, Venue
 from stubbot.services.enrollments import PAYABLE_ORDER_STATUSES, CancelResult, MyApplication
+from stubbot.services.online_payments import Applied as OnlinePaymentApplied
+from stubbot.services.online_payments import Problem as OnlineProblem
 from stubbot.services.schedule import SessionCard
 from stubbot.tg import texts
 from stubbot.tg.formatting import safe
@@ -240,8 +242,9 @@ def enrolled(card: SessionCard, order: Order, colleague_name: str | None, timezo
     )
 
 
-def pay_individual(order: Order, email: str | None, timezone: str) -> str:
-    return texts.PAY_INDIVIDUAL.format(
+def pay_individual(order: Order, email: str | None, timezone: str, online: bool = False) -> str:
+    """online - кнопка «Оплатить онлайн» под текстом (онлайн-оплата включена, сумма заказа известна)."""
+    return (texts.PAY_INDIVIDUAL_ONLINE if online else texts.PAY_INDIVIDUAL).format(
         number=order.number,
         email=texts.PAY_INDIVIDUAL_EMAIL.format(email=safe(email)) if email else "",
         due=format_moment(order.due_at, timezone),
@@ -457,6 +460,32 @@ def payment_reminder(course_session: CourseSession, order: Order, overdue: bool,
     hint = texts.PAYMENT_REMINDER_HINT if has_manager else texts.PAYMENT_REMINDER_HINT_NO_MANAGER
     return texts.PAYMENT_REMINDER.format(number=order.number, title=title, dates=dates, amount=order_amount(order),
                                          due=format_moment(order.due_at, timezone), hint=hint)
+
+
+def pay_online(number: int, title: str, amount: int, email: str | None, payment_page: bool) -> str:
+    """Ссылка на онлайн-оплату (или кнопки тестовой оплаты): заказ, курс, сумма, куда придёт чек."""
+    if not payment_page:
+        return texts.PAY_ONLINE_FAKE.format(number=number, title=safe(title), amount=format_rub(amount))
+    receipt = texts.PAY_ONLINE_RECEIPT.format(email=safe(email)) if email else ""
+    return texts.PAY_ONLINE_LINK.format(number=number, title=safe(title), amount=format_rub(amount), receipt=receipt)
+
+
+def pay_online_failed(number: int, reason: str | None) -> str:
+    return texts.PAY_ONLINE_FAILED.format(number=number, reason=texts.PAY_ONLINE_FAIL_REASONS.get(reason or "", ""))
+
+
+def online_payment_received(applied: OnlinePaymentApplied) -> str:
+    """«Оплата получена» после онлайн-оплаты. Заказ к этому времени отменили - место не закреплено, деньги решит
+    менеджер; заказ уже был оплачен - лишнее вернут или зачислят на аванс."""
+    course_session, order = applied.course_session, applied.order
+    if applied.problem is OnlineProblem.ORDER_CANCELLED:
+        return texts.PAYMENT_RECEIVED.format(number=order.number, title=safe(session_title(course_session)),
+                                             dates=dates_text(course_session),
+                                             details=texts.PAYMENT_RECEIVED_AFTER_CANCEL)
+    text = payment_received(course_session, order, applied.paid, applied.full)
+    if applied.extra:
+        text += texts.PAYMENT_RECEIVED_OVERPAID.format(extra=format_rub(applied.extra))
+    return text
 
 
 def invoice_caption(order: Order, left: int | None, timezone: str) -> str:

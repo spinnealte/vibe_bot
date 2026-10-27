@@ -44,6 +44,12 @@ class Application(StatesGroup):
     requisites = State()  # ждём файл с реквизитами организации
 
 
+class PayOnline(StatesGroup):
+    """Онлайн-оплата: чек 54-ФЗ уходит на e-mail, а в профиле его нет. В data: order_id и index карточки."""
+
+    email = State()
+
+
 class AdminDict(StatesGroup):
     """Справочник в админке. В data: kind, mode (add/edit), item_id, step/field, values, prompt id."""
 

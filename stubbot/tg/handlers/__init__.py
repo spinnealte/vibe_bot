@@ -12,6 +12,7 @@ from stubbot.tg.handlers import (
     consent,
     fallback,
     menu,
+    payment,
     registration,
     schedule,
     selection,
@@ -36,6 +37,8 @@ def build_root_router(applications_enabled: bool) -> Router:
     root.include_router(schedule.router)
     if applications_enabled:
         root.include_router(application.router)
+        # Онлайн-оплата: без ONLINE_PAYMENTS кнопок нет, а нажатие старой отвечает «недоступна».
+        root.include_router(payment.router)
     # Фильтр «только админ» - на всём роутере; не-админам он не мешает: их апдейты идут дальше, в fallback.
     root.include_router(admin.router)
     # Номер строки из пронумерованного списка админки - после admin: «⚙️ Админка» открывает меню.

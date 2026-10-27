@@ -9,9 +9,11 @@ from datetime import UTC, datetime
 from stubbot.config import get_settings
 from stubbot.db.session import create_engine, create_session_factory
 from stubbot.logging_setup import setup_logging
+from stubbot.payments import GatewayConfigError, create_gateway
 from stubbot.services.legal import LegalTextChanged, publish_documents
 from stubbot.tg.bot import check_telegram, create_bot
 from stubbot.tg.dispatcher import create_dispatcher
+from stubbot.tg.online_payments import OnlinePayments
 from stubbot.tg.reminders import PaymentReminders
 
 logger = logging.getLogger("stubbot")
@@ -20,12 +22,18 @@ logger = logging.getLogger("stubbot")
 async def main() -> int:
     settings = get_settings()
     setup_logging(settings.log_level, settings.log_dir)
+    try:
+        gateway = create_gateway(settings)  # онлайн-оплата: None - выключена (ONLINE_PAYMENTS=off)
+    except GatewayConfigError as exc:
+        logger.error("Онлайн-оплата не настроена: %s", exc)
+        return 1
 
     engine = create_engine(settings.database_url)
     session_factory = create_session_factory(engine)
     bot = create_bot(settings)
-    dp = create_dispatcher(settings, session_factory)
-    reminders: asyncio.Task | None = None
+    online_payments = OnlinePayments(bot, session_factory, settings, gateway) if gateway is not None else None
+    dp = create_dispatcher(settings, session_factory, online_payments=online_payments)
+    tasks: list[asyncio.Task] = []
     try:
         try:
             # Тексты согласий - в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
@@ -41,8 +49,11 @@ async def main() -> int:
             return 1
         if settings.applications_enabled:
             # Полная версия: напоминания об оплате - фоновая задача рядом с приёмом сообщений.
-            reminders = asyncio.create_task(PaymentReminders(bot, session_factory, settings).run_forever(),
-                                            name="payment-reminders")
+            tasks.append(asyncio.create_task(PaymentReminders(bot, session_factory, settings).run_forever(),
+                                             name="payment-reminders"))
+        if online_payments is not None:
+            # Сверка онлайн-платежей: оплату без нажатия «Проверить» бот заметит в течение минуты.
+            tasks.append(asyncio.create_task(online_payments.run_forever(), name="online-payments"))
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         return 0
     except asyncio.CancelledError:
@@ -50,10 +61,12 @@ async def main() -> int:
         logger.info("Получена команда остановки (Ctrl+C)")
         raise
     finally:
-        if reminders is not None:
-            reminders.cancel()
+        for task in tasks:
+            task.cancel()
             with suppress(asyncio.CancelledError):
-                await reminders
+                await task
+        if gateway is not None:
+            await gateway.close()
         await dp.storage.close()
         await bot.session.close()
         await engine.dispose()

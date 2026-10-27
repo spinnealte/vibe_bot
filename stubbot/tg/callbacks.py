@@ -132,6 +132,22 @@ class OrderCb(CallbackData, prefix="order"):
     order_id: int
 
 
+class PayAction(StrEnum):
+    """Онлайн-оплата (шаг 7). item_id - заказ (START) или наш платёж (остальные); index - карточка «Моих записей»,
+    куда вернёт «К моим записям»."""
+
+    START = "go"  # «💳 Оплатить онлайн» - ссылка на весь остаток
+    CHECK = "chk"  # «🔄 Проверить оплату»
+    FAKE_OK = "fok"  # тестовая оплата (ONLINE_PAYMENTS=fake): «🧪 Оплата прошла»
+    FAKE_FAIL = "ffl"  # «🧪 Оплата не прошла»
+
+
+class PayCb(CallbackData, prefix="pay"):
+    action: PayAction
+    item_id: int
+    index: int = 0
+
+
 class MyApplicationAction(StrEnum):
     VIEW = "view"  # карточка записи номер index
     PAY = "pay"  # «Как будете оплачивать?» - выбор «Физлицо / Юрлицо» для заказа этой записи

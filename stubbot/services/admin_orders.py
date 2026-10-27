@@ -60,6 +60,7 @@ class AdminOrderCard:
     paid: int  # оплачено, копейки
     advance: int  # аванс плательщика сейчас
     money_settled: bool = False  # отменённый заказ: деньги уже распределены
+    online_pending: Payment | None = None  # клиенту выдана ссылка на онлайн-оплату, итога ещё нет
 
     @property
     def left(self) -> int | None:
@@ -157,6 +158,7 @@ class AdminOrderService:
             paid=paid,
             advance=await self.advances.balance(order.payer_client_id),
             money_settled=order.status is OrderStatus.CANCELLED and await self.orders.money_settled(order.id),
+            online_pending=await self.orders.pending_online(order.id),
         )
 
     async def find(self, number: int) -> Order | None:
@@ -180,7 +182,7 @@ class AdminOrderService:
                 await self.db.flush()
         except IntegrityError:
             return ActionResult(Outcome.DUPLICATE, order, paid=paid)
-        result = await self._after_payment(order, amount, paid + amount, now)
+        result = await self.after_payment(order, amount, paid + amount, now)
         log_admin_action(self.admin_id, LOG_SECTION, "№%s: оплата %s коп. (%s)", order.number, amount, method.value)
         return result
 
@@ -266,7 +268,7 @@ class AdminOrderService:
         self.orders.add_payment(self._payment(order, amount, PaymentMethod.ADVANCE, now))
         self.advances.add(self._advance(order, -amount, AdvanceReason.APPLIED_TO_ORDER))
         await self.db.flush()
-        result = await self._after_payment(order, amount, paid + amount, now)
+        result = await self.after_payment(order, amount, paid + amount, now)
         log_admin_action(self.admin_id, LOG_SECTION, "№%s: зачтено из аванса %s коп.", order.number, amount)
         return result
 
@@ -286,8 +288,9 @@ class AdminOrderService:
         await self.advances.lock_client(order.payer_client_id)
         return order, paid
 
-    async def _after_payment(self, order: Order, amount: int, paid: int, now: datetime) -> ActionResult:
-        """После оплаты: статус заказа и записи участников - любая оплата закрепляет место."""
+    async def after_payment(self, order: Order, amount: int, paid: int, now: datetime) -> ActionResult:
+        """После оплаты: статус заказа и записи участников - любая оплата закрепляет место. Заказ уже под
+        блокировкой. Тот же шаг и у онлайн-оплаты (services/online_payments.py)."""
         full = order.total_amount is not None and paid >= order.total_amount
         order.status = OrderStatus.PAID if full else OrderStatus.PARTIALLY_PAID
         if full:

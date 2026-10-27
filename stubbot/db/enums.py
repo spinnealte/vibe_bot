@@ -134,8 +134,8 @@ class PaymentMethod(StrEnum):
     INVOICE = "invoice"  # по счёту (банковский перевод)
     CASH = "cash"
     CARD = "card"  # картой или по СБП - оплату отметил админ (кнопка «💳 Карта, СБП»)
-    CARD_ONLINE = "card_online"  # онлайн через платёжный сервис - после договора
-    SBP = "sbp"  # СБП через платёжный сервис - после договора
+    CARD_ONLINE = "card_online"  # онлайн через платёжный сервис: картой, SberPay, T-Pay, ЮMoney - всё, кроме СБП
+    SBP = "sbp"  # СБП через платёжный сервис
     ADVANCE = "advance"  # из аванса клиента (засчитывает админ)
 
 
@@ -146,10 +146,11 @@ MANUAL_PAYMENT_METHODS = (PaymentMethod.INVOICE, PaymentMethod.CASH, PaymentMeth
 class PaymentProvider(StrEnum):
     MANUAL = "manual"  # оплату отметил админ
     YOOKASSA = "yookassa"
+    FAKE = "fake"  # тестовая оплата без ЮKassa (ONLINE_PAYMENTS=fake, только на локальной базе)
 
 
 class PaymentState(StrEnum):
-    PENDING = "pending"  # онлайн-платёж создан, ждём оплату
+    PENDING = "pending"  # онлайн-платёж создан, клиент получил ссылку - ждём оплату (в «оплачено» не входит)
     SUCCEEDED = "succeeded"
     CANCELED = "canceled"
 
