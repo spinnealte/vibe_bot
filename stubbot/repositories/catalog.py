@@ -38,15 +38,16 @@ class CatalogRepository:
         self.session = session
 
     def _public_sessions(self, today: date) -> Select[tuple[CourseSession]]:
-        """Афиша - только проведения: не в архиве и не прошедшие (без дат - «даты уточняются» - тоже здесь).
-        Сам по себе курс в афишу не попадает (решение 16)."""
+        """Афиша - только проведения: не в архиве и ещё не начавшиеся (без дат - «даты уточняются» - тоже здесь).
+        В день начала проведение уходит из афиши насовсем (решение пользователя 26.10.2026). Сам по себе курс
+        в афишу не попадает (решение 16)."""
         return (
             select(CourseSession)
             .join(CourseSession.program)
             .where(
                 CourseSession.archived_at.is_(None),
                 CourseSession.status.in_(PUBLIC_SESSION_STATUSES),
-                or_(CourseSession.end_date.is_(None), CourseSession.end_date >= today),
+                or_(CourseSession.start_date.is_(None), CourseSession.start_date > today),
                 *_published_program(),
             )
         )

@@ -11,16 +11,18 @@ from stubbot.db.models import CourseSession, Enrollment, PriceOption, Program, S
 class SessionScope(StrEnum):
     """Где проведение лежит в админке. Значение едет в кнопках (DictCb.value)."""
 
-    ACTIVE = ""  # раздел «Проведения»: не в архиве и не прошло - то, что стоит в афише
+    ACTIVE = ""  # раздел «Проведения»: не в архиве и ещё не началось - то, что стоит в афише
     ARCHIVED = "a"  # «Архив → Проведения»: убрано в архив вручную
-    PAST = "p"  # «Архив → Прошедшие мероприятия»: прошло по датам (само, без нажатий)
+    # «Архив → Прошедшие мероприятия»: началось (в день начала - само, без нажатий) или уже прошло. С 26.10.2026
+    # (решение пользователя) проведение уходит из афиши в день начала, а не на следующий день после конца.
+    PAST = "p"
 
 
-def session_scope(archived: bool, end_date: date | None, today: date) -> SessionScope:
+def session_scope(archived: bool, start_date: date | None, today: date) -> SessionScope:
     """Архив важнее дат: убранное вручную остаётся в «Архив → Проведения», даже когда его даты пройдут."""
     if archived:
         return SessionScope.ARCHIVED
-    if end_date is not None and end_date < today:
+    if start_date is not None and start_date <= today:
         return SessionScope.PAST
     return SessionScope.ACTIVE
 
@@ -30,9 +32,9 @@ def _in_scope(scope: SessionScope, today: date) -> list[ColumnElement[bool]]:
         case SessionScope.ARCHIVED:
             return [CourseSession.archived_at.is_not(None)]
         case SessionScope.PAST:
-            return [CourseSession.archived_at.is_(None), CourseSession.end_date < today]
+            return [CourseSession.archived_at.is_(None), CourseSession.start_date <= today]
     return [CourseSession.archived_at.is_(None),
-            or_(CourseSession.end_date.is_(None), CourseSession.end_date >= today)]
+            or_(CourseSession.start_date.is_(None), CourseSession.start_date > today)]
 
 
 class AdminSessionRepository:

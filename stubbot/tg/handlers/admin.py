@@ -50,7 +50,7 @@ from stubbot.services.admin_sessions import (
     SessionScope,
 )
 from stubbot.services.client_export import ClientExportService
-from stubbot.services.schedule import SessionCard
+from stubbot.services.schedule import SessionCard, deadline_passed
 from stubbot.tg import admin_views, catalog_flow, picker, render, texts
 from stubbot.tg.callbacks import AdminAction, AdminCb, DictAction, DictCb
 from stubbot.tg.filters import IsAdmin
@@ -984,7 +984,7 @@ async def _show_session_card(message: Message, session: AsyncSession, client: Cl
         next_id=siblings[index + 1] if index + 1 < len(siblings) else 0,
         participants=participants,
     )
-    card = SessionCard(session=item, seats_left=None)
+    card = SessionCard(session=item, seats_left=None, deadline_passed=deadline_passed(item))
     caption = _session_caption(card)
     # Пометки над подписью - то, чего по самой карточке не видно.
     hints = []

@@ -10,8 +10,8 @@ from sqlalchemy.exc import IntegrityError
 from stubbot.db.enums import EnrollmentStatus, OrderStatus, PayerType, PriceUnit, SessionStatus
 from stubbot.services.enrollments import Colleague, EnrollmentService, EnrollOutcome
 from stubbot.services.orders import MAX_FILE_NAME, OrderService
-from stubbot.services.schedule import SessionCard
-from stubbot.tg import keyboards, render, texts
+from stubbot.services.schedule import SessionCard, deadline_passed
+from stubbot.tg import catalog_flow, keyboards, render, texts
 from stubbot.tg.callbacks import ApplyAction, ApplyCb, OrderAction, OrderCb
 from stubbot.utils.money import format_rub
 
@@ -110,6 +110,25 @@ def _enroll(service: EnrollmentService, price_id: int | None = 1, colleague: Col
 
 
 COLLEAGUE = Colleague("Иванова Анна Сергеевна", "+79991234567")
+
+
+def test_registration_deadline_closes_card_and_enrollment() -> None:
+    """Срок «запись до» прошёл - запись закрыта и в карточке (нет кнопки, «Запись закрыта»), и при записи:
+    одно правило на оба места (26.10.2026)."""
+    late = _session()
+    late.registration_deadline = NOW - timedelta(minutes=1)
+    soon = _session()
+    soon.registration_deadline = NOW + timedelta(hours=1)
+    assert deadline_passed(late, NOW) and not deadline_passed(soon, NOW) and not deadline_passed(_session(), NOW)
+    card = SessionCard(late, seats_left=5, deadline_passed=True)
+    assert not card.accepts_applications and card.shown_status is SessionStatus.REGISTRATION_CLOSED
+    assert catalog_flow._apply_button(card) is None and catalog_flow.deadline_text(card, "Europe/Moscow") is None
+    assert _enroll(_service(card)).outcome is EnrollOutcome.CLOSED
+    # Срок не прошёл - всё как раньше.
+    assert SessionCard(soon, seats_left=5).shown_status is SessionStatus.REGISTRATION_OPEN
+    # «Скоро откроется запись» срок не перекрашивает - записи там и так нет.
+    announced = SessionCard(_session(status=SessionStatus.ANNOUNCED), seats_left=None, deadline_passed=True)
+    assert announced.shown_status is SessionStatus.ANNOUNCED
 
 
 def test_solo_enrollment_takes_a_seat_and_creates_an_order() -> None:

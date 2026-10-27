@@ -38,8 +38,9 @@ def _time(hours: str, minutes: str) -> time | None:
 
 
 def parse_days(raw: str, today: date) -> list[dict[str, str | None]] | None:
-    """«13.10 10:00-18:00» - день на строку, время необязательно. None - строка не разобрана, дата прошла,
-    начало не раньше конца или дней больше MAX_DAYS. Дни сортируются по дате и времени."""
+    """«13.10 10:00-18:00» - день на строку, время необязательно. None - строка не разобрана, дата сегодня или
+    прошла (в день начала проведение уходит из афиши - заводить его поздно), начало не раньше конца или дней
+    больше MAX_DAYS. Дни сортируются по дате и времени."""
     days = []
     for line in filter(None, (line.strip() for line in raw.splitlines())):
         match = _DAY_LINE.match(line)
@@ -47,7 +48,7 @@ def parse_days(raw: str, today: date) -> list[dict[str, str | None]] | None:
             return None
         day, month, year, start_h, start_m, end_h, end_m = match.groups()
         parsed = _date(day, month, year, today)
-        if parsed is None:
+        if parsed is None or parsed <= today:
             return None
         start = end = None
         if start_h is not None:

@@ -131,7 +131,7 @@ def session_caption(card: SessionCard, deadline_text: str | None, show_seats: bo
     else:
         lines.append(texts.CAPTION_NO_PRICE)
 
-    status = texts.SESSION_STATUS_LABELS[s.status.value]
+    status = texts.SESSION_STATUS_LABELS[card.shown_status.value]  # срок записи прошёл - «Запись закрыта»
     if show_seats and card.seats_left is not None and card.accepts_applications and not card.goes_to_waitlist:
         status += texts.CAPTION_SEATS_LEFT.format(seats=card.seats_left)
     lines += ["", texts.CAPTION_STATUS.format(value=status)]

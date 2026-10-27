@@ -95,8 +95,8 @@ class AdminSessionService:
         return []
 
     def scope(self, item: CourseSession) -> SessionScope:
-        """Где проведение лежит: в афише, в архиве (убрано вручную) или в прошедших."""
-        return session_scope(item.archived_at is not None, item.end_date, self.today)
+        """Где проведение лежит: в афише, в архиве (убрано вручную) или в прошедших (уже началось)."""
+        return session_scope(item.archived_at is not None, item.start_date, self.today)
 
     async def count(self, scope: SessionScope) -> int:
         return await self.repo.count(scope, self.today)
@@ -132,7 +132,8 @@ class AdminSessionService:
         return item.archived_at is None
 
     def is_past(self, item: CourseSession) -> bool:
-        return item.end_date is not None and item.end_date < self.today
+        """Уже началось (или прошло): в афише его нет."""
+        return item.start_date is not None and item.start_date <= self.today
 
     def title(self, item: CourseSession) -> str:
         """«13–14 октября · Имплантация…» - дата первой: в списке ищут по ней."""

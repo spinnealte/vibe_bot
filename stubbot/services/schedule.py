@@ -1,6 +1,6 @@
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -14,10 +14,19 @@ logger = logging.getLogger(__name__)
 APPLY_STATUSES = (SessionStatus.REGISTRATION_OPEN, SessionStatus.WAITLIST, SessionStatus.FULL)
 
 
+def deadline_passed(course_session: CourseSession, now: datetime | None = None) -> bool:
+    """Срок «запись до» прошёл - запись закрыта, какой бы статус ни стоял у проведения."""
+    deadline = course_session.registration_deadline
+    return deadline is not None and (now or datetime.now(UTC)) > deadline
+
+
 @dataclass(frozen=True)
 class SessionCard:
     session: CourseSession
     seats_left: int | None  # None - число мест не ограничено
+    # Срок записи прошёл (26.10.2026): карточка показывает «Запись закрыта» без кнопки и мест - иначе «Идёт набор»
+    # висел до начала курса, а «Записаться» отвечало «запись закрыта».
+    deadline_passed: bool = False
 
     @property
     def program(self) -> Program:
@@ -29,7 +38,14 @@ class SessionCard:
 
     @property
     def accepts_applications(self) -> bool:
-        return self.session.status in APPLY_STATUSES
+        return self.session.status in APPLY_STATUSES and not self.deadline_passed
+
+    @property
+    def shown_status(self) -> SessionStatus:
+        """Статус для подписи: срок записи прошёл - «Запись закрыта», даже если в проведении стоит «Идёт набор»."""
+        if self.deadline_passed and self.session.status in APPLY_STATUSES:
+            return SessionStatus.REGISTRATION_CLOSED
+        return self.session.status
 
     @property
     def goes_to_waitlist(self) -> bool:
@@ -73,15 +89,16 @@ class ScheduleService:
                 return CourseSlide(card.program, card, index, len(ids))
         return None
 
-    async def card(self, session_id: int, today: date) -> SessionCard | None:
-        """Карточка проведения из афиши. None - проведения нет, оно в архиве или уже прошло."""
+    async def card(self, session_id: int, today: date, now: datetime | None = None) -> SessionCard | None:
+        """Карточка проведения из афиши. None - проведения нет, оно в архиве или уже началось."""
         course_session = await self.catalog.public_session(session_id, today)
         if course_session is None:
             return None
         seats_left = None
         if course_session.capacity is not None:
             seats_left = course_session.capacity - await self.catalog.taken_seats(course_session.id)
-        return SessionCard(session=course_session, seats_left=seats_left)
+        return SessionCard(session=course_session, seats_left=seats_left,
+                           deadline_passed=deadline_passed(course_session, now))
 
     async def program(self, program_id: int) -> Program | None:
         return await self.catalog.published_program(program_id)

@@ -48,7 +48,8 @@ class _FakeCatalog:
     async def public_session(self, session_id: int, today: date) -> SimpleNamespace | None:
         if session_id not in self.visible:
             return None
-        return SimpleNamespace(id=session_id, capacity=None, program=SimpleNamespace(id=10 + session_id))
+        return SimpleNamespace(id=session_id, capacity=None, registration_deadline=None,
+                               program=SimpleNamespace(id=10 + session_id))
 
 
 class _FakeDictionaries:

@@ -1,10 +1,12 @@
-from datetime import date, time
+from datetime import UTC, date, datetime, time
 from types import SimpleNamespace
 
 import pytest
 
-from stubbot.db.enums import PriceUnit
+from stubbot.db.enums import PriceUnit, SessionStatus
 from stubbot.services.enrollments import is_pair_price
+from stubbot.services.schedule import SessionCard
+from stubbot.tg.catalog_flow import deadline_text
 from stubbot.tg.render import program_caption, session_caption, split_html, visible_length
 from stubbot.utils.dates import format_day, format_range, format_time_range
 from stubbot.utils.money import format_rub
@@ -67,7 +69,7 @@ def _card(description: str | None, lecturers: int = 3, program_html: str | None 
     )
     prices = [SimpleNamespace(label="Полный курс", amount=4_500_000, unit=SimpleNamespace(value="per_person"))]
     return SimpleNamespace(session=session, program=program, active_prices=prices, seats_left=5,
-                           accepts_applications=True, goes_to_waitlist=False)
+                           accepts_applications=True, goes_to_waitlist=False, shown_status=session.status)
 
 
 @pytest.mark.parametrize(
@@ -113,6 +115,28 @@ def test_caption_of_session_without_dates() -> None:
     assert "<b>Даты:</b> уточняются\n" in caption
     assert "Невский пр., 1" in caption and "Полный курс" in caption and "Идёт набор" in caption
     assert visible_length(caption) <= 1024
+
+
+def _real_card(deadline_passed: bool) -> SessionCard:
+    """Настоящая карточка проведения «идёт набор, 5 мест» с подписью из тех же данных, что _card."""
+    fake = _card(None)
+    session = fake.session
+    session.status = SessionStatus.REGISTRATION_OPEN
+    session.registration_deadline = datetime(2026, 10, 11, 15, 0, tzinfo=UTC)  # 18:00 по Москве
+    session.price_options = [SimpleNamespace(**vars(price), is_active=True) for price in fake.active_prices]
+    return SessionCard(session, seats_left=5, deadline_passed=deadline_passed)
+
+
+def test_caption_after_registration_deadline() -> None:
+    """Срок «запись до» прошёл - «Запись закрыта», без счётчика мест и строки срока (26.10.2026). Раньше карточка
+    писала «Идёт набор · свободных мест: 5», а «Записаться» отвечало «запись закрыта»."""
+    open_card = _real_card(deadline_passed=False)
+    caption = session_caption(open_card, deadline_text(open_card, "Europe/Moscow"))
+    assert "Идёт набор · свободных мест: 5" in caption and "11 октября, 18:00" in caption
+    closed_card = _real_card(deadline_passed=True)
+    caption = session_caption(closed_card, deadline_text(closed_card, "Europe/Moscow"))
+    assert "Запись закрыта" in caption and "Идёт набор" not in caption
+    assert "свободных мест" not in caption and "11 октября, 18:00" not in caption
 
 
 def test_course_library_caption_has_no_dates_or_status() -> None:

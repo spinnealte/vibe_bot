@@ -43,8 +43,11 @@ def test_parse_days_lines_year_and_sorting() -> None:
 
 @pytest.mark.parametrize(
     "raw",
-    ["", "завтра", "13.10 18:00-10:00", "31.02", "01.10.2026", "13.10 25:00-26:00", "\n".join(["13.10"] * 15)],
-    ids=["empty", "words", "end-before-start", "no-such-date", "past-with-year", "bad-time", "too-many"],
+    ["", "завтра", "13.10 18:00-10:00", "31.02", "01.10.2026", "13.10 25:00-26:00", "\n".join(["13.10"] * 15),
+     "02.10 10:00-18:00", "13.10\n02.10.2026"],
+    # Сегодня - тоже нельзя: в день начала проведение уходит из афиши (26.10.2026).
+    ids=["empty", "words", "end-before-start", "no-such-date", "past-with-year", "bad-time", "too-many", "today",
+         "one-day-today"],
 )
 def test_parse_days_rejects(raw: str) -> None:
     assert parse_days(raw, TODAY) is None
@@ -111,20 +114,22 @@ def test_month_helpers() -> None:
 # --- Три раздела проведений: афиша, архив, прошедшие -----------------------------------------------------------
 
 @pytest.mark.parametrize(
-    ("archived", "end_date", "expected"),
+    ("archived", "start_date", "expected"),
     [
-        (False, date(2026, 10, 2), SessionScope.ACTIVE),  # идёт сегодня - ещё в афише
-        (False, date(2026, 11, 20), SessionScope.ACTIVE),
+        # Начинается сегодня - уже не в афише (решение 26.10.2026): само ушло в «прошедшие».
+        (False, date(2026, 10, 2), SessionScope.PAST),
+        (False, date(2026, 10, 3), SessionScope.ACTIVE),  # завтра - ещё в афише
         (False, None, SessionScope.ACTIVE),  # без дат - в афише, пока не убрали
-        (False, date(2026, 10, 1), SessionScope.PAST),  # прошло вчера - само ушло в «прошедшие»
+        (False, date(2026, 10, 1), SessionScope.PAST),  # началось вчера (может ещё идти) - в «прошедших»
         (True, date(2026, 11, 20), SessionScope.ARCHIVED),
         (True, None, SessionScope.ARCHIVED),
         (True, date(2026, 10, 1), SessionScope.ARCHIVED),  # убрано вручную - остаётся в архиве и после дат
     ],
-    ids=["today", "future", "no-dates", "yesterday", "archived", "archived-no-dates", "archived-and-past"],
+    ids=["starts-today", "tomorrow", "no-dates", "started-yesterday", "archived", "archived-no-dates",
+         "archived-and-past"],
 )
-def test_session_scope(archived: bool, end_date: date | None, expected: SessionScope) -> None:
-    assert session_scope(archived, end_date, TODAY) is expected
+def test_session_scope(archived: bool, start_date: date | None, expected: SessionScope) -> None:
+    assert session_scope(archived, start_date, TODAY) is expected
 
 
 def _service() -> AdminSessionService:

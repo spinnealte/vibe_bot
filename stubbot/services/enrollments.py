@@ -153,8 +153,9 @@ class EnrollmentService:
 
     async def availability(self, client: Client, session_id: int, today: date) -> tuple[SessionCard | None, Enrollment | None]:
         """Карточка потока (None - записаться нельзя) и уже существующая активная запись клиента."""
+        # Срок «запись до» карточка учитывает сама: то же правило, по которому она прячет кнопку «Записаться».
         card = await self.schedule.card(session_id, today)
-        if card is None or not card.accepts_applications or self._deadline_passed(card.session):
+        if card is None or not card.accepts_applications:
             return None, None
         return card, await self.enrollments.active_for(client.id, session_id)
 
@@ -313,8 +314,3 @@ class EnrollmentService:
             self.analytics.add_event(client_id, ClientEventType.INTEREST_CREATED, {"program_id": program_id})
             logger.info("Клиент #%s: подписался на набор курса #%s", client_id, program_id)
         return created
-
-    @staticmethod
-    def _deadline_passed(course_session: CourseSession) -> bool:
-        deadline = course_session.registration_deadline
-        return deadline is not None and datetime.now(UTC) > deadline
