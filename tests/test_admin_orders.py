@@ -57,7 +57,7 @@ def _row(client, status=EnrollmentStatus.APPLICATION, enrolled_by=None) -> Simpl
 # --- Сервис --------------------------------------------------------------------------------------------------------
 
 class _Orders:
-    def __init__(self, order, paid: int = 0, participants=(), settled: bool = False) -> None:
+    def __init__(self, order, paid: int = 0, participants=(), settled: int = 0) -> None:
         self.order, self.paid, self.settled = order, paid, settled
         self._participants = list(participants)
         self.payments: list = []
@@ -77,7 +77,7 @@ class _Orders:
     async def participants(self, order_id: int, lock: bool = False):
         return self._participants
 
-    async def money_settled(self, order_id: int) -> bool:
+    async def settled_amount(self, order_id: int) -> int:
         return self.settled
 
 
@@ -121,7 +121,7 @@ class _Db:
             raise IntegrityError("INSERT", {}, Exception("uq_payments_idempotency_key"))
 
 
-def _service(order, paid: int = 0, participants=(), settled: bool = False, balance: int = 0,
+def _service(order, paid: int = 0, participants=(), settled: int = 0, balance: int = 0,
              fail: bool = False) -> AdminOrderService:
     service = AdminOrderService.__new__(AdminOrderService)
     service.db = _Db(fail)
@@ -210,9 +210,31 @@ def test_credit_and_refund_of_cancelled_order() -> None:
     assert [(a.amount, a.reason) for a in refund.advances.added] == [
         (2_000_000, AdvanceReason.CANCELLED_ORDER), (-2_000_000, AdvanceReason.REFUND)]
     # Уже распределены, оплаты не было, заказ не отменён - нельзя.
-    for service in (_service(_order(status=OrderStatus.CANCELLED), paid=100, settled=True),
+    for service in (_service(_order(status=OrderStatus.CANCELLED), paid=100, settled=100),
                     _service(_order(status=OrderStatus.CANCELLED)), _service(_order(), paid=100)):
         assert _run(service.credit_advance(77)).outcome is Outcome.NOT_ALLOWED
+        assert _run(service.mark_refunded(77)).outcome is Outcome.NOT_ALLOWED
+
+
+def test_money_that_came_after_the_order_was_settled() -> None:
+    """Аванс по отменённому заказу уже зачислен, а потом пришла ещё оплата (онлайн по старой ссылке): заказ снова
+    в «Деньги после отмены», зачислить и вернуть можно только пришедшее после (ошибка найдена 28.10.2026)."""
+    cancelled = _order(status=OrderStatus.CANCELLED, cancelled_at=NOW, cancel_reason="Отменена клиентом в боте")
+    card = _card(cancelled, paid=4_500_000, settled=1_000_000)
+    assert card.money_pending and card.to_settle == 3_500_000 and card.category(NOW) is OrderCategory.MONEY
+    text, markup = views.order_card(card, TZ, NOW)
+    assert texts.ADMIN_ORDER_MONEY_PENDING in text
+    assert [texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(3_500_000))] in _rows(markup)
+    assert format_rub(3_500_000) in views.credit_confirm(card)[0] and format_rub(3_500_000) in views.refund_confirm(card)[0]
+    credit = _service(_order(status=OrderStatus.CANCELLED), paid=4_500_000, settled=1_000_000)
+    result = _run(credit.credit_advance(77))
+    assert (result.outcome, result.amount, result.paid) == (Outcome.DONE, 3_500_000, 4_500_000)
+    assert [(a.amount, a.reason) for a in credit.advances.added] == [(3_500_000, AdvanceReason.CANCELLED_ORDER)]
+    refund = _service(_order(status=OrderStatus.CANCELLED), paid=4_500_000, settled=1_000_000)
+    assert _run(refund.mark_refunded(77)).amount == 3_500_000
+    assert [a.amount for a in refund.advances.added] == [3_500_000, -3_500_000]
+    # Не отменённый заказ распределять нечего, даже если в журнале что-то есть.
+    assert _card(_order(status=OrderStatus.PAID), paid=8_000_000, settled=0).to_settle == 0
 
 
 def test_apply_advance_up_to_balance_and_left() -> None:
@@ -236,7 +258,7 @@ def _session() -> SimpleNamespace:
                            start_date=date(2026, 11, 13), end_date=date(2026, 11, 14), days=[], venue=None)
 
 
-def _card(order=None, paid: int = 0, advance: int = 0, settled: bool = False, participants=None,
+def _card(order=None, paid: int = 0, advance: int = 0, settled: int = 0, participants=None,
           price=None) -> AdminOrderCard:
     order = order or _order()
     participants = participants if participants is not None else [(_row(PAYER), PAYER)]
@@ -257,7 +279,7 @@ def test_card_category_and_amounts() -> None:
     assert _card(_order(status=OrderStatus.PAID), paid=8_000_000).category(NOW) is OrderCategory.PAID
     cancelled = _order(status=OrderStatus.CANCELLED)
     assert _card(cancelled, paid=100).category(NOW) is OrderCategory.MONEY
-    assert _card(cancelled, paid=100, settled=True).category(NOW) is None
+    assert _card(cancelled, paid=100, settled=100).category(NOW) is None
     assert _card(paid=2_000_000).left == 6_000_000 and _card(_order(total_amount=None)).left is None
     assert _card(paid=7_000_000, advance=5_000_000).advance_to_apply == 1_000_000
 
@@ -384,7 +406,7 @@ def test_card_of_order_without_amount_and_of_cancelled_paid_order() -> None:
     assert _rows(markup) == [[texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(2_000_000))],
                              [texts.BTN_ADMIN_ORDER_REFUND], [texts.BTN_ADMIN_ORDER_CLIENT, texts.BTN_ADMIN_ORDER_WRITE],
                              [texts.BTN_ADMIN_TO_ORDERS]]  # бронь уже снята - снимать нечего
-    text, markup = views.order_card(_card(cancelled, paid=2_000_000, settled=True), TZ, NOW)
+    text, markup = views.order_card(_card(cancelled, paid=2_000_000, settled=2_000_000), TZ, NOW)
     assert texts.ADMIN_ORDER_MONEY_SETTLED in text and texts.BTN_ADMIN_ORDER_REFUND not in str(_rows(markup))
 
 

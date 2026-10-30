@@ -67,7 +67,7 @@ class AdminOrderCard:
     participants: list[tuple[Enrollment, Client]]
     paid: int  # оплачено, копейки
     advance: int  # аванс плательщика сейчас
-    money_settled: bool = False  # отменённый заказ: деньги уже распределены
+    settled: int = 0  # отменённый заказ: сколько из оплаченного уже распределено (на аванс или возврат)
     online_pending: Payment | None = None  # клиенту выдана ссылка на онлайн-оплату, итога ещё нет
 
     @property
@@ -81,8 +81,16 @@ class AdminOrderCard:
         return self.order.status in PAYABLE_ORDER_STATUSES
 
     @property
+    def to_settle(self) -> int:
+        """Отменённый заказ: сколько ещё распределить. Деньги могут прийти и после распределения (онлайн-оплата
+        по старой ссылке) - считаем по суммам, а не по тому, было ли уже зачисление (ошибка найдена 28.10.2026)."""
+        if self.order.status is not OrderStatus.CANCELLED:
+            return 0
+        return max(self.paid - self.settled, 0)
+
+    @property
     def money_pending(self) -> bool:
-        return self.order.status is OrderStatus.CANCELLED and self.paid > 0 and not self.money_settled
+        return self.to_settle > 0
 
     def overdue(self, now: datetime) -> bool:
         return self.order.status is OrderStatus.AWAITING_PAYMENT and self.order.due_at < now
@@ -175,7 +183,7 @@ class AdminOrderService:
             participants=await self.orders.participants(order.id),
             paid=paid,
             advance=await self.advances.balance(order.payer_client_id),
-            money_settled=order.status is OrderStatus.CANCELLED and await self.orders.money_settled(order.id),
+            settled=await self.orders.settled_amount(order.id) if order.status is OrderStatus.CANCELLED else 0,
             online_pending=await self.orders.pending_online(order.id),
         )
 
@@ -277,26 +285,26 @@ class AdminOrderService:
     # --- Аванс -------------------------------------------------------------------------------------------------
 
     async def credit_advance(self, order_id: int) -> ActionResult:
-        """Оплаченное по отменённому заказу - на аванс плательщика."""
-        order, paid = await self._money_to_settle(order_id)
+        """Нераспределённое по отменённому заказу - на аванс плательщика."""
+        order, paid, amount = await self._money_to_settle(order_id)
         if order is None:
             return ActionResult(Outcome.NOT_ALLOWED)
-        self.advances.add(self._advance(order, paid, AdvanceReason.CANCELLED_ORDER))
+        self.advances.add(self._advance(order, amount, AdvanceReason.CANCELLED_ORDER))
         await self.db.flush()
         balance = await self.advances.balance(order.payer_client_id)
-        log_admin_action(self.admin_id, LOG_SECTION, "№%s: на аванс %s коп.", order.number, paid)
-        return ActionResult(Outcome.DONE, order, amount=paid, paid=paid, balance=balance)
+        log_admin_action(self.admin_id, LOG_SECTION, "№%s: на аванс %s коп.", order.number, amount)
+        return ActionResult(Outcome.DONE, order, amount=amount, paid=paid, balance=balance)
 
     async def mark_refunded(self, order_id: int) -> ActionResult:
-        """Деньги по отменённому заказу вернули: в журнале - зачисление и возврат, баланс не меняется."""
-        order, paid = await self._money_to_settle(order_id)
+        """Нераспределённое по отменённому заказу вернули: в журнале - зачисление и возврат, баланс не меняется."""
+        order, paid, amount = await self._money_to_settle(order_id)
         if order is None:
             return ActionResult(Outcome.NOT_ALLOWED)
-        self.advances.add(self._advance(order, paid, AdvanceReason.CANCELLED_ORDER))
-        self.advances.add(self._advance(order, -paid, AdvanceReason.REFUND))
+        self.advances.add(self._advance(order, amount, AdvanceReason.CANCELLED_ORDER))
+        self.advances.add(self._advance(order, -amount, AdvanceReason.REFUND))
         await self.db.flush()
-        log_admin_action(self.admin_id, LOG_SECTION, "№%s: возврат %s коп.", order.number, paid)
-        return ActionResult(Outcome.DONE, order, amount=paid, paid=paid,
+        log_admin_action(self.admin_id, LOG_SECTION, "№%s: возврат %s коп.", order.number, amount)
+        return ActionResult(Outcome.DONE, order, amount=amount, paid=paid,
                             balance=await self.advances.balance(order.payer_client_id))
 
     async def apply_advance(self, order_id: int, now: datetime | None = None) -> ActionResult:
@@ -322,16 +330,18 @@ class AdminOrderService:
     async def _paid(self, order: Order) -> int:
         return (await self.orders.paid_amounts([order.id])).get(order.id, 0)
 
-    async def _money_to_settle(self, order_id: int) -> tuple[Order | None, int]:
-        """Отменённый заказ с нераспределённой оплатой (под блокировкой заказа и клиента) и сколько оплачено."""
+    async def _money_to_settle(self, order_id: int) -> tuple[Order | None, int, int]:
+        """Отменённый заказ с нераспределённой оплатой (под блокировкой заказа и клиента), сколько оплачено и сколько
+        из этого ещё не распределено. Заказ под блокировкой: два нажатия «Да, зачислить» не зачислят дважды."""
         order = await self.orders.lock(order_id)
-        if order is None or order.status is not OrderStatus.CANCELLED or await self.orders.money_settled(order.id):
-            return None, 0
+        if order is None or order.status is not OrderStatus.CANCELLED:
+            return None, 0, 0
         paid = await self._paid(order)
-        if not paid:
-            return None, 0
+        rest = paid - await self.orders.settled_amount(order.id)
+        if rest <= 0:
+            return None, 0, 0
         await self.advances.lock_client(order.payer_client_id)
-        return order, paid
+        return order, paid, rest
 
     async def after_payment(self, order: Order, amount: int, paid: int, now: datetime) -> ActionResult:
         """После оплаты: статус заказа и записи участников - любая оплата закрепляет место. Заказ уже под

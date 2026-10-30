@@ -11,18 +11,13 @@ from stubbot.tg import texts
 from stubbot.tg.callbacks import (
     ApplyAction,
     ApplyCb,
-    ApplyPriceCb,
     MyApplicationAction,
     MyApplicationCb,
     OrderAction,
     OrderCb,
     PayAction,
     PayCb,
-    ScheduleAction,
-    ScheduleCb,
-    SelectGroup,
     SkipOptionalCb,
-    ToggleCb,
 )
 from tests.e2e.harness import ADMIN_ID, OWNER_ID, Harness, crawl
 
@@ -136,29 +131,27 @@ def test_garbage_button_data(e2e) -> None:
     e2e.run(scenario)
 
 
-@pytest.mark.xfail(strict=True, reason="БАГ (найден 28.10.2026): число в кнопке больше bigint - ошибка БД вместо "
-                                       "«кнопка неактуальна» (поля int в tg/callbacks.py без границ)")
 def test_numbers_beyond_bigint_in_button_data(e2e) -> None:
+    """Число в кнопке больше bigint - «кнопка неактуальна», а не ошибка базы (исправлено: DbInt в tg/callbacks.py)."""
+
     async def scenario(h: Harness) -> None:
         await _admins(h)
         user = h.person(8021, "Тест")
         await user.register("+79990008021", "Числов Тест Тестович")
         huge = 2**63  # на единицу больше bigint PostgreSQL
-        garbage = [PayCb(action=PayAction.CHECK, item_id=huge).pack(),
-                   PayCb(action=PayAction.START, item_id=-huge - 1).pack(),
-                   PayCb(action=PayAction.FAKE_OK, item_id=huge).pack(),
-                   OrderCb(action=OrderAction.INDIVIDUAL, order_id=huge).pack(),
-                   "order:ind:" + "9" * 50,
-                   MyApplicationCb(action=MyApplicationAction.CANCEL, enrollment_id=huge).pack(),
-                   ScheduleCb(action=ScheduleAction.APPLY, item_id=huge).pack(),
-                   ScheduleCb(action=ScheduleAction.PROGRAM, item_id=huge, page=huge).pack(),
-                   ScheduleCb(action=ScheduleAction.SLIDE, index=huge).pack(),
-                   ScheduleCb(action=ScheduleAction.NOTIFY, item_id=huge).pack(),
-                   ToggleCb(group=SelectGroup.SPECIALTIES, item_id=huge).pack(),
-                   ApplyPriceCb(price_id=huge).pack()]
+        # Такие кнопки бот уже не соберёт (DbInt) - данные строкой, как прислал бы подделанный клиент.
+        garbage = [f"pay:chk:{huge}:0", f"pay:go:{-huge - 1}:0", f"pay:fok:{huge}:0", f"order:ind:{huge}",
+                   "order:ind:" + "9" * 50, f"myapp:yes:{huge}:0", f"sch:apply:{huge}:0:0",
+                   f"sch:prog:{huge}:0:{huge}", f"sch:s:0:{huge}:0", f"sch:notify:{huge}:0:0",
+                   f"tgl:spec:{huge}", f"aprice:{huge}"]
+        assert garbage[0].startswith(PayCb.__prefix__)
         failed = await _press_all(h, user, garbage)
-        h.allowed_errors.extend(["Ошибка при обработке", "ошибка DBAPIError", "ошибка DataError"])
         assert not failed, f"бот упал на данных кнопок: {failed}"
+        await user.press(f"pay:chk:{huge}:0")
+        assert user.alert() == texts.UNKNOWN_CALLBACK
+        with pytest.raises(ValueError):
+            PayCb(action=PayAction.CHECK, item_id=huge)
+        assert PayCb.unpack(f"pay:chk:{2**63 - 1}:0").item_id == 2**63 - 1  # граница bigint - ещё можно
 
     e2e.run(scenario)
 
@@ -310,18 +303,29 @@ def test_long_and_strange_input(e2e) -> None:
     e2e.run(scenario)
 
 
-@pytest.mark.xfail(strict=True, reason="БАГ (найден 28.10.2026): символ NUL (\\x00) в тексте - PostgreSQL отклоняет "
-                                       "строку, бот отвечает «Что-то пошло не так»")
 def test_nul_character_in_text(e2e) -> None:
+    """Символ NUL (\\x00) PostgreSQL не хранит - бот убирает его из сообщения до хендлеров (исправлено:
+    tg/middlewares/text_cleanup.py). Раньше - «Что-то пошло не так»."""
+
     async def scenario(h: Harness) -> None:
-        user = h.person(8071, "Тест")
+        owner, admin = await _admins(h)
+        user = h.person(8071, "Те\x00ст", last_name="Фа\x00милия")
         await user.register("+79990008071", "Нулев Иван Иванович")
+        assert (await h.scalar(select(Client).where(Client.telegram_id == 8071))).tg_first_name == "Тест"
         await user.send(texts.BTN_CABINET)
         await user.click(texts.BTN_EDIT_PROFILE)
         await user.click(texts.EDIT_FIELD_LABELS["city"])
         await user.send("Санкт-\x00Петербург")
-        h.allowed_errors.extend(["Ошибка при обработке", "ошибка DBAPIError"])
-        assert not user.got_error()
         assert (await h.scalar(select(Client).where(Client.telegram_id == 8071))).city == "Санкт-Петербург"
+        guest = h.person(8072, "Гость")
+        await guest.start("src_\x00abc")  # параметр /start пишется в базу
+        assert guest.sees(texts.WELCOME_NEW)
+        await admin.send(texts.BTN_ADMIN)
+        await admin.click(texts.BTN_ADMIN_CLIENTS)
+        await admin.click(texts.BTN_ADMIN_CLIENT_FIND)
+        await admin.send("Ну\x00лев")  # поиск по ФИО - запрос к базе
+        assert "Нулев" in admin.last_text()
+        for person in (user, guest, admin):
+            assert not person.got_error()
 
     e2e.run(scenario)

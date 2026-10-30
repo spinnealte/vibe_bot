@@ -243,7 +243,7 @@ def _card_markup(card: AdminOrderCard, now: datetime) -> InlineKeyboardMarkup:
     if order.requisites_file_id:
         rows.append(_button(texts.BTN_ADMIN_ORDER_REQUISITES, OrderAdminAction.REQUISITES, order.id))
     if card.money_pending:
-        rows.append(_button(texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(card.paid)),
+        rows.append(_button(texts.BTN_ADMIN_ORDER_CREDIT.format(amount=format_rub(card.to_settle)),
                             OrderAdminAction.CREDIT, order.id))
         rows.append(_button(texts.BTN_ADMIN_ORDER_REFUND, OrderAdminAction.REFUND, order.id))
     rows.append([
@@ -306,13 +306,13 @@ def remove_confirm(card: AdminOrderCard) -> Screen:
 
 
 def credit_confirm(card: AdminOrderCard) -> Screen:
-    text = texts.ADMIN_ORDER_CREDIT_CONFIRM.format(amount=format_rub(card.paid), name=person(card.payer),
+    text = texts.ADMIN_ORDER_CREDIT_CONFIRM.format(amount=format_rub(card.to_settle), name=person(card.payer),
                                                    number=card.order.number)
     return text, _yes_no(texts.BTN_ADMIN_ORDER_CREDIT_YES, OrderAdminAction.CREDIT_OK, card.order.id)
 
 
 def refund_confirm(card: AdminOrderCard) -> Screen:
-    text = texts.ADMIN_ORDER_REFUND_CONFIRM.format(amount=format_rub(card.paid), name=person(card.payer),
+    text = texts.ADMIN_ORDER_REFUND_CONFIRM.format(amount=format_rub(card.to_settle), name=person(card.payer),
                                                    number=card.order.number)
     return text, _yes_no(texts.BTN_ADMIN_ORDER_REFUND_YES, OrderAdminAction.REFUND_OK, card.order.id)
 

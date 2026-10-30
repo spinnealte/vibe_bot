@@ -1,10 +1,19 @@
-"""CallbackData-фабрики: данные кнопок парсятся и валидируются aiogram, без строк со split."""
+"""CallbackData-фабрики: данные кнопок парсятся и валидируются aiogram, без строк со split.
+
+Числа в кнопках - в пределах bigint PostgreSQL (DbInt): данные кнопки присылает клиент Telegram, их можно подделать,
+и слишком большое число уронило бы запрос к базе. Вне пределов - кнопка не подходит ни одному хендлеру, человеку
+«Эта кнопка уже неактуальна» (ошибка найдена 28.10.2026).
+"""
 
 from enum import StrEnum
+from typing import Annotated
 
 from aiogram.filters.callback_data import CallbackData
+from pydantic import Field
 
 from stubbot.services.admin_dictionaries import DictKind
+
+DbInt = Annotated[int, Field(ge=-(2**63), le=2**63 - 1)]
 
 
 class ConsentKind(StrEnum):
@@ -52,7 +61,7 @@ class SelectGroup(StrEnum):
 
 class ToggleCb(CallbackData, prefix="tgl"):
     group: SelectGroup
-    item_id: int
+    item_id: DbInt
 
 
 class SelectDoneCb(CallbackData, prefix="seldone"):
@@ -101,13 +110,13 @@ class ScheduleAction(StrEnum):
 
 class ScheduleCb(CallbackData, prefix="sch"):
     action: ScheduleAction
-    item_id: int = 0
-    index: int = 0
-    page: int = 0
+    item_id: DbInt = 0
+    index: DbInt = 0
+    page: DbInt = 0
 
 
 class ApplyPriceCb(CallbackData, prefix="aprice"):
-    price_id: int
+    price_id: DbInt
 
 
 class ApplyAction(StrEnum):
@@ -129,7 +138,7 @@ class OrderCb(CallbackData, prefix="order"):
     """Кнопки под «Вы записаны»: заказ оплачивает только его плательщик (id из кнопки сверяется)."""
 
     action: OrderAction
-    order_id: int
+    order_id: DbInt
 
 
 class PayAction(StrEnum):
@@ -144,8 +153,8 @@ class PayAction(StrEnum):
 
 class PayCb(CallbackData, prefix="pay"):
     action: PayAction
-    item_id: int
-    index: int = 0
+    item_id: DbInt
+    index: DbInt = 0
 
 
 class MyApplicationAction(StrEnum):
@@ -162,8 +171,8 @@ class MyApplicationAction(StrEnum):
 
 class MyApplicationCb(CallbackData, prefix="myapp"):
     action: MyApplicationAction
-    enrollment_id: int = 0
-    index: int = 0
+    enrollment_id: DbInt = 0
+    index: DbInt = 0
 
 
 class EditControl(StrEnum):
@@ -220,9 +229,9 @@ class OrderAdminAction(StrEnum):
 
 class OrderAdminCb(CallbackData, prefix="aord"):
     action: OrderAdminAction
-    order_id: int = 0
+    order_id: DbInt = 0
     value: str = ""
-    page: int = 0
+    page: DbInt = 0
 
 
 class ClientAdminAction(StrEnum):
@@ -247,7 +256,7 @@ class ClientAdminAction(StrEnum):
 
 class ClientAdminCb(CallbackData, prefix="acl"):
     action: ClientAdminAction
-    item_id: int = 0
+    item_id: DbInt = 0
     value: str = ""
 
 
@@ -256,7 +265,7 @@ class PickCb(CallbackData, prefix="pick"):
     списком (уже открыт другой) не листают новый."""
 
     token: str
-    page: int = -1  # -1 - счётчик «2/5» между стрелками
+    page: DbInt = -1  # -1 - счётчик «2/5» между стрелками
 
 
 class DictAction(StrEnum):
@@ -287,7 +296,7 @@ class DictAction(StrEnum):
 class DictCb(CallbackData, prefix="dic"):
     kind: DictKind
     action: DictAction
-    item_id: int = 0
+    item_id: DbInt = 0
     field: str = ""
-    page: int = 0
+    page: DbInt = 0
     value: str = ""

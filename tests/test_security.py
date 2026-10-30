@@ -20,7 +20,10 @@ from aiogram.types import (
     ChatMemberLeft,
     ChatMemberMember,
     ChatMemberUpdated,
+    Contact,
+    Document,
     Message,
+    MessageEntity,
     Update,
     User,
 )
@@ -29,10 +32,10 @@ from stubbot.config import Settings
 from stubbot.logging_setup import setup_logging
 from stubbot.services.admin_log import ADMIN_LOGGER_NAME, log_admin_action
 from stubbot.tg import texts
-from stubbot.tg.callbacks import AdminAction, AdminCb
+from stubbot.tg.callbacks import AdminAction, AdminCb, OrderCb, PayAction, PayCb
 from stubbot.tg.dispatcher import FSM_TTL, create_dispatcher, create_storage
 from stubbot.tg.handlers import chats
-from stubbot.tg.middlewares import ClientMiddleware, ThrottlingMiddleware
+from stubbot.tg.middlewares import ClientMiddleware, TextCleanupMiddleware, ThrottlingMiddleware
 
 OWNER_ID = 1
 GROUP = Chat(id=-1001234, type="supergroup")
@@ -230,6 +233,45 @@ def test_throttle_skips_groups_and_forgets_idle_users() -> None:
     clock.now += 61.0
     assert _hit(middleware, user_id=9) == "ok"
     assert set(middleware._hits) == {9}  # молчавший минуту из памяти убран
+
+
+def test_nul_is_removed_before_handlers_and_formatting_stays() -> None:
+    """Символ NUL PostgreSQL не хранит: убирается из текста, подписи, имени файла и контакта, разметка (позиции
+    в UTF-16) сдвигается. Сообщение без NUL проходит как есть - тем же объектом."""
+    seen: list[Message] = []
+
+    async def handler(event: Message, data: dict) -> None:
+        seen.append(event)
+
+    text = "😀\x00 Жирный\x00 текст"  # эмодзи - две позиции UTF-16
+    entities = [MessageEntity(type="bold", offset=4, length=7), MessageEntity(type="italic", offset=2, length=1)]
+    message = Message(message_id=1, date=NOW, chat=Chat(id=5, type="private"), text=text, entities=entities,
+                      document=Document(file_id="F", file_unique_id="F", file_name="реквиз\x00иты.pdf"),
+                      contact=Contact(phone_number="+7999\x000000000", first_name="Ан\x00на"))
+    asyncio.run(TextCleanupMiddleware()(handler, message, {}))
+    cleaned = seen[0]
+    assert cleaned.text == "😀 Жирный текст" and cleaned.document.file_name == "реквизиты.pdf"
+    assert (cleaned.contact.phone_number, cleaned.contact.first_name) == ("+79990000000", "Анна")
+    [bold] = cleaned.entities  # курсив стоял только на NUL - его больше нет
+    assert (bold.offset, bold.length) == (3, 6) and cleaned.html_text == "😀 <b>Жирный</b> текст"
+    plain = Message(message_id=2, date=NOW, chat=Chat(id=5, type="private"), text="без нулей")
+    asyncio.run(TextCleanupMiddleware()(handler, plain, {}))
+    assert seen[1] is plain
+
+
+def test_callback_numbers_stay_within_bigint() -> None:
+    """Данные кнопки можно подделать: число больше bigint PostgreSQL кнопку не собирает и под фильтр не подходит -
+    человеку «кнопка неактуальна», а не ошибка базы."""
+    biggest = 2**63 - 1
+    assert PayCb.unpack(f"pay:chk:{biggest}:0").item_id == biggest
+    for data in (f"pay:chk:{biggest + 1}:0", f"pay:go:{-biggest - 2}:0", "order:ind:" + "9" * 50):
+        with pytest.raises(ValueError):
+            (PayCb if data.startswith("pay") else OrderCb).unpack(data)
+    query = CallbackQuery(id="1", from_user=User(id=5, is_bot=False, first_name="Т"), chat_instance="ci",
+                          data=f"pay:chk:{biggest + 1}:0")
+    assert asyncio.run(PayCb.filter()(query)) is False
+    with pytest.raises(ValueError):
+        PayCb(action=PayAction.CHECK, item_id=biggest + 1)
 
 
 def test_unfinished_scenarios_expire_in_redis() -> None:

@@ -11,7 +11,6 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
-import pytest
 from sqlalchemy import func, select
 
 from stubbot.db.enums import CancelChoice, EnrollmentStatus, OrderStatus, PaymentMethod, PaymentProvider, PaymentState, \
@@ -255,11 +254,10 @@ def test_payment_after_the_order_was_cancelled(e2e) -> None:
     e2e.run(scenario)
 
 
-@pytest.mark.xfail(strict=True, reason="БАГ (найден 28.10.2026): «деньги распределены» - по факту любого зачисления на "
-                                       "аванс, а не по сумме: поздняя онлайн-оплата пропадает из «Деньги после отмены»")
 def test_late_online_payment_after_the_money_was_settled(e2e) -> None:
     """Заказ частично оплачен, клиент отменил с «на аванс», админ зачислил аванс. Потом клиент всё-таки оплатил
-    остаток по старой ссылке: эти деньги тоже должны дойти до «Деньги после отмены»."""
+    остаток по старой ссылке: эти деньги тоже доходят до «Деньги после отмены» (ошибка найдена и исправлена
+    28.10-30.10.2026: «распределены» считалось по факту зачисления, а не по сумме)."""
 
     async def scenario(h: Harness) -> None:
         olga, order = await _setup(h)
@@ -284,6 +282,14 @@ def test_late_online_payment_after_the_money_was_settled(e2e) -> None:
             credited = await session.scalar(select(func.sum(Advance.amount)).where(Advance.order_id == order.id))
         assert credited == 10_000 * RUB
         assert [o.id for o, _ in rows] == [order.id], "35 000 ₽ после зачисления аванса не видны в «Деньги после отмены»"
+        async with h.factory() as session, session.begin():
+            result = await AdminOrderService(session, ADMIN_ID).credit_advance(order.id)
+            assert result.amount == 35_000 * RUB  # только то, что пришло после первого зачисления
+        async with h.factory() as session:
+            rows = await AdminOrderService(session, ADMIN_ID).category(OrderCategory.MONEY, datetime.now(UTC).date(),
+                                                                       datetime.now(UTC))
+            balance = await session.scalar(select(func.sum(Advance.amount)))
+        assert rows == [] and balance == 45_000 * RUB
 
     e2e.run(scenario)
 

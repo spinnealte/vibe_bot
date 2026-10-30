@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import exists, func, or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -103,12 +103,14 @@ class OrderRepository:
         return [tuple(row) for row in (await self.session.execute(stmt)).all()]
 
     async def money_pending(self) -> list[tuple[Order, Client]]:
-        """Отменённые заказы, по которым платили, а деньги ещё не распределены (ни аванса, ни возврата)."""
-        paid = exists().where(Payment.order_id == Order.id, Payment.state == PaymentState.SUCCEEDED)
+        """Отменённые заказы, по которым оплачено больше, чем распределено (на аванс или возврат). По суммам: деньги
+        бывают и после распределения - онлайн-оплата по старой ссылке."""
+        paid = (select(func.coalesce(func.sum(Payment.amount), 0))
+                .where(Payment.order_id == Order.id, Payment.state == PaymentState.SUCCEEDED).scalar_subquery())
         stmt = (
             select(Order, Client)
             .join(Client, Client.id == Order.payer_client_id)
-            .where(Order.status == OrderStatus.CANCELLED, paid, ~self._settled_clause())
+            .where(Order.status == OrderStatus.CANCELLED, paid > self._settled_sum(Order.id))
             .order_by(Order.cancelled_at, Order.id)
         )
         return [tuple(row) for row in (await self.session.execute(stmt)).all()]
@@ -137,14 +139,15 @@ class OrderRepository:
         )
         return list(await self.session.scalars(stmt))
 
-    async def money_settled(self, order_id: int) -> bool:
-        """По отменённому заказу деньги уже распределены: в журнале аванса есть зачисление по нему."""
-        return bool(await self.session.scalar(select(self._settled_clause(order_id))))
+    async def settled_amount(self, order_id: int) -> int:
+        """Сколько из оплаченного по отменённому заказу уже распределено: зачисления на аванс по нему в журнале
+        (возврат - тоже зачисление, следом списание)."""
+        return int(await self.session.scalar(select(self._settled_sum(order_id))))
 
     @staticmethod
-    def _settled_clause(order_id: int | None = None):
-        order = Order.id if order_id is None else order_id
-        return exists().where(Advance.order_id == order, Advance.reason == AdvanceReason.CANCELLED_ORDER)
+    def _settled_sum(order):
+        return (select(func.coalesce(func.sum(Advance.amount), 0))
+                .where(Advance.order_id == order, Advance.reason == AdvanceReason.CANCELLED_ORDER).scalar_subquery())
 
     async def session_for_card(self, session_id: int) -> CourseSession:
         """Проведение с курсом и днями - для карточки заказа и сообщений о нём."""

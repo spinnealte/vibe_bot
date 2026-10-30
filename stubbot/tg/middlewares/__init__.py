@@ -2,6 +2,7 @@ from stubbot.tg.middlewares.client import ClientMiddleware
 from stubbot.tg.middlewares.db import DbSessionMiddleware
 from stubbot.tg.middlewares.handler_log import HandlerLogMiddleware, UnhandledLogMiddleware
 from stubbot.tg.middlewares.retry import RetryRequestMiddleware
+from stubbot.tg.middlewares.text_cleanup import TextCleanupMiddleware
 from stubbot.tg.middlewares.throttle import ThrottlingMiddleware
 
 __all__ = [
@@ -9,6 +10,7 @@ __all__ = [
     "DbSessionMiddleware",
     "HandlerLogMiddleware",
     "RetryRequestMiddleware",
+    "TextCleanupMiddleware",
     "ThrottlingMiddleware",
     "UnhandledLogMiddleware",
 ]

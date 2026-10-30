@@ -13,6 +13,7 @@ from stubbot.tg.middlewares import (
     ClientMiddleware,
     DbSessionMiddleware,
     HandlerLogMiddleware,
+    TextCleanupMiddleware,
     ThrottlingMiddleware,
     UnhandledLogMiddleware,
 )
@@ -50,6 +51,8 @@ def create_dispatcher(
         throttle = ThrottlingMiddleware(settings.flood_limit, settings.flood_window)
         dp.message.outer_middleware(throttle)
         dp.callback_query.outer_middleware(throttle)
+    # Символ NUL из текста - до всего, что пишет в базу (PostgreSQL его не хранит).
+    dp.message.outer_middleware(TextCleanupMiddleware())
     # Клиент нужен только там, где есть отправитель-человек: сообщения и нажатия кнопок.
     dp.message.outer_middleware(ClientMiddleware())
     dp.callback_query.outer_middleware(ClientMiddleware())

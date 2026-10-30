@@ -6,15 +6,17 @@ from aiogram.enums import ChatType
 from aiogram.types import Chat, TelegramObject, User
 
 from stubbot.services.clients import ClientService, TelegramProfile
+from stubbot.tg.middlewares.text_cleanup import strip_nul
 
 
 def telegram_profile(user: User) -> TelegramProfile:
+    # Имя из Telegram - в базу (после согласия): символ NUL PostgreSQL не хранит.
     return TelegramProfile(
         telegram_id=user.id,
-        username=user.username,
-        first_name=user.first_name,
-        last_name=user.last_name,
-        language_code=user.language_code,
+        username=strip_nul(user.username),
+        first_name=strip_nul(user.first_name),
+        last_name=strip_nul(user.last_name),
+        language_code=strip_nul(user.language_code),
     )
 
 
