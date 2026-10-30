@@ -464,6 +464,9 @@ def test_about_manager_and_unknown_text(e2e) -> None:
         await guest.start()
         await guest.send(texts.BTN_ABOUT)
         assert guest.last.buttons()[0].url.startswith("https://t.me/aquastom_manager_e2e")
+        # Площадки из админки - списком в «О центре» (список включён 30.10.2026).
+        assert "Учебный класс - Санкт-Петербург, Невский пр., 1" in guest.last_text()
+        assert "Уточняется" not in guest.last_text()
         await guest.send(texts.BTN_MANAGER)
         assert guest.last.buttons()[0].url.startswith("https://t.me/aquastom_manager_e2e?text=")
         await guest.send("Сколько стоит курс?")
