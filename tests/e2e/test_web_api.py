@@ -52,7 +52,7 @@ def test_only_telegram_signature_lets_in(e2e: E2E, tmp_path: Path, monkeypatch: 
             me = await app.user(5001, start_param="src_vk").get("/me")
             assert me["step"] == "consent"
             assert me["config"]["applications"] and me["config"]["fake_payments"]
-            assert me["config"]["bot_url"].endswith("aquastom_e2e_bot")
+            assert "bot_url" not in me["config"]  # «Открыть чат с ботом» убрана: изнутри приложения не открывалась
             client = await h.scalar(select(Client).where(Client.telegram_id == 5001))
             assert client.start_param == "src_vk"
             # До согласия из Telegram храним только id (как в боте).

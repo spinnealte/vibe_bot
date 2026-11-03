@@ -150,7 +150,6 @@ export interface Me {
     online_payments: boolean;
     fake_payments: boolean;
     manager_url: string | null;
-    bot_url: string | null;
     dev: boolean;
   };
 }

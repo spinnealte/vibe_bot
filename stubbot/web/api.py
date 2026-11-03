@@ -231,7 +231,6 @@ async def _find_application(ctx: Ctx, enrollment_id: int | None = None,
 
 @route("GET", "/me")
 async def me(ctx: Ctx) -> dict[str, Any]:
-    username = await _bot_username(ctx)
     settings = ctx.settings
     return {
         "client_id": ctx.client.id,
@@ -245,7 +244,6 @@ async def me(ctx: Ctx) -> dict[str, Any]:
             "online_payments": settings.online_payments_enabled,
             "fake_payments": ctx.payments is not None and not ctx.payments.has_payment_page,
             "manager_url": _manager(ctx, texts.MANAGER_DRAFT_ABOUT),
-            "bot_url": f"https://t.me/{username}" if username else None,
             "dev": ctx.user.dev,
         },
     }

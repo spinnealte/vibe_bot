@@ -5,11 +5,10 @@ import type { ReactNode } from "react";
 import { api } from "../api";
 import { Icon } from "../icons";
 import { openUrl } from "../telegram";
-import { Button, ErrorState, Loading, ManagerButton, Rich, useApp, useLoad } from "../ui";
+import { Button, ErrorState, Loading, ManagerButton, Rich, useLoad } from "../ui";
 import { Brand } from "./Schedule";
 
 export function AboutScreen(): ReactNode {
-  const { me } = useApp();
   const about = useLoad(api.about);
   return (
     <div className="page">
@@ -53,11 +52,6 @@ export function AboutScreen(): ReactNode {
           )}
           <div className="stack" style={{ marginTop: 16 }}>
             <ManagerButton url={about.data.manager_url} label="Связаться с менеджером" />
-            {me.config.bot_url && (
-              <Button variant="ghost" block onClick={() => openUrl(me.config.bot_url!)}>
-                Открыть чат с ботом
-              </Button>
-            )}
           </div>
         </>
       )}
