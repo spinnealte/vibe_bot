@@ -1,6 +1,7 @@
 """Веб-приложение без базы: очистка HTML, подпись Telegram, ограничение частоты, картинки каталога."""
 
 import json
+import re
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -10,6 +11,7 @@ from stubbot.web.app import RateLimiter
 from stubbot.web.auth import AuthError, phone_from_contact, user_from_init_data
 from stubbot.web.files import image_type
 from stubbot.web.html import to_plain, to_telegram_html, to_web_html
+from stubbot.web.server import STATIC_DIR
 from tests.e2e.telegram_stub import BOT_TOKEN, parse_html
 from tests.e2e.web_client import contact, init_data, sign
 
@@ -120,3 +122,11 @@ def test_only_images_are_served_as_covers() -> None:
 
 def test_web_client_contact_helper_is_signed() -> None:
     assert phone_from_contact(contact(5, "+79990000000"), BOT_TOKEN, 5) == "+79990000000"
+
+
+def test_built_interface_is_in_repo() -> None:
+    """Amvera собирает только Python: сборка интерфейса лежит в репозитории, и её index.html ссылается на свои файлы.
+    Иначе по адресу приложения - пустая страница."""
+    index = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
+    assets = re.findall(r'(?:src|href)="/(assets/[^"]+)"', index)
+    assert len(assets) >= 2 and all((STATIC_DIR / asset).is_file() for asset in assets)

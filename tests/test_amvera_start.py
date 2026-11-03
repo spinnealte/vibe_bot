@@ -2,19 +2,25 @@
 
 import importlib
 import os
+from pathlib import Path
 
 import pytest
 
 
+# Модуль при импорте задаёт их, если их нет; заданное модулем не должно достаться другим тестам.
+STARTER_ENV = ("LOG_DIR", "WEBAPP_HOST", "WEBAPP_PORT", "WEBAPP_CACHE_DIR")
+
+
 @pytest.fixture
 def starter(monkeypatch: pytest.MonkeyPatch):
-    # Модуль при импорте задаёт LOG_DIR, если его нет.
-    monkeypatch.delenv("LOG_DIR", raising=False)
+    for name in STARTER_ENV:
+        monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("START_DELAY", "0")
     import amvera_start
 
     yield importlib.reload(amvera_start)
-    os.environ.pop("LOG_DIR", None)  # заданное модулем значение не должно достаться другим тестам
+    for name in STARTER_ENV:
+        os.environ.pop(name, None)
 
 
 def _trace(starter, monkeypatch: pytest.MonkeyPatch, empty: bool) -> list[str]:
@@ -35,14 +41,26 @@ def _trace(starter, monkeypatch: pytest.MonkeyPatch, empty: bool) -> list[str]:
 
 def test_storage_paths_default_to_persistent_data(starter) -> None:
     assert os.environ["LOG_DIR"] == "/data/logs"  # не задано - в постоянное хранилище
+    assert os.environ["WEBAPP_CACHE_DIR"] == "/data/webapp-cache"
+
+
+def test_web_app_listens_on_container_port(starter) -> None:
+    """Amvera направляет запросы с домена на containerPort из amvera.yml - сервер слушает его на всех адресах."""
+    config = (Path(starter.__file__).parent / "amvera.yml").read_text(encoding="utf-8")
+    assert os.environ["WEBAPP_HOST"] == "0.0.0.0"
+    assert f"containerPort: {os.environ['WEBAPP_PORT']}" in config
 
 
 def test_log_dir_from_project_settings_is_kept(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("LOG_DIR", "/custom/logs")
+    monkeypatch.setenv("WEBAPP_PORT", "9000")
     import amvera_start
 
     importlib.reload(amvera_start)
     assert os.environ["LOG_DIR"] == "/custom/logs"  # задано в переменных проекта - не трогаем
+    assert os.environ["WEBAPP_PORT"] == "9000"
+    for name in ("WEBAPP_HOST", "WEBAPP_CACHE_DIR"):
+        os.environ.pop(name, None)
 
 
 def test_fresh_database_gets_migrations_and_seed(starter, monkeypatch: pytest.MonkeyPatch) -> None:

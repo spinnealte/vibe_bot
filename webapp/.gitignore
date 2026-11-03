@@ -1,2 +1,2 @@
 node_modules/
-dist/
+# dist/ - в git (сборка для Amvera, см. .gitignore в корне)

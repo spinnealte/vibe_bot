@@ -17,6 +17,11 @@ import time
 # Задаётся до чтения настроек; значение из переменных проекта, если оно есть, остаётся в силе.
 # Тексты согласий - в коде (stubbot/services/legal.py), новую версию бот заводит в базе сам при запуске.
 os.environ.setdefault("LOG_DIR", "/data/logs")
+# Веб-приложение (WEBAPP_ENABLED=true): сервер слушает все адреса контейнера на порту из amvera.yml (containerPort) -
+# туда Amvera направляет https-запросы с домена проекта. Обложки из Telegram - тоже в постоянном /data.
+os.environ.setdefault("WEBAPP_HOST", "0.0.0.0")
+os.environ.setdefault("WEBAPP_PORT", "8080")
+os.environ.setdefault("WEBAPP_CACHE_DIR", "/data/webapp-cache")
 
 DEFAULT_START_DELAY = 5.0
 

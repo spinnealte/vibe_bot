@@ -25,7 +25,8 @@ CACHE_DIR = ROOT / "var" / "webapp-cache"  # скачанные из Telegram о
 async def start_web_app(settings: Settings, session_factory: async_sessionmaker[AsyncSession], bot: Bot | None,
                         payments: OnlinePayments | None) -> web.AppRunner:
     """Поднять сервер на WEBAPP_HOST:WEBAPP_PORT. Остановка - await runner.cleanup()."""
-    app = create_web_app(settings, session_factory, bot, payments, static_dir=STATIC_DIR, cache_dir=CACHE_DIR)
+    cache_dir = Path(settings.webapp_cache_dir) if settings.webapp_cache_dir else CACHE_DIR
+    app = create_web_app(settings, session_factory, bot, payments, static_dir=STATIC_DIR, cache_dir=cache_dir)
     runner = web.AppRunner(app, access_log=None)  # журнал запросов не пишем: в адресах бывают id и подписи
     await runner.setup()
     await web.TCPSite(runner, settings.webapp_host, settings.webapp_port).start()

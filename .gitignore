@@ -12,9 +12,9 @@ legal/*
 !legal/README.md
 !legal/site/
 
-# Веб-приложение: пакеты и сборка интерфейса, кэш обложек из Telegram.
+# Веб-приложение: пакеты и кэш обложек из Telegram. Сборка интерфейса (webapp/dist) - в git: Amvera собирает только
+# Python, отдаёт её как есть. После правок в webapp/src - `cd webapp && npm run build` и коммит вместе с dist.
 webapp/node_modules/
-webapp/dist/
 var/
 
 # Туннель для проверки в Telegram (docs/06_webapp.md): официальный cloudflared.exe скачивается отдельно, в git не кладём.

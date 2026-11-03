@@ -84,6 +84,9 @@ class Settings(BaseSettings):
     # Вход без Telegram (заголовок «Authorization: dev <telegram_id>») - только для разработки в браузере
     # и только с локальной базой (webapp_dev_allowed).
     webapp_dev_auth: bool = False
+    # Куда складывать обложки, скачанные из Telegram; пусто - var/webapp-cache в папке проекта. На Amvera - /data
+    # (amvera_start.py): папка с кодом сбрасывается при каждом обновлении.
+    webapp_cache_dir: str | None = None
 
     @property
     def online_payments_enabled(self) -> bool:
@@ -93,7 +96,7 @@ class Settings(BaseSettings):
     def webapp_dev_allowed(self) -> bool:
         return self.webapp_dev_auth and self.db_host in ("localhost", "127.0.0.1", "::1")
 
-    @field_validator("db_schema", "webapp_url", mode="before")
+    @field_validator("db_schema", "webapp_url", "webapp_cache_dir", mode="before")
     @classmethod
     def _blank_is_none(cls, value: object) -> object:
         return None if isinstance(value, str) and not value.strip() else value
