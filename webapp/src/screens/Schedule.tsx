@@ -113,17 +113,17 @@ export function CourseCardView({ item, preview }: { item: CourseCard; preview?: 
   return (
     <div className={`course-card-wrap ${editable ? "editable" : ""}`}>
       <button className="card course-card" onClick={() => navigate(`/course/${item.id}`)}>
-        <Cover src={item.cover_url} alt={item.title}>
-          <div className="badges">
+        {/* Значки - под картинкой, а не поверх: на обложке свой текст, на телефоне его перекрывало. */}
+        <Cover src={item.cover_url} alt={item.title} />
+        <div className="card-body">
+          <div className="row wrap" style={{ marginBottom: 8 }}>
             {item.mine ? (
-              <Badge tone="mine">✓ {clean(item.mine.label)}</Badge>
+              <Badge tone="accent">✓ {clean(item.mine.label)}</Badge>
             ) : (
               item.status_label && <Badge tone={statusTone(item.status)}>{clean(item.status_label)}</Badge>
             )}
             <Badge>{clean(item.format_label)}</Badge>
           </div>
-        </Cover>
-        <div className="card-body">
           <h3 className="course-title">{item.title}</h3>
           {item.subtitle && <p className="course-sub">{item.subtitle}</p>}
           <div className="meta">

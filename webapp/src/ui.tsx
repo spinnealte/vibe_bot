@@ -190,7 +190,7 @@ export function ActionButton(props: Omit<Parameters<typeof Button>[0], "busy" | 
   );
 }
 
-export function Badge({ children, tone }: { children: ReactNode; tone?: "ok" | "warn" | "danger" | "accent" | "mine" }) {
+export function Badge({ children, tone }: { children: ReactNode; tone?: "ok" | "warn" | "danger" | "accent" }) {
   return <span className={`badge ${tone ?? ""}`}>{children}</span>;
 }
 
@@ -220,7 +220,8 @@ const DEFAULT_COVER = "/api/files/default";
 
 /** Обложка курса. Своей нет (заглушка бота) или не загрузилась - фирменный фон со значком.
  * full - картинка целиком (страница курса): высота - по самой картинке, но не больше 55% экрана; если картинка
- * узкая, по бокам - её же размытая копия. В списках обложка обрезается до 16:9, как карточки в Telegram. */
+ * узкая, по бокам - её же размытая копия. В списках - кадр 3:2 (обложки делают 1536×1024, видны целиком);
+ * картинка других пропорций обрезается по краям. */
 export function Cover({ src, alt, full, children }: {
   src: string;
   alt: string;
@@ -248,8 +249,9 @@ export function Cover({ src, alt, full, children }: {
   );
 }
 
-/** Только админам: «Править» поверх обложки в расписании и на странице курса - сразу в карточку проведения
- * в админке (статус, поля, участники), без захода через переключатель режима. «Назад» вернёт сюда же. */
+/** Только админам: «Править» (круглый карандаш в углу обложки, чтобы не закрывать её текст) в расписании и на
+ * странице курса - сразу в карточку проведения в админке (статус, поля, участники), без захода через переключатель
+ * режима. «Назад» вернёт сюда же. */
 export function EditSessionButton({ id }: { id: number }): ReactNode {
   const { me } = useApp();
   if (!me.is_admin) return null;
@@ -257,6 +259,8 @@ export function EditSessionButton({ id }: { id: number }): ReactNode {
     <button
       type="button"
       className="edit-pill"
+      aria-label="Править"
+      title="Править"
       onClick={(event) => {
         event.stopPropagation();
         haptic("tap");
@@ -264,7 +268,6 @@ export function EditSessionButton({ id }: { id: number }): ReactNode {
       }}
     >
       <Icon.pencil />
-      Править
     </button>
   );
 }

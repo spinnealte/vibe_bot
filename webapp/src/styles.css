@@ -514,9 +514,10 @@ img {
   transform: scale(0.985);
 }
 
+/* Кадр в списках - 3:2, как обложки от генератора (1536×1024): видны целиком, ничего не срезается. */
 .cover {
   position: relative;
-  aspect-ratio: 16 / 9;
+  aspect-ratio: 3 / 2;
   background: linear-gradient(135deg, #d9f3f4, #b8e3e6);
   overflow: hidden;
 }
@@ -579,16 +580,6 @@ img {
   height: auto;
   opacity: 0.22;
   transform: rotate(-8deg);
-}
-
-.cover .badges {
-  position: absolute;
-  left: 10px;
-  top: 10px;
-  right: 10px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
 }
 
 .course-title {
@@ -713,38 +704,26 @@ img {
   color: #0b7f84;
 }
 
-.cover .badge.mine {
-  background: rgba(8, 32, 40, 0.8);
-  color: #ffffff;
-}
-
-/* «Править» поверх обложки - только у админов (ui.tsx: EditSessionButton). В карточке расписания кнопка лежит
-   рядом с карточкой, а не внутри (кнопка в кнопке не работает), значки обложки ей место уступают. */
+/* «Править» в углу обложки - только у админов (ui.tsx: EditSessionButton): круглый карандаш, текст обложки почти
+   не закрывает. В карточке расписания кнопка лежит рядом с карточкой, а не внутри (кнопка в кнопке не работает). */
 .course-card-wrap {
   position: relative;
 }
 
-.course-card-wrap.editable .cover .badges {
-  right: 112px;
-}
-
 .edit-pill {
   position: absolute;
-  top: 10px;
-  right: 10px;
+  top: 8px;
+  right: 8px;
   z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
+  display: grid;
+  place-items: center;
+  width: 32px;
   height: 32px;
-  padding: 0 12px;
+  padding: 0;
   border: 0;
-  border-radius: 999px;
-  background: rgba(8, 32, 40, 0.78);
+  border-radius: 50%;
+  background: rgba(8, 32, 40, 0.72);
   color: #ffffff;
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
   -webkit-backdrop-filter: blur(6px);
