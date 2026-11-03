@@ -194,15 +194,27 @@ def test_two_admins_mark_the_same_money(e2e) -> None:
 
 def test_total_for_a_course_without_price(e2e) -> None:
     async def scenario(h: Harness) -> None:
+        from datetime import UTC, datetime, timedelta
+
+        from stubbot.tg.reminders import PaymentReminders
+
         owner, admin = await _admins(h)
         client, order = await _client_with_order(h, title="Ортодонтия", price=None)
+        assert client.sees(texts.DUE_LINE_NO_AMOUNT)  # срок не обещаем, пока суммы нет (ревью 03.11.2026)
+        reminders = PaymentReminders(h.bot, h.factory, h.settings)
+        mark = client.mark()
+        assert await reminders.tick(datetime.now(UTC) + timedelta(hours=80)) == 0  # ни «сутки», ни «просрочено»
+        assert not client.since(mark)
         await _open_order(admin, order)
         await admin.click(texts.BTN_ADMIN_ORDER_TOTAL)
         await admin.send("тридцать тысяч")
         assert admin.sees(texts.ADMIN_ORDER_AMOUNT_INVALID)
         await admin.send("30000")
         assert admin.sees(texts.ADMIN_ORDER_TOTAL_SAVED.format(amount=format_rub(30_000 * RUB)))
-        assert (await h.scalar(select(Order))).total_amount == 30_000 * RUB
+        saved = await h.scalar(select(Order))
+        assert saved.total_amount == 30_000 * RUB
+        assert abs(saved.due_at - (datetime.now(UTC) + timedelta(hours=72))) < timedelta(minutes=1)  # 72 ч - отсюда
+        assert await reminders.tick(datetime.now(UTC) + timedelta(hours=25)) == 1  # теперь напоминание идёт
         assert not admin.has_button(texts.BTN_ADMIN_ORDER_TOTAL, admin.last)  # указанную сумму не меняют
         # Теперь клиенту доступна онлайн-оплата.
         await client.send(texts.BTN_CABINET)

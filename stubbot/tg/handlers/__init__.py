@@ -6,6 +6,7 @@ from stubbot.tg.handlers import (
     admin_clients,
     admin_orders,
     admin_pick,
+    app_only,
     application,
     cabinet,
     chats,
@@ -20,13 +21,19 @@ from stubbot.tg.handlers import (
 )
 
 
-def build_root_router(applications_enabled: bool) -> Router:
+def build_root_router(applications_enabled: bool, webapp_only: bool = False) -> Router:
     root = Router(name="root")
     # Только личные чаты: фильтр корневого роутера действует на все вложенные. В группе бот молчит,
     # иначе кабинет, списки админки и выгрузка клиентов оказались бы на виду у всех участников.
     root.message.filter(F.chat.type == ChatType.PRIVATE)
     root.callback_query.filter(F.message.chat.type == ChatType.PRIVATE)
     root.include_router(chats.router)  # если бота добавили в группу - выходит из неё
+    if webapp_only:
+        # Всё - в приложении (WEBAPP_ONLY): /start - приветствие с кнопкой приложения, на остальное - подсказка.
+        # Разделы бота (меню, кабинет, афиша, запись, админка) не подключаются, их код остаётся.
+        root.include_router(start.router)
+        root.include_router(app_only.router)
+        return root
     # Порядок важен: /start и меню работают в любом состоянии и должны перехватывать ввод раньше сценариев.
     root.include_router(start.router)
     root.include_router(menu.router)

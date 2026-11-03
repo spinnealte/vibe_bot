@@ -186,6 +186,22 @@ def test_split_html_respects_limit_and_paragraphs() -> None:
     assert all(chunk.count("<b>") == chunk.count("</b>") for chunk in chunks)  # теги не разорваны
 
 
+def test_program_title_takes_room_only_on_the_first_page() -> None:
+    """Ревью 03.11.2026: место под название курса - только на первой странице, остальные - полные."""
+    from types import SimpleNamespace
+
+    from stubbot.tg.render import PROGRAM_PAGE_LIMIT, program_pages
+
+    long_title = "Мукогингивальная хирургия: пластика мягких тканей вокруг зубов и имплантатов"
+    block = "<b>Теория</b>\n" + "\n".join(f"• пункт {i} " + "слово " * 12 for i in range(10))
+    # Блок длиннее первой страницы (на ней ещё название), но короче полной: раньше он резался на каждой странице.
+    assert PROGRAM_PAGE_LIMIT - visible_length(long_title) < visible_length(block) <= PROGRAM_PAGE_LIMIT
+    pages = program_pages(SimpleNamespace(title=long_title, program_html="\n\n".join([block, block])))
+    assert pages[-1].startswith(block.rstrip())  # не первая страница вмещает блок целиком - список не разрезан
+    chunks = split_html("\n\n".join(["а" * 50] * 4), limit=120, first_limit=60)
+    assert [visible_length(chunk) for chunk in chunks] == [50, 102, 50]
+
+
 def test_split_html_splits_oversized_paragraph_by_lines_and_words() -> None:
     lines = [f"• пункт номер {i} " + "слово " * 10 for i in range(20)]
     huge_line = "очень " * 200

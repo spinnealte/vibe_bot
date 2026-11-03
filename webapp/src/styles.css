@@ -1,0 +1,1548 @@
+/* Цвета - из темы Telegram (SDK ставит --tg-theme-*), бренд «АкваСтом» - морская волна (--accent).
+   В обычном браузере - свои светлая и тёмная палитры. Все цвета - здесь, в одном месте. */
+:root {
+  --accent: #0e9aa0;
+  --accent-strong: #0b7f84;
+  --accent-soft: rgba(14, 154, 160, 0.12);
+  --accent-text: #ffffff;
+
+  --bg: var(--tg-theme-secondary-bg-color, #f2f4f6);
+  --surface: var(--tg-theme-section-bg-color, var(--tg-theme-bg-color, #ffffff));
+  --text: var(--tg-theme-text-color, #14212b);
+  --hint: var(--tg-theme-hint-color, #7b8794);
+  --subtitle: var(--tg-theme-subtitle-text-color, var(--hint));
+  --link: var(--tg-theme-link-color, #0b7f84);
+  --danger: var(--tg-theme-destructive-text-color, #e5484d);
+  --separator: var(--tg-theme-section-separator-color, rgba(120, 130, 140, 0.18));
+  --ok: #1f9d55;
+  --warn: #c27c0e;
+  --ok-soft: rgba(31, 157, 85, 0.12);
+  --warn-soft: rgba(194, 124, 14, 0.14);
+  --danger-soft: rgba(229, 72, 77, 0.12);
+  --muted-soft: rgba(120, 130, 140, 0.14);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.06), 0 4px 16px rgba(16, 24, 40, 0.06);
+  --radius: 16px;
+  --radius-sm: 10px;
+  --tabbar-height: 80px; /* нижняя панель-капсула (62) + отступ от края (10) + зазор */
+  --spring: cubic-bezier(0.34, 1.36, 0.5, 1);
+  --water: linear-gradient(160deg, #4fc9cd 0%, var(--accent) 48%, var(--accent-strong) 100%);
+  --water-glow: rgba(14, 154, 160, 0.35);
+  --deep: #1f4e6b;
+  --deep-water: linear-gradient(160deg, #4a8bb5 0%, #25628a 48%, #173f5c 100%);
+  --deep-glow: rgba(31, 78, 107, 0.4);
+  --dock-shadow: 0 10px 30px rgba(8, 60, 70, 0.16), 0 2px 6px rgba(8, 60, 70, 0.08);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+
+  color-scheme: light dark;
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, "Helvetica Neue", Arial,
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: 100%;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-telegram]) {
+    --bg: #0f1419;
+    --surface: #1a2129;
+    --text: #e8edf2;
+    --hint: #8b98a5;
+    --link: #3cc4c9;
+    --separator: rgba(255, 255, 255, 0.08);
+    --accent-soft: rgba(60, 196, 201, 0.16);
+    --accent-strong: #5cd3d8;
+    --shadow: none;
+    --deep: #8cc2e3;
+    --dock-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* Тёмная тема Telegram: цвета фона и текста даёт Telegram, светлее делаем только фирменный акцент. */
+:root[data-scheme="dark"] {
+  --accent-soft: rgba(60, 196, 201, 0.16);
+  --accent-strong: #5cd3d8;
+  --shadow: none;
+  --deep: #8cc2e3;
+  --dock-shadow: 0 10px 30px rgba(0, 0, 0, 0.45);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+body {
+  min-height: 100vh;
+  overscroll-behavior-y: none;
+}
+
+a {
+  color: var(--link);
+  text-decoration: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* --- Каркас ----------------------------------------------------------------------------------------------------- */
+
+.app {
+  min-height: 100vh;
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 16px);
+}
+
+.app.no-tabs {
+  padding-bottom: calc(var(--safe-bottom) + 24px);
+}
+
+.app.with-action {
+  padding-bottom: calc(var(--tabbar-height) + var(--safe-bottom) + 96px);
+}
+
+.app.no-tabs.with-action {
+  padding-bottom: calc(var(--safe-bottom) + 104px);
+}
+
+.page {
+  max-width: 640px;
+  margin: 0 auto;
+  padding: 12px 16px 0;
+}
+
+.page-header {
+  padding: 8px 2px 14px;
+}
+
+.page-header h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+}
+
+.page-header p {
+  margin: 6px 0 0;
+  color: var(--hint);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 2px 14px;
+}
+
+.brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  background: linear-gradient(135deg, #12b3b9, #0b7f84);
+  display: grid;
+  place-items: center;
+  flex: none;
+}
+
+.brand-mark svg {
+  width: 22px;
+  height: 22px;
+}
+
+.brand-name {
+  font-weight: 700;
+  font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.brand-sub {
+  color: var(--hint);
+  font-size: 13px;
+}
+
+.section-title {
+  margin: 22px 2px 8px;
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--hint);
+}
+
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.wrap {
+  flex-wrap: wrap;
+}
+
+.grow {
+  flex: 1;
+  min-width: 0;
+}
+
+.muted {
+  color: var(--hint);
+}
+
+.small {
+  font-size: 13px;
+}
+
+.center {
+  text-align: center;
+}
+
+/* --- Нижняя панель: капля воды --------------------------------------------------------------------------------- */
+/* Плавающая капсула; активный раздел «залит водой» с волнами, капля перетекает между разделами (ширина и место -
+   из --i и --total, как у кнопок, поэтому они движутся вместе). В админке вода темнее - «глубина». */
+
+.dock {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(10px + var(--safe-bottom));
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 0 12px;
+  pointer-events: none;
+}
+
+.dock > * {
+  pointer-events: auto;
+}
+
+.dock-track {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  height: 62px;
+  padding: 6px;
+  border-radius: 31px;
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--separator));
+  box-shadow: var(--dock-shadow);
+}
+
+.dock-drop {
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: calc(6px + (100% - 12px) * var(--i) / var(--total));
+  width: calc((100% - 12px) * var(--grow) / var(--total));
+  border-radius: 25px;
+  overflow: hidden;
+  background: var(--water);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 6px 16px var(--water-glow);
+  transition: left 0.55s var(--spring), width 0.55s var(--spring);
+}
+
+.dock-wave {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 58%;
+  opacity: 0.22;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 120 24' preserveAspectRatio='none'%3E%3Cpath d='M0 8 Q15 0 30 8 T60 8 T90 8 T120 8 V24 H0 Z' fill='white'/%3E%3C/svg%3E")
+    repeat-x 0 0 / 96px 100%;
+  animation: dock-wave 3.4s linear infinite;
+}
+
+.dock-wave.back {
+  height: 74%;
+  opacity: 0.12;
+  animation-duration: 5.2s;
+  animation-direction: reverse;
+}
+
+.dock-bubbles i {
+  position: absolute;
+  bottom: 4px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.8);
+  opacity: 0;
+  animation: dock-bubble 0.95s ease-out forwards;
+}
+
+.dock-bubbles i:nth-child(1) {
+  left: 22%;
+}
+
+.dock-bubbles i:nth-child(2) {
+  left: 44%;
+  width: 4px;
+  height: 4px;
+  animation-delay: 0.1s;
+}
+
+.dock-bubbles i:nth-child(3) {
+  left: 63%;
+  width: 7px;
+  height: 7px;
+  animation-delay: 0.18s;
+}
+
+.dock-bubbles i:nth-child(4) {
+  left: 80%;
+  width: 3px;
+  height: 3px;
+  animation-delay: 0.05s;
+}
+
+.dock-item {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 0;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 6px;
+  border: 0;
+  background: none;
+  color: var(--hint);
+  font-size: 12.5px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: flex-grow 0.55s var(--spring), color 0.25s ease;
+}
+
+.dock-item.on {
+  flex-grow: var(--grow);
+  color: #fff;
+}
+
+.dock-icon {
+  position: relative;
+  flex: none;
+  display: grid;
+}
+
+.dock-icon svg {
+  width: 24px;
+  height: 24px;
+  transition: transform 0.35s var(--spring);
+}
+
+.dock-item:active .dock-icon svg {
+  transform: scale(0.86);
+}
+
+.dock-label {
+  max-width: 0;
+  opacity: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  transition: max-width 0.45s ease, opacity 0.2s ease;
+}
+
+.dock-item.on .dock-label {
+  max-width: 120px;
+  opacity: 1;
+  transition-delay: 0.08s;
+}
+
+.dock-badge {
+  position: absolute;
+  top: 7px;
+  left: calc(50% + 5px);
+  min-width: 17px;
+  height: 17px;
+  padding: 0 4px;
+  border-radius: 9px;
+  background: var(--danger);
+  color: #fff;
+  font-size: 10.5px;
+  font-weight: 700;
+  line-height: 17px;
+  text-align: center;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+/* У раздела с водой число - рядом с названием, а не поверх значка. */
+.dock-item.on .dock-badge {
+  position: static;
+  background: rgba(255, 255, 255, 0.24);
+  box-shadow: none;
+}
+
+.dock-mode {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 18%, var(--separator));
+  background: color-mix(in srgb, var(--surface) 84%, transparent);
+  backdrop-filter: saturate(180%) blur(18px);
+  -webkit-backdrop-filter: saturate(180%) blur(18px);
+  color: var(--deep);
+  box-shadow: var(--dock-shadow);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.2s ease;
+}
+
+.dock-mode:active {
+  transform: scale(0.92);
+}
+
+.dock.admin .dock-mode {
+  color: var(--accent-strong);
+}
+
+.dock-mode-icon {
+  display: grid;
+  animation: dock-mode-in 0.5s var(--spring);
+}
+
+.dock-mode svg {
+  width: 25px;
+  height: 25px;
+}
+
+.dock.admin {
+  --water: var(--deep-water);
+  --water-glow: var(--deep-glow);
+}
+
+@keyframes dock-wave {
+  to {
+    background-position-x: 96px;
+  }
+}
+
+@keyframes dock-bubble {
+  0% {
+    transform: translateY(0) scale(0.4);
+    opacity: 0;
+  }
+  25% {
+    opacity: 0.9;
+  }
+  100% {
+    transform: translateY(-38px) scale(1);
+    opacity: 0;
+  }
+}
+
+@keyframes dock-mode-in {
+  from {
+    transform: rotate(-140deg) scale(0.4);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dock-wave,
+  .dock-bubbles {
+    display: none;
+  }
+
+  .dock-drop,
+  .dock-item,
+  .dock-label {
+    transition-duration: 0.01s;
+  }
+}
+
+/* --- Карточки ----------------------------------------------------------------------------------------------------- */
+
+.card {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.card-body {
+  padding: 14px 16px;
+}
+
+.card + .card {
+  margin-top: 0;
+}
+
+.course-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease;
+}
+
+.course-card:active {
+  transform: scale(0.985);
+}
+
+.cover {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  background: linear-gradient(135deg, #d9f3f4, #b8e3e6);
+  overflow: hidden;
+}
+
+.cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* Картинка целиком (ui.tsx: Cover full): высота - по картинке, не больше 55% экрана (название курса видно
+   сразу); узкая или высокая - по центру,
+   по бокам её же размытая копия. */
+.cover.full {
+  aspect-ratio: auto;
+  min-height: 160px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface);
+}
+
+.cover.full .cover-backdrop {
+  position: absolute;
+  inset: -24px;
+  width: calc(100% + 48px);
+  height: calc(100% + 48px);
+  object-fit: cover;
+  filter: blur(22px) saturate(1.15);
+  opacity: 0.55;
+}
+
+.cover.full .cover-main {
+  position: relative;
+  width: 100%;
+  height: auto;
+  max-height: 55vh;
+  object-fit: contain;
+}
+
+.cover.placeholder {
+  background:
+    radial-gradient(120% 90% at 100% 0%, rgba(255, 255, 255, 0.22) 0%, transparent 55%),
+    radial-gradient(90% 80% at 0% 100%, rgba(4, 60, 64, 0.45) 0%, transparent 60%),
+    linear-gradient(135deg, #17b8be 0%, #0e9aa0 45%, #0a7378 100%);
+}
+
+.cover-art {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding-right: 8%;
+}
+
+.cover-art svg {
+  width: 38%;
+  max-width: 180px;
+  height: auto;
+  opacity: 0.22;
+  transform: rotate(-8deg);
+}
+
+.cover .badges {
+  position: absolute;
+  left: 10px;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.course-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.3;
+  letter-spacing: -0.01em;
+}
+
+.course-sub {
+  margin: 4px 0 0;
+  color: var(--hint);
+  font-size: 14px;
+}
+
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 10px;
+  color: var(--subtitle);
+  font-size: 13.5px;
+}
+
+.meta span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.meta svg {
+  width: 15px;
+  height: 15px;
+  flex: none;
+  opacity: 0.8;
+}
+
+.card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--separator);
+}
+
+.price {
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.price small {
+  font-weight: 500;
+  color: var(--hint);
+  font-size: 13px;
+}
+
+/* --- Значки ------------------------------------------------------------------------------------------------------- */
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  background: var(--muted-soft);
+  color: var(--text);
+}
+
+.cover .badge {
+  background: rgba(255, 255, 255, 0.92);
+  color: #14212b;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.badge.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.badge.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.badge.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.badge.accent {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+/* На обложке значки всегда на белом: цветной полупрозрачный фон на картинке не читается. */
+.cover .badge.ok,
+.cover .badge.warn,
+.cover .badge.danger,
+.cover .badge.accent {
+  background: rgba(255, 255, 255, 0.94);
+}
+
+.cover .badge.ok {
+  color: #157a42;
+}
+
+.cover .badge.warn {
+  color: #9a6208;
+}
+
+.cover .badge.danger {
+  color: #c4292f;
+}
+
+.cover .badge.accent {
+  color: #0b7f84;
+}
+
+.cover .badge.mine {
+  background: rgba(8, 32, 40, 0.8);
+  color: #ffffff;
+}
+
+/* «Править» поверх обложки - только у админов (ui.tsx: EditSessionButton). В карточке расписания кнопка лежит
+   рядом с карточкой, а не внутри (кнопка в кнопке не работает), значки обложки ей место уступают. */
+.course-card-wrap {
+  position: relative;
+}
+
+.course-card-wrap.editable .cover .badges {
+  right: 112px;
+}
+
+.edit-pill {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: rgba(8, 32, 40, 0.78);
+  color: #ffffff;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.18);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease;
+}
+
+.edit-pill svg {
+  width: 15px;
+  height: 15px;
+}
+
+.edit-pill:active {
+  transform: scale(0.95);
+}
+
+/* --- Кнопки ------------------------------------------------------------------------------------------------------- */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 48px;
+  padding: 0 18px;
+  border: 0;
+  border-radius: 14px;
+  background: var(--accent);
+  color: var(--accent-text);
+  font-weight: 600;
+  font-size: 16px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: filter 0.12s ease, transform 0.12s ease, opacity 0.12s ease;
+  text-align: center;
+}
+
+.btn:active {
+  transform: scale(0.98);
+  filter: brightness(0.95);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+.btn.block {
+  width: 100%;
+}
+
+.btn.secondary {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.btn.ghost {
+  background: transparent;
+  color: var(--link);
+  min-height: 40px;
+  padding: 0 8px;
+}
+
+.btn.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.btn.small {
+  min-height: 36px;
+  padding: 0 14px;
+  font-size: 14px;
+  border-radius: 11px;
+}
+
+.btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+.action-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--tabbar-height) + var(--safe-bottom));
+  z-index: 15;
+  padding: 10px 16px 12px;
+  background: linear-gradient(to top, var(--bg) 70%, transparent);
+}
+
+.no-tabs .action-bar {
+  bottom: 0;
+  padding-bottom: calc(12px + var(--safe-bottom));
+}
+
+.action-bar-inner {
+  max-width: 640px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.action-note {
+  text-align: center;
+  font-size: 12.5px;
+  color: var(--hint);
+}
+
+/* --- Списки и поля ------------------------------------------------------------------------------------------------ */
+
+.list {
+  background: var(--surface);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+}
+
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 52px;
+  padding: 11px 16px;
+  border: 0;
+  background: none;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.list-item:active {
+  background: var(--muted-soft);
+}
+
+.list-item + .list-item {
+  border-top: 1px solid var(--separator);
+}
+
+.list-item .label {
+  font-size: 13px;
+  color: var(--hint);
+}
+
+.list-item .value {
+  font-size: 15px;
+  word-break: break-word;
+}
+
+.list-item .value.empty {
+  color: var(--hint);
+}
+
+.chevron {
+  width: 18px;
+  height: 18px;
+  color: var(--hint);
+  flex: none;
+}
+
+.list-item.static {
+  cursor: default;
+}
+
+.list-item.static:active {
+  background: none;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 13px;
+  color: var(--hint);
+  padding-left: 2px;
+}
+
+.input {
+  width: 100%;
+  min-height: 48px;
+  padding: 12px 14px;
+  border: 1.5px solid var(--separator);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 16px;
+  outline: none;
+  transition: border-color 0.12s ease;
+}
+
+.input:focus {
+  border-color: var(--accent);
+}
+
+.input.invalid {
+  border-color: var(--danger);
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 13px;
+  padding-left: 2px;
+}
+
+.field-hint {
+  color: var(--hint);
+  font-size: 13px;
+  padding-left: 2px;
+}
+
+.check {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 14px 16px;
+  border: 1.5px solid var(--separator);
+  border-radius: 14px;
+  background: var(--surface);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.check.on {
+  border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 6%, var(--surface));
+}
+
+.check-box {
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-top: 1px;
+  border-radius: 7px;
+  border: 2px solid var(--hint);
+  display: grid;
+  place-items: center;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.check.on .check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.check-box svg {
+  width: 16px;
+  height: 16px;
+  color: #fff;
+  opacity: 0;
+}
+
+.check.on .check-box svg {
+  opacity: 1;
+}
+
+.check.radio .check-box {
+  border-radius: 50%;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  padding: 9px 14px;
+  border-radius: 999px;
+  border: 1.5px solid var(--separator);
+  background: var(--surface);
+  font-size: 14.5px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+.chip.on {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-text);
+}
+
+.filters {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  margin: 0 -16px 14px;
+  padding: 0 16px 2px;
+  scrollbar-width: none;
+}
+
+.filters::-webkit-scrollbar {
+  display: none;
+}
+
+/* Лента, которую на компьютере тянут мышью (ui.tsx: DragScroll). */
+@media (pointer: fine) {
+  .drag-scroll {
+    cursor: grab;
+  }
+}
+
+.drag-scroll.dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.filters .chip {
+  flex: none;
+  padding: 7px 13px;
+  font-size: 14px;
+}
+
+/* --- Текст с разметкой (программа курса, описания) ------------------------------------------------------------- */
+
+.rich {
+  font-size: 15px;
+  line-height: 1.55;
+  word-wrap: break-word;
+}
+
+.rich b,
+.rich strong {
+  font-weight: 650;
+}
+
+.rich blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-left: 3px solid var(--accent);
+  color: var(--subtitle);
+}
+
+.rich pre,
+.rich code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 13.5px;
+}
+
+.rich .spoiler {
+  background: var(--hint);
+  color: transparent;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.rich .spoiler.shown {
+  background: none;
+  color: inherit;
+}
+
+/* --- Курс --------------------------------------------------------------------------------------------------------- */
+
+.hero {
+  position: relative;
+  margin: 0 -16px 0;
+}
+
+.hero .cover.placeholder {
+  aspect-ratio: 16 / 10;
+}
+
+/* Информация - под картинкой, а не поверх неё: картинка видна целиком. */
+.hero-body {
+  position: relative;
+  padding: 16px 16px 4px;
+  background: var(--bg);
+}
+
+.hero-body h1 {
+  margin: 0;
+  font-size: 23px;
+  line-height: 1.2;
+  letter-spacing: -0.02em;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.fact {
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.fact .label {
+  font-size: 12px;
+  color: var(--hint);
+}
+
+.fact .value {
+  margin-top: 2px;
+  font-weight: 600;
+  font-size: 14.5px;
+}
+
+.fact.wide {
+  grid-column: 1 / -1;
+}
+
+/* Дни проведения: блоки по два в ряд поровну; один день или последний из нечётного числа - на всю ширину. */
+.days-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.day-card {
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.days-grid .day-card:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
+.day-card-date {
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--accent-strong);
+}
+
+.day-card-weekday {
+  font-size: 13.5px;
+  color: var(--hint);
+}
+
+.day-card-time {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 14.5px;
+  font-weight: 600;
+}
+
+.day-card-time svg {
+  width: 16px;
+  height: 16px;
+  color: var(--hint);
+}
+
+.lecturer {
+  display: flex;
+  gap: 12px;
+  padding: 14px 16px;
+}
+
+.lecturer + .lecturer {
+  border-top: 1px solid var(--separator);
+}
+
+.avatar {
+  flex: none;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+  display: grid;
+  place-items: center;
+  font-weight: 700;
+  font-size: 17px;
+}
+
+.price-option {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 13px 16px;
+}
+
+.price-option + .price-option {
+  border-top: 1px solid var(--separator);
+}
+
+/* --- Записи и заказ ----------------------------------------------------------------------------------------------- */
+
+.order-box {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--bg);
+}
+
+.order-line {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 14px;
+  padding: 2px 0;
+}
+
+.order-line .muted {
+  flex: none;
+}
+
+.order-line b {
+  text-align: right;
+}
+
+.notice {
+  display: flex;
+  gap: 10px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: var(--accent-soft);
+  font-size: 14px;
+}
+
+.notice.warn {
+  background: var(--warn-soft);
+}
+
+.notice.danger {
+  background: var(--danger-soft);
+}
+
+.notice.ok {
+  background: var(--ok-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.actions .btn {
+  flex: 1 1 auto;
+}
+
+/* --- Шаги регистрации --------------------------------------------------------------------------------------------- */
+
+.steps {
+  display: flex;
+  gap: 6px;
+  margin: 4px 0 18px;
+}
+
+.steps span {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--separator);
+}
+
+.steps span.done {
+  background: var(--accent);
+}
+
+.big-icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 20px;
+  margin: 8px auto 14px;
+  display: grid;
+  place-items: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.big-icon svg {
+  width: 32px;
+  height: 32px;
+}
+
+.big-icon.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+/* --- Окна снизу и уведомления ------------------------------------------------------------------------------------- */
+
+.sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background: rgba(10, 16, 22, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  animation: fade 0.16s ease;
+}
+
+.sheet {
+  width: 100%;
+  max-width: 640px;
+  max-height: 88vh;
+  overflow-y: auto;
+  padding: 10px 16px calc(18px + var(--safe-bottom));
+  border-radius: 22px 22px 0 0;
+  background: var(--bg);
+  animation: rise 0.2s ease;
+}
+
+.sheet-handle {
+  width: 40px;
+  height: 5px;
+  border-radius: 3px;
+  margin: 0 auto 12px;
+  background: var(--separator);
+}
+
+.sheet h2 {
+  margin: 0 0 6px;
+  font-size: 20px;
+  letter-spacing: -0.01em;
+}
+
+.toast {
+  position: fixed;
+  left: 16px;
+  right: 16px;
+  top: calc(12px + env(safe-area-inset-top, 0px));
+  z-index: 60;
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 12px 16px;
+  border-radius: 14px;
+  background: #1d2733;
+  color: #fff;
+  font-size: 14.5px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.25);
+  animation: drop 0.2s ease;
+}
+
+.toast.error {
+  background: #b4282e;
+}
+
+.toast.ok {
+  background: #17794a;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes rise {
+  from {
+    transform: translateY(40px);
+    opacity: 0.6;
+  }
+}
+
+@keyframes drop {
+  from {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+}
+
+/* --- Загрузка, пусто, ошибка -------------------------------------------------------------------------------------- */
+
+.state {
+  padding: 48px 24px;
+  text-align: center;
+  color: var(--hint);
+}
+
+.state h3 {
+  margin: 10px 0 6px;
+  color: var(--text);
+  font-size: 18px;
+}
+
+.spinner {
+  width: 28px;
+  height: 28px;
+  margin: 0 auto;
+  border-radius: 50%;
+  border: 3px solid var(--accent-soft);
+  border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+
+.btn .spinner {
+  width: 18px;
+  height: 18px;
+  border-width: 2.5px;
+  border-color: rgba(255, 255, 255, 0.35);
+  border-top-color: #fff;
+  margin: 0;
+}
+
+.btn.secondary .spinner {
+  border-color: var(--accent-soft);
+  border-top-color: var(--accent);
+}
+
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--surface) 0%, var(--muted-soft) 50%, var(--surface) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* «Назад» вверху экранов, которых нет на нижней панели: закреплена при прокрутке. */
+.back-bar {
+  position: sticky;
+  top: 0;
+  z-index: 18;
+  max-width: 640px;
+  margin: 0 auto;
+  padding: calc(8px + env(safe-area-inset-top, 0px)) 12px 4px;
+  background: linear-gradient(to bottom, var(--bg) 60%, transparent);
+  pointer-events: none;
+}
+
+.back-btn {
+  pointer-events: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-height: 38px;
+  padding: 0 16px 0 8px;
+  border: 0;
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--surface) 90%, transparent);
+  backdrop-filter: saturate(180%) blur(14px);
+  -webkit-backdrop-filter: saturate(180%) blur(14px);
+  box-shadow: var(--shadow), 0 0 0 1px var(--separator);
+  color: var(--accent-strong);
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: transform 0.12s ease;
+}
+
+.back-btn:active {
+  transform: scale(0.96);
+}
+
+.back-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.admin-mode .back-btn {
+  color: var(--deep);
+}
+
+.back-bar + .page {
+  padding-top: 4px;
+}
+
+.dev-banner {
+  margin: 0 0 10px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: var(--warn-soft);
+  color: var(--warn);
+  font-size: 12.5px;
+  text-align: center;
+}
+
+/* Значки в строках списков и карточек. */
+.list-item > svg,
+.row > svg,
+.inline-icon svg {
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--accent);
+}

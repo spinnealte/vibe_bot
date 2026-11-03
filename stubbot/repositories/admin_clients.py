@@ -3,14 +3,15 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, select, update
+from sqlalchemy import exists, func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from stubbot.db.enums import OrderStatus
+from stubbot.db.enums import EnrollmentStatus, OrderStatus
 from stubbot.db.models import Client, CourseSession, Enrollment, Order, Program, ProgramInterest
 
 LIKE_ESCAPE = "\\"
+ACTIVE_STATUSES = (EnrollmentStatus.APPLICATION, EnrollmentStatus.CONFIRMED, EnrollmentStatus.WAITLIST)
 
 
 def like_escape(value: str) -> str:
@@ -45,6 +46,37 @@ class AdminClientRepository:
             .limit(limit)
         )
         return list(await self.session.scalars(stmt))
+
+    async def page(self, filters: list, order: list, offset: int, limit: int) -> tuple[list[Client], int]:
+        """Страница списка клиентов (админка в приложении) и сколько их всего с теми же условиями."""
+        where = [Client.deleted_at.is_(None), *filters]
+        total = int(await self.session.scalar(select(func.count(Client.id)).where(*where)) or 0)
+        stmt = select(Client).where(*where).order_by(*order).offset(offset).limit(limit)
+        return list(await self.session.scalars(stmt)), total
+
+    @staticmethod
+    def name_filters(words: list[str]) -> list:
+        return [Client.full_name.is_not(None)] + [
+            _folded_name().like(f"%{like_escape(word)}%", escape=LIKE_ESCAPE) for word in words]
+
+    @staticmethod
+    def phone_filter(digits: str):
+        return Client.phone.like(f"%{like_escape(digits)}%", escape=LIKE_ESCAPE)
+
+    @staticmethod
+    def has_active_enrollment():
+        """Есть действующая запись: ждёт оплаты, место закреплено или лист ожидания."""
+        return exists().where(Enrollment.client_id == Client.id, Enrollment.status.in_(ACTIVE_STATUSES))
+
+    async def active_enrollment_counts(self, client_ids: list[int]) -> dict[int, int]:
+        if not client_ids:
+            return {}
+        stmt = (
+            select(Enrollment.client_id, func.count(Enrollment.id))
+            .where(Enrollment.client_id.in_(client_ids), Enrollment.status.in_(ACTIVE_STATUSES))
+            .group_by(Enrollment.client_id)
+        )
+        return {client_id: int(count) for client_id, count in await self.session.execute(stmt)}
 
     async def client_with_profile(self, client_id: int) -> Client | None:
         stmt = (

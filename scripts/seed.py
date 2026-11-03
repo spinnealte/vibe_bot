@@ -50,7 +50,7 @@ def _catalog_rows(titles: list[str]) -> list[dict[str, object]]:
 
 async def seed() -> None:
     settings = get_settings()
-    engine = create_engine(settings.database_url)
+    engine = create_engine(settings.database_url, settings.db_schema)
     session_factory = create_session_factory(engine)
     try:
         async with session_factory() as session, session.begin():

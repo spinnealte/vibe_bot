@@ -11,3 +11,11 @@ logs/
 legal/*
 !legal/README.md
 !legal/site/
+
+# Веб-приложение: пакеты и сборка интерфейса, кэш обложек из Telegram.
+webapp/node_modules/
+webapp/dist/
+var/
+
+# Туннель для проверки в Telegram (docs/06_webapp.md): официальный cloudflared.exe скачивается отдельно, в git не кладём.
+tools/cloudflared/

@@ -118,7 +118,7 @@ class StoredMessage:
     photo: str | None = None  # file_id
     document: str | None = None
     document_name: str | None = None
-    markup: Any = None  # InlineKeyboardMarkup, ReplyKeyboardMarkup...
+    markup: Any = None  # InlineKeyboardMarkup, ReplyKeyboardMarkup, ReplyKeyboardRemove...
     deleted: bool = False
     date: datetime = field(default_factory=lambda: datetime.now(UTC))
 
@@ -239,9 +239,11 @@ class FakeTelegram(BaseSession):
                 for button in row:
                     if not button.text:
                         self._refuse(method, "пустой текст кнопки")
-                    kinds = [k for k in ("callback_data", "url") if getattr(button, k) is not None]
+                    kinds = [k for k in ("callback_data", "url", "web_app") if getattr(button, k) is not None]
                     if len(kinds) != 1:
-                        self._refuse(method, f"кнопка {button.text!r}: нужен ровно один из callback_data / url")
+                        self._refuse(method, f"кнопка {button.text!r}: нужен ровно один из callback_data / url / web_app")
+                    if button.web_app is not None and not button.web_app.url.startswith("https://"):
+                        self._refuse(method, f"BUTTON_TYPE_INVALID: приложение только по https ({button.web_app.url!r})")
                     if button.callback_data is not None:
                         size = len(button.callback_data.encode("utf-8"))
                         if not 1 <= size <= CALLBACK_DATA_LIMIT:
@@ -300,8 +302,7 @@ class FakeTelegram(BaseSession):
         plain = self._render(bot, method, method.text, TEXT_LIMIT, required=True)
         self._check_markup(method, method.reply_markup)
         markup = method.reply_markup
-        return self._store(chat_id, html=method.text, plain=plain,
-                           markup=None if isinstance(markup, ReplyKeyboardRemove) else markup).to_message(bot)
+        return self._store(chat_id, html=method.text, plain=plain, markup=markup).to_message(bot)
 
     def _on_SendPhoto(self, bot: Bot, method: SendPhoto) -> Message:
         chat_id = self._check_chat(method, method.chat_id)

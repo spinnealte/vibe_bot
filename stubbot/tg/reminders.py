@@ -51,7 +51,8 @@ def letters(job: ReminderJob, settings: Settings) -> list[Letter]:
         # с известной суммой - «Оплатить онлайн», если онлайн-оплата включена (шаг 7).
         online = (settings.online_payments_enabled and order.payer_type is PayerType.INDIVIDUAL
                   and order.total_amount is not None)
-        markup = keyboards.payment_reminder(order.id, order.payer_type is None and not overdue, manager_url, online)
+        markup = keyboards.payment_reminder(order.id, order.payer_type is None and not overdue, manager_url, online,
+                                            app_url=settings.webapp_url if settings.webapp_only else None)
         result.append(Letter(payer.telegram_id, text, markup, payer.telegram_id))
     admin_text, admin_markup = admin_orders_views.reminder_notice(job, settings.timezone)
     result += [Letter(chat_id, admin_text, admin_markup) for chat_id in settings.admin_chat_ids]

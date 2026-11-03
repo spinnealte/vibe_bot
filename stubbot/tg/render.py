@@ -158,8 +158,10 @@ def program_caption(program: Program, intro: str | None = None) -> str:
 def program_pages(program: Program, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
     """Программа курса страницами «на один экран телефона» для листания в одном сообщении."""
     title = f"📖 <b>{safe(short(program.title, 200))}</b>"
-    # Заголовок стоит на первой странице - оставляем под него место, чтобы и она влезала в экран.
-    pages = split_html(program.program_html or "", limit=limit - visible_length(title) - 2) or [texts.PROGRAM_TEXT_EMPTY]
+    # Заголовок стоит только на первой странице - место под него оставляем только там (ревью 03.11.2026: раньше
+    # запас вычитался из каждой страницы, и длинное название курса резало списки посередине).
+    pages = split_html(program.program_html or "", limit=limit,
+                       first_limit=limit - visible_length(title) - 2) or [texts.PROGRAM_TEXT_EMPTY]
     pages[0] = f"{title}\n\n{pages[0]}"
     if len(pages) > 1:
         pages = [page + texts.PROGRAM_PAGE.format(page=i + 1, pages=len(pages)) for i, page in enumerate(pages)]
@@ -230,6 +232,14 @@ def order_amount(order: Order) -> str:
     return format_rub(order.total_amount) if order.total_amount is not None else texts.APPLY_NO_PRICE
 
 
+def due_line(order: Order, timezone: str) -> str:
+    """«⏰ Оплатить до …» - или, если суммы ещё нет, что 72 часа пойдут, когда её назовёт менеджер (ревью 03.11.2026:
+    раньше обещали срок, которого у заказа без суммы на деле нет)."""
+    if order.total_amount is None:
+        return texts.DUE_LINE_NO_AMOUNT
+    return texts.DUE_LINE.format(due=format_moment(order.due_at, timezone))
+
+
 def enrolled(card: SessionCard, order: Order, colleague_name: str | None, timezone: str) -> str:
     """«Вы записаны!»: заказ, сумма, срок оплаты и вопрос «Как будете оплачивать?»."""
     return texts.APPLY_ENROLLED.format(
@@ -238,17 +248,19 @@ def enrolled(card: SessionCard, order: Order, colleague_name: str | None, timezo
         colleague=texts.APPLY_ENROLLED_COLLEAGUE.format(name=safe(colleague_name)) if colleague_name else "",
         number=order.number,
         amount=order_amount(order),
-        due=format_moment(order.due_at, timezone),
+        due_line=due_line(order, timezone),
     )
 
 
 def pay_individual(order: Order, email: str | None, timezone: str, online: bool = False) -> str:
     """online - кнопка «Оплатить онлайн» под текстом (онлайн-оплата включена, сумма заказа известна)."""
-    return (texts.PAY_INDIVIDUAL_ONLINE if online else texts.PAY_INDIVIDUAL).format(
-        number=order.number,
-        email=texts.PAY_INDIVIDUAL_EMAIL.format(email=safe(email)) if email else "",
-        due=format_moment(order.due_at, timezone),
-    )
+    email_text = texts.PAY_INDIVIDUAL_EMAIL.format(email=safe(email)) if email else ""
+    due = format_moment(order.due_at, timezone)
+    if online:
+        return texts.PAY_INDIVIDUAL_ONLINE.format(number=order.number, email=email_text, due=due)
+    clause = (texts.PAY_INDIVIDUAL_DUE.format(due=due) if order.total_amount is not None
+              else texts.PAY_INDIVIDUAL_DUE_NO_AMOUNT)
+    return texts.PAY_INDIVIDUAL.format(number=order.number, email=email_text, due_clause=clause)
 
 
 def linked_records(apps: list[MyApplication], registration: bool) -> str:
@@ -284,7 +296,7 @@ def colleague_enrolled(card: SessionCard, enroller_name: str | None) -> str:
 def order_pay_choice(order: Order, timezone: str) -> str:
     """«Как будете оплачивать?» из «Моих записей» - если после записи не выбрали «Физлицо / Юрлицо»."""
     return texts.ORDER_PAY_CHOICE.format(number=order.number, amount=order_amount(order),
-                                         due=format_moment(order.due_at, timezone))
+                                         due_line=due_line(order, timezone))
 
 
 # --- Мои записи и отмена (полная версия, этап 1, шаг 3) ----------------------------------------------------------
@@ -322,6 +334,8 @@ def _order_lines(app: MyApplication, order: Order, timezone: str, now: datetime)
         else:
             lines.append(texts.MY_APPLICATION_PAID.format(paid=format_rub(app.paid),
                                                           left=format_rub(order.total_amount - app.paid)))
+    elif app.active and order.status in PAYABLE_ORDER_STATUSES and order.total_amount is None:
+        lines.append(texts.MY_APPLICATION_DUE_NO_AMOUNT)
     elif app.active and order.status in PAYABLE_ORDER_STATUSES:
         lines.append(texts.MY_APPLICATION_DUE.format(value=format_moment(order.due_at, timezone)))
         if order.due_at < now:
@@ -494,16 +508,18 @@ def invoice_caption(order: Order, left: int | None, timezone: str) -> str:
                                         else texts.APPLY_NO_PRICE, due=format_moment(order.due_at, timezone))
 
 
-def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT) -> list[str]:
+def split_html(text: str, limit: int = PROGRAM_PAGE_LIMIT, first_limit: int | None = None) -> list[str]:
     """Длинный текст на страницы по `limit` видимых символов: сначала по абзацам, слишком длинный абзац - по строкам,
-    слишком длинная строка - по словам. Разметка внутри строки не разрывается, пока строка не длиннее страницы."""
+    слишком длинная строка - по словам. Разметка внутри строки не разрывается, пока строка не длиннее страницы.
+    first_limit - своя граница для первой страницы (на ней ещё заголовок)."""
     pages: list[str] = []
     current = ""
 
     def fits(piece: str, separator: str) -> bool:
         nonlocal current
         candidate = f"{current}{separator}{piece}" if current else piece
-        if visible_length(candidate) > limit:
+        page_limit = first_limit if first_limit is not None and not pages else limit
+        if visible_length(candidate) > page_limit:
             return False
         current = candidate
         return True

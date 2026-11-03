@@ -1,6 +1,6 @@
 """Последний роутер: то, что не подошло ни одному хендлеру. Подключается строго последним."""
 
-from aiogram import Router
+from aiogram import F, Router
 from aiogram.types import CallbackQuery, Message
 
 from stubbot.config import Settings
@@ -14,6 +14,12 @@ router = Router(name="fallback")
 async def unknown_callback(callback: CallbackQuery) -> None:
     # Без answer() у пользователя бесконечно крутятся «часики» на кнопке.
     await callback.answer(texts.UNKNOWN_CALLBACK)
+
+
+@router.message(F.contact)
+async def contact_outside_steps(message: Message) -> None:
+    """Контакт не на шаге «телефон»: так приходит номер, которым поделились в веб-приложении (Mini App) - его
+    сохраняет само приложение. Отвечать «не понял» на это не нужно."""
 
 
 @router.message()

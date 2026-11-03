@@ -38,6 +38,7 @@ from stubbot.tg.handlers import (
     admin_clients,
     admin_orders,
     admin_pick,
+    app_only,
     application,
     cabinet,
     chats,
@@ -60,8 +61,8 @@ MANAGER_URL = "https://t.me/aquastom_manager_e2e"
 RUB = 100
 TZ = ZoneInfo("Europe/Moscow")
 
-_ROUTER_MODULES = (admin, admin_clients, admin_orders, admin_pick, application, cabinet, chats, consent, fallback,
-                   menu, payment, registration, schedule, selection, start)
+_ROUTER_MODULES = (admin, admin_clients, admin_orders, admin_pick, app_only, application, cabinet, chats, consent,
+                   fallback, menu, payment, registration, schedule, selection, start)
 HANDLERS_CALLED: set[str] = set()  # «модуль.функция» хендлеров, которые вызвал хоть один сценарий прогона
 
 
@@ -329,10 +330,13 @@ class Person:
         return self.last.plain or ""
 
     def reply_keyboard(self) -> list[str]:
-        """Кнопки нижнего меню, которые сейчас у человека (последняя присланная reply-клавиатура)."""
-        from aiogram.types import ReplyKeyboardMarkup
+        """Кнопки нижнего меню, которые сейчас у человека (последняя присланная reply-клавиатура; после «убрать
+        клавиатуру» - никаких)."""
+        from aiogram.types import ReplyKeyboardMarkup, ReplyKeyboardRemove
 
         for message in reversed(self.tg.chats.get(self.id, [])):
+            if message.from_bot and isinstance(message.markup, ReplyKeyboardRemove):
+                return []
             if message.from_bot and isinstance(message.markup, ReplyKeyboardMarkup):
                 return [b.text for row in message.markup.keyboard for b in row]
         return []

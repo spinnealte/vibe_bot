@@ -39,7 +39,8 @@ def _job(kind: ReminderKind = ReminderKind.DAY, participants: int = 1, payer=PAY
 
 
 def _settings(manager_url: str | None = "https://t.me/manager", online: bool = False) -> SimpleNamespace:
-    return SimpleNamespace(manager_url=manager_url, timezone=TZ, admin_chat_ids=[1, 2], online_payments_enabled=online)
+    return SimpleNamespace(manager_url=manager_url, timezone=TZ, admin_chat_ids=[1, 2], online_payments_enabled=online,
+                           webapp_only=False, webapp_url=None)
 
 
 def _rows(markup) -> list[list[str]]:

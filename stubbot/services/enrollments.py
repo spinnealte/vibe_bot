@@ -160,8 +160,10 @@ class EnrollmentService:
         return card, await self.enrollments.active_for(client.id, session_id)
 
     async def enroll(self, client: Client, session_id: int, price_option_id: int | None, colleague: Colleague | None,
-                     today: date, now: datetime | None = None) -> EnrollResult:
-        """Записать клиента (и коллегу) на проведение: занять места и создать заказ - или лист ожидания."""
+                     today: date, now: datetime | None = None,
+                     source: EnrollmentSource = EnrollmentSource.BOT) -> EnrollResult:
+        """Записать клиента (и коллегу) на проведение: занять места и создать заказ - или лист ожидания.
+        source - откуда запись: бот или веб-приложение (SITE)."""
         now = now or datetime.now(UTC)
         # Места считаем под блокировкой проведения: двое не займут одно последнее место одновременно.
         await self.enrollments.lock_session(session_id)
@@ -219,7 +221,7 @@ class EnrollmentService:
                     enrolled_by_client_id=client.id if person is not client else None,
                     status=EnrollmentStatus.WAITLIST if waitlist else EnrollmentStatus.APPLICATION,
                     requested_seats=1,
-                    source=EnrollmentSource.BOT,
+                    source=source,
                 ) for person in participants]
                 for enrollment in enrollments:
                     self.enrollments.add(enrollment)

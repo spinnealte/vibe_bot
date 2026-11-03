@@ -15,6 +15,7 @@ from stubbot.tg.bot import check_telegram, create_bot
 from stubbot.tg.dispatcher import create_dispatcher
 from stubbot.tg.online_payments import OnlinePayments
 from stubbot.tg.reminders import PaymentReminders
+from stubbot.web.server import set_menu_button, start_web_app
 
 logger = logging.getLogger("stubbot")
 
@@ -28,12 +29,13 @@ async def main() -> int:
         logger.error("Онлайн-оплата не настроена: %s", exc)
         return 1
 
-    engine = create_engine(settings.database_url)
+    engine = create_engine(settings.database_url, settings.db_schema)
     session_factory = create_session_factory(engine)
     bot = create_bot(settings)
     online_payments = OnlinePayments(bot, session_factory, settings, gateway) if gateway is not None else None
     dp = create_dispatcher(settings, session_factory, online_payments=online_payments)
     tasks: list[asyncio.Task] = []
+    web_runner = None
     try:
         try:
             # Тексты согласий - в коде; новую версию бот заводит в базе сам (на Amvera нет консоли).
@@ -54,6 +56,10 @@ async def main() -> int:
         if online_payments is not None:
             # Сверка онлайн-платежей: оплату без нажатия «Проверить» бот заметит в течение минуты.
             tasks.append(asyncio.create_task(online_payments.run_forever(), name="online-payments"))
+        if settings.webapp_enabled:
+            # Веб-приложение (Mini App) - в том же процессе: тот же бот, база и онлайн-оплата.
+            web_runner = await start_web_app(settings, session_factory, bot, online_payments)
+            await set_menu_button(bot, settings)
         await dp.start_polling(bot, allowed_updates=dp.resolve_used_update_types())
         return 0
     except asyncio.CancelledError:
@@ -65,6 +71,8 @@ async def main() -> int:
             task.cancel()
             with suppress(asyncio.CancelledError):
                 await task
+        if web_runner is not None:
+            await web_runner.cleanup()
         if gateway is not None:
             await gateway.close()
         await dp.storage.close()

@@ -11,7 +11,7 @@ advance); любая оплата закрепляет место: записи 
 
 import logging
 from dataclasses import dataclass, field
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from enum import StrEnum
 
 from sqlalchemy.exc import IntegrityError
@@ -29,6 +29,7 @@ from stubbot.db.enums import (
     PaymentState,
 )
 from stubbot.db.models import Advance, Client, CourseSession, Enrollment, Order, Payment, PriceOption
+from stubbot.db.models.orders import PAYMENT_HOURS
 from stubbot.repositories.enrollments import EnrollmentRepository
 from stubbot.repositories.orders import AdvanceRepository, OrderRepository
 from stubbot.services.admin_log import log_admin_action
@@ -93,7 +94,9 @@ class AdminOrderCard:
         return self.to_settle > 0
 
     def overdue(self, now: datetime) -> bool:
-        return self.order.status is OrderStatus.AWAITING_PAYMENT and self.order.due_at < now
+        """Срок оплаты вышел. У заказа без суммы срока ещё нет: 72 часа пойдут, когда админ её укажет."""
+        return (self.order.status is OrderStatus.AWAITING_PAYMENT and self.order.total_amount is not None
+                and self.order.due_at < now)
 
     @property
     def advance_to_apply(self) -> int:
@@ -212,14 +215,17 @@ class AdminOrderService:
         log_admin_action(self.admin_id, LOG_SECTION, "№%s: оплата %s коп. (%s)", order.number, amount, method.value)
         return result
 
-    async def set_total(self, order_id: int, amount: int) -> Order | None:
-        """Сумма заказа, которую при записи не знали («стоимость уточнит менеджер»). Указанную не меняем."""
+    async def set_total(self, order_id: int, amount: int, now: datetime | None = None) -> Order | None:
+        """Сумма заказа, которую при записи не знали («стоимость уточнит менеджер»). Указанную не меняем.
+        С этого момента и идут 72 часа на оплату: пока суммы не было, заплатить было нельзя (ревью 03.11.2026)."""
         order = await self.orders.lock(order_id)
         if order is None or order.status not in PAYABLE_ORDER_STATUSES or order.total_amount is not None:
             return None
         if amount < await self._paid(order):
             return None  # оплачено уже больше - такой суммы заказа быть не может
         order.total_amount = amount
+        order.due_at = (now or datetime.now(UTC)) + timedelta(hours=PAYMENT_HOURS)
+        order.payment_reminded_at = order.overdue_notified_at = None
         log_admin_action(self.admin_id, LOG_SECTION, "№%s: сумма заказа %s коп.", order.number, amount)
         return order
 

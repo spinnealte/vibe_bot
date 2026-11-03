@@ -28,7 +28,7 @@ from stubbot.payments.fake import FakeGateway
 from stubbot.payments.gateway import GatewayError, GatewayPayment, PaymentGateway, PaymentRequest
 from stubbot.services.clients import ClientService
 from stubbot.services.online_payments import NOT_CREATED, Applied, OnlinePaymentService, StartOutcome
-from stubbot.tg import admin_orders_views, render, texts
+from stubbot.tg import admin_orders_views, keyboards, render, texts
 from stubbot.tg.admin_notify import notify_admins
 
 logger = logging.getLogger(__name__)
@@ -166,7 +166,8 @@ class OnlinePayments:
         telegram_id = applied.payer.telegram_id
         if tell_client and telegram_id is not None:
             try:
-                await self.bot.send_message(telegram_id, render.online_payment_received(applied))
+                await self.bot.send_message(telegram_id, render.online_payment_received(applied),
+                                            reply_markup=keyboards.app_link(self.settings, texts.BTN_APP_MY, "/my"))
             except TelegramForbiddenError:
                 async with self.session_factory() as session, session.begin():
                     await ClientService(session).mark_bot_blocked(telegram_id)

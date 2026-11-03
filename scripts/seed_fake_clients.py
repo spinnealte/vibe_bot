@@ -183,7 +183,7 @@ async def create(session, now: datetime) -> None:
 
 async def main() -> None:
     settings = get_settings()
-    engine = create_engine(settings.database_url)
+    engine = create_engine(settings.database_url, settings.db_schema)
     try:
         async with create_session_factory(engine)() as session, session.begin():
             if "--remove" in sys.argv:

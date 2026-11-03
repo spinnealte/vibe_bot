@@ -59,6 +59,7 @@ from stubbot.tg.formatting import safe
 from stubbot.tg.screen import delete_quietly, show_screen
 from stubbot.tg.states import PENDING_APPLY_KEY, Application
 from stubbot.utils.dates import local_today
+from stubbot.utils.files import requisites_file_ok
 from stubbot.utils.links import with_draft_text
 from stubbot.utils.names import parse_full_name
 from stubbot.utils.phone import normalize_phone
@@ -265,6 +266,9 @@ async def on_requisites(message: Message, state: FSMContext, session: AsyncSessi
     data = await state.get_data()
     photo = message.document is None
     if not photo:
+        if not requisites_file_ok(message.document.file_name, message.document.file_size):
+            await message.answer(texts.REQUISITES_FILE_TYPES)  # файл откроют админы - только документы и картинки
+            return
         file_id, file_name = message.document.file_id, message.document.file_name
     else:
         file_id, file_name = message.photo[-1].file_id, None

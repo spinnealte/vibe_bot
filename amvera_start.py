@@ -32,7 +32,8 @@ async def database_is_empty() -> bool:
     from stubbot.config import get_settings
     from stubbot.db.session import create_engine
 
-    engine = create_engine(get_settings().database_url)
+    settings = get_settings()
+    engine = create_engine(settings.database_url, settings.db_schema)
     try:
         async with engine.connect() as connection:
             return (await connection.scalar(text("SELECT count(*) FROM specialties"))) == 0

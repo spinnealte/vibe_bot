@@ -373,8 +373,11 @@ def test_client_texts() -> None:
     order = _order()
     individual = render.pay_individual(order, None, TZ, online=True)
     assert "Оплатите онлайн кнопкой ниже" in individual and "до 29 октября, 12:00" in individual
-    assert render.pay_individual(order, None, TZ) == texts.PAY_INDIVIDUAL.format(number=100001, email="",
-                                                                               due="29 октября, 12:00")
+    assert render.pay_individual(order, None, TZ) == texts.PAY_INDIVIDUAL.format(
+        number=100001, email="", due_clause=texts.PAY_INDIVIDUAL_DUE.format(due="29 октября, 12:00"))
+    # Суммы ещё нет - срок не обещаем: 72 часа пойдут, когда её назовёт менеджер (ревью 03.11.2026).
+    order.total_amount = None
+    assert texts.PAY_INDIVIDUAL_DUE_NO_AMOUNT in render.pay_individual(order, None, TZ)
 
 
 def test_payment_received_after_online_payment() -> None:
@@ -449,7 +452,8 @@ def test_reminder_letter_gets_the_online_button() -> None:
     from stubbot.services.reminders import ReminderJob, ReminderKind
     from stubbot.tg.reminders import letters
 
-    settings = SimpleNamespace(manager_url=None, timezone=TZ, admin_chat_ids=[1], online_payments_enabled=True)
+    settings = SimpleNamespace(manager_url=None, timezone=TZ, admin_chat_ids=[1], online_payments_enabled=True,
+                               webapp_only=False, webapp_url=None)
     job = ReminderJob(ReminderKind.DAY, _order(), SESSION, PAYER, 1)
     assert _rows(letters(job, settings)[0].markup) == [[texts.BTN_PAY_ONLINE]]
     organization = ReminderJob(ReminderKind.DAY, _order(payer_type=PayerType.ORGANIZATION), SESSION, PAYER, 1)

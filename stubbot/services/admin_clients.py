@@ -11,9 +11,16 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
 
+from sqlalchemy import func
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from stubbot.db.enums import CANCELLED_ENROLLMENT_STATUSES, AdvanceReason, ConsentType, EnrollmentStatus
+from stubbot.db.enums import (
+    CANCELLED_ENROLLMENT_STATUSES,
+    AdvanceReason,
+    ConsentType,
+    EnrollmentStatus,
+    ProfileStatus,
+)
 from stubbot.db.models import Advance, Client, CourseSession, Enrollment, Order, PriceOption, Program
 from stubbot.repositories.admin_clients import AdminClientRepository
 from stubbot.repositories.enrollments import EnrollmentRepository
@@ -126,6 +133,34 @@ class SessionParticipants:
         return None if capacity is None else max(capacity - len(self.confirmed) - len(self.awaiting), 0)
 
 
+CLIENTS_PAGE = 15  # клиентов на странице полного списка (админка в приложении)
+
+
+class ClientFilter(StrEnum):
+    """Кого показать в полном списке клиентов."""
+
+    ALL = "all"
+    PROFILE = "profile"  # заполнили обязательную часть профиля
+    ENROLLED = "enrolled"  # есть действующая запись: ждёт оплаты, место закреплено, лист ожидания
+    BLOCKED = "blocked"  # заблокировали бота - сообщения им не доходят
+
+
+class ClientSort(StrEnum):
+    NEW = "new"  # сначала недавно пришедшие
+    OLD = "old"
+    NAME = "name"  # по ФИО, без ФИО - в конце
+
+
+@dataclass(frozen=True)
+class ClientPage:
+    clients: list[Client]
+    total: int
+    page: int
+    pages: int
+    active: dict[int, int]  # id клиента → сколько действующих записей
+    query: SearchQuery | None = None
+
+
 class AdvanceOutcome(StrEnum):
     DONE = "done"
     NEGATIVE = "negative"  # списание больше аванса
@@ -160,6 +195,40 @@ class AdminClientService:
             found = await self.repo.search_by_name(list(query.words), SEARCH_LIMIT + 1)
         log_admin_action(self.admin_id, LOG_SECTION, "поиск (%s): найдено %s", query.kind.value, len(found))
         return SearchResult(query, found[:SEARCH_LIMIT], more=len(found) > SEARCH_LIMIT)
+
+    async def client_list(self, raw: str, client_filter: ClientFilter, sort: ClientSort, page: int) -> ClientPage:
+        """Полный список клиентов по страницам (админка в приложении): фильтр, сортировка и, если задан запрос, тот же
+        поиск, что выше (часть ФИО или цифры телефона). Короткий запрос - страница с query.kind TOO_SHORT и без строк.
+        В журнал - только номер страницы, фильтр и число найденных: запрос - это ФИО или телефон."""
+        conditions: list = []
+        query = parse_query(raw) if raw.strip() else None
+        if query is not None:
+            if query.kind is QueryKind.TOO_SHORT:
+                return ClientPage([], 0, 1, 1, {}, query)
+            conditions += (self.repo.name_filters(list(query.words)) if query.kind is QueryKind.NAME
+                           else [self.repo.phone_filter(query.digits)])
+        match client_filter:
+            case ClientFilter.PROFILE:
+                conditions.append(Client.profile_status == ProfileStatus.COMPLETED)
+            case ClientFilter.ENROLLED:
+                conditions.append(self.repo.has_active_enrollment())
+            case ClientFilter.BLOCKED:
+                conditions.append(Client.is_bot_blocked.is_(True))
+        order = {
+            ClientSort.NEW: [Client.created_at.desc(), Client.id.desc()],
+            ClientSort.OLD: [Client.created_at, Client.id],
+            ClientSort.NAME: [Client.full_name.is_(None), func.lower(Client.full_name), Client.id],
+        }[sort]
+        page = max(page, 1)
+        clients, total = await self.repo.page(conditions, order, (page - 1) * CLIENTS_PAGE, CLIENTS_PAGE)
+        pages = max(1, -(-total // CLIENTS_PAGE))
+        if page > pages:  # список стал короче, пока листали - последняя страница
+            page = pages
+            clients, total = await self.repo.page(conditions, order, (page - 1) * CLIENTS_PAGE, CLIENTS_PAGE)
+        log_admin_action(self.admin_id, LOG_SECTION, "список (%s, %s): стр. %s, всего %s", client_filter.value,
+                         "поиск" if query else "без поиска", page, total)
+        active = await self.repo.active_enrollment_counts([client.id for client in clients])
+        return ClientPage(clients, total, page, pages, active, query)
 
     async def card(self, client_id: int) -> AdminClientCard | None:
         client = await self.repo.client_with_profile(client_id)

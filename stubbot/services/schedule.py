@@ -100,6 +100,14 @@ class ScheduleService:
         return SessionCard(session=course_session, seats_left=seats_left,
                            deadline_passed=deadline_passed(course_session, now))
 
+    async def cards(self, today: date, now: datetime | None = None) -> list[SessionCard]:
+        """Вся афиша карточками, в порядке карусели - для списка в веб-приложении (два запроса вместо 2N)."""
+        sessions = await self.catalog.public_sessions(today)
+        taken = await self.catalog.taken_seats_by_session([s.id for s in sessions if s.capacity is not None])
+        now = now or datetime.now(UTC)
+        return [SessionCard(session=s, seats_left=None if s.capacity is None else s.capacity - taken.get(s.id, 0),
+                            deadline_passed=deadline_passed(s, now)) for s in sessions]
+
     async def program(self, program_id: int) -> Program | None:
         return await self.catalog.published_program(program_id)
 

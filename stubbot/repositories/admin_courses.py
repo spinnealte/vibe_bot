@@ -21,6 +21,17 @@ class AdminCourseRepository:
         stmt = select(Program).where(Program.archived_at.is_not(None)).order_by(Program.archived_at.desc(), Program.id)
         return list(await self.session.scalars(stmt))
 
+    async def list_with_relations(self, archived: bool) -> list[Program]:
+        """Курсы раздела для списка в приложении: сразу с направлениями и лекторами (порядок - как в разделе)."""
+        order = (Program.archived_at.desc(), Program.id) if archived else (Program.sort_order, Program.title)
+        stmt = (
+            select(Program)
+            .where(Program.archived_at.is_not(None) if archived else Program.archived_at.is_(None))
+            .options(selectinload(Program.specialties), selectinload(Program.lecturers))
+            .order_by(*order)
+        )
+        return list(await self.session.scalars(stmt))
+
     async def archived_count(self) -> int:
         stmt = select(func.count()).select_from(Program).where(Program.archived_at.is_not(None))
         return int(await self.session.scalar(stmt) or 0)

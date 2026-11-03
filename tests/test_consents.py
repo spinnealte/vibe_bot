@@ -35,8 +35,8 @@ def _plain(html: str) -> str:
 
 def test_pd_consent_is_customer_wording_with_links_to_site() -> None:
     assert _plain(PD_CONSENT.html) == (
-        "Я согласен с Политикой обработки персональных данных, даю согласие на обработку моих персональных данных "
-        "и на получение информационных сообщений."
+        "Я согласен с Политикой обработки персональных данных и даю согласие на обработку моих персональных данных, "
+        "а также, на получение информационных сообщений."
     )
     assert f'<a href="{POLICY_URL}">Политикой обработки персональных данных</a>' in PD_CONSENT.html
     assert f'<a href="{CONSENT_URL}">согласие на обработку моих персональных данных</a>' in PD_CONSENT.html
@@ -81,7 +81,7 @@ def test_two_separate_checkboxes_and_continue() -> None:
 def test_document_text_by_version() -> None:
     assert {d.type for d in DOCUMENTS} == {LegalDocumentType.PRIVACY_POLICY, LegalDocumentType.PD_CONSENT,
                                            LegalDocumentType.MARKETING_CONSENT}
-    assert document_text(SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="1")) == PD_CONSENT.html
+    assert document_text(SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version=PD_CONSENT.version)) == PD_CONSENT.html
     # Черновик «0» (или версия, которой нет в коде) - показывать нечего, согласие не собираем.
     assert document_text(SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="0")) is None
     assert PD_CONSENT.text_hash == hashlib.sha256(PD_CONSENT.html.encode("utf-8")).hexdigest()
@@ -120,28 +120,28 @@ def test_publish_replaces_placeholder_and_is_idempotent(monkeypatch: pytest.Monk
             for t in (LegalDocumentType.PD_CONSENT, LegalDocumentType.MARKETING_CONSENT,
                       LegalDocumentType.PRIVACY_POLICY)]
     published = _publish(monkeypatch, rows)
-    assert sorted(published) == [f"marketing_consent v{MARKETING_CONSENT.version}", "pd_consent v1",
+    assert sorted(published) == [f"marketing_consent v{MARKETING_CONSENT.version}", f"pd_consent v{PD_CONSENT.version}",
                                  "privacy_policy v1"]
     assert "0" not in _current(rows).values()  # черновики «0» больше не текущие - согласия на них не в счёт
-    new = next(r for r in rows if r.type is LegalDocumentType.PD_CONSENT and r.version == "1")
+    new = next(r for r in rows if r.type is LegalDocumentType.PD_CONSENT and r.version == PD_CONSENT.version)
     assert (new.url, new.text_hash, new.published_at) == (CONSENT_URL, PD_CONSENT.text_hash, NOW)
     # Повторный запуск (каждый старт бота) ничего не выпускает и не меняет.
     assert _publish(monkeypatch, rows) == [] and len(rows) == 6
 
 
 def test_publish_refuses_changed_text_under_old_version(monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = [SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="1", text_hash="другой текст",
+    rows = [SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version=PD_CONSENT.version, text_hash="другой текст",
                             is_current=True)]
-    with pytest.raises(LegalTextChanged, match="pd_consent v1"):
+    with pytest.raises(LegalTextChanged, match=f"pd_consent v{PD_CONSENT.version}"):
         _publish(monkeypatch, rows)
 
 
 def test_publish_makes_existing_version_current_again(monkeypatch: pytest.MonkeyPatch) -> None:
-    rows = [SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="1", text_hash=PD_CONSENT.text_hash,
+    rows = [SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version=PD_CONSENT.version, text_hash=PD_CONSENT.text_hash,
                             is_current=False),
-            SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="2", text_hash="x", is_current=True)]
-    assert "pd_consent v1" not in _publish(monkeypatch, rows)
-    assert _current(rows)[LegalDocumentType.PD_CONSENT] == "1"
+            SimpleNamespace(type=LegalDocumentType.PD_CONSENT, version="99", text_hash="x", is_current=True)]
+    assert f"pd_consent v{PD_CONSENT.version}" not in _publish(monkeypatch, rows)
+    assert _current(rows)[LegalDocumentType.PD_CONSENT] == PD_CONSENT.version
 
 
 # --- Данные из Telegram - только после согласия ------------------------------------------------------------------

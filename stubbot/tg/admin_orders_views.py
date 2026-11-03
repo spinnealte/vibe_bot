@@ -15,6 +15,7 @@ from stubbot.db.enums import (
     OrderStatus,
     PayerType,
 )
+from stubbot.config import get_settings
 from stubbot.db.models import Client, Order, PriceOption
 from stubbot.services.admin_orders import AdminOrderCard, OrderCategory
 from stubbot.services.enrollments import CancelResult, MyApplication
@@ -22,7 +23,7 @@ from stubbot.services.online_payments import Applied as OnlinePaymentApplied
 from stubbot.services.online_payments import Problem as OnlineProblem
 from stubbot.services.reminders import ReminderJob, ReminderKind
 from stubbot.services.schedule import SessionCard
-from stubbot.tg import texts
+from stubbot.tg import keyboards, texts
 from stubbot.tg.callbacks import (
     AdminAction,
     AdminCb,
@@ -188,6 +189,8 @@ def _money_lines(card: AdminOrderCard, timezone: str, now: datetime) -> list[str
             lines.append(texts.ADMIN_ORDER_PAID.format(paid=format_rub(card.paid), left=format_rub(card.left)))
         else:
             lines.append(texts.ADMIN_ORDER_PAID_FULL.format(paid=format_rub(card.paid)))
+    elif card.payable and order.total_amount is None:
+        lines.append(texts.ADMIN_ORDER_DUE_NO_AMOUNT)
     elif card.payable:
         due = texts.ADMIN_ORDER_DUE.format(due=format_moment(order.due_at, timezone))
         lines.append(due + (texts.ADMIN_ORDER_DUE_LATE if card.overdue(now) else ""))
@@ -366,7 +369,12 @@ def to_card(order_id: int) -> InlineKeyboardMarkup:
 
 
 def open_order(order_id: int) -> InlineKeyboardMarkup:
-    """Под уведомлением: «🧾 Открыть заказ» - карточка в админке новым сообщением."""
+    """Под уведомлением: «🧾 Открыть заказ» - карточка в админке новым сообщением; когда всё в приложении
+    (WEBAPP_ONLY) - карточка заказа в админке приложения."""
+    settings = get_settings()
+    if settings.webapp_only and settings.webapp_url:
+        page = f"/admin/order/{order_id}"
+        return _markup([keyboards.app_button(settings.webapp_url, texts.BTN_ADMIN_OPEN_ORDER, page)])
     return _markup(_button(texts.BTN_ADMIN_OPEN_ORDER, OrderAdminAction.VIEW, order_id, NEW_SCREEN))
 
 
@@ -414,6 +422,9 @@ def reminder_notice(job: ReminderJob, timezone: str) -> tuple[str, InlineKeyboar
                   name=person(payer), phone=phone(payer), amount=order_amount(order),
                   due=format_moment(order.due_at, timezone),
                   with_colleague=texts.ADMIN_NOTIFY_WITH_COLLEAGUE if job.participants > 1 else "")
+    if job.kind is ReminderKind.OVERDUE and get_settings().webapp_only:
+        # Снять бронь - в карточке заказа в приложении.
+        return texts.ADMIN_REMINDER_OVERDUE.format(**fields), open_order(order.id)
     if job.kind is ReminderKind.OVERDUE:
         markup = _markup(_button(texts.BTN_ADMIN_ORDER_REMOVE, OrderAdminAction.REMOVE, order.id, NEW_SCREEN),
                          _button(texts.BTN_ADMIN_OPEN_ORDER, OrderAdminAction.VIEW, order.id, NEW_SCREEN))

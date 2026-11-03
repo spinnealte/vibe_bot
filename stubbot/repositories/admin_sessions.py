@@ -71,6 +71,18 @@ class AdminSessionRepository:
         )
         return list(await self.session.scalars(stmt))
 
+    async def list_scope(self, scope: SessionScope, today: date) -> list[CourseSession]:
+        """Все проведения раздела для списка в приложении (там они идут по месяцам одним списком): с датами - по
+        дате начала, без дат - в конце; сразу с курсом, площадкой, днями и тарифами."""
+        stmt = (
+            select(CourseSession)
+            .where(*_in_scope(scope, today))
+            .options(selectinload(CourseSession.program), selectinload(CourseSession.venue),
+                     selectinload(CourseSession.days), selectinload(CourseSession.price_options))
+            .order_by(CourseSession.start_date.is_(None), CourseSession.start_date, CourseSession.id)
+        )
+        return list(await self.session.scalars(stmt))
+
     async def get(self, session_id: int) -> CourseSession | None:
         """Со всем, что нужно карточке «как в афише»: курс с лекторами и направлениями, площадка, дни, тарифы."""
         stmt = (

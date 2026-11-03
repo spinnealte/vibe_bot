@@ -31,6 +31,8 @@ def test_wrong_input_during_registration_and_enrollment(e2e) -> None:
         await user.send_photo()  # телефон - только кнопкой «Поделиться номером»
         assert user.sees(texts.REG_PHONE_USE_BUTTON)
         await user.share_contact("+79990009701")
+        await user.share_contact("+79990009701")  # второй раз, уже не на шаге «телефон» (так шлёт Mini App) - тишина
+        assert not user.sees(texts.UNKNOWN_MESSAGE)
         await user.send("Вводов Иван Иванович")
         await user.send("ещё текст")  # подтверждение ФИО - кнопками
         assert user.sees(texts.REG_USE_BUTTONS)

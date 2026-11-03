@@ -347,6 +347,9 @@ def test_organization_sends_requisites(e2e) -> None:
         await gleb.click(texts.BTN_PAY_ORGANIZATION)
         await gleb.send("ИНН 7801234567")  # текстом - нельзя, нужен файл
         assert gleb.sees(texts.REQUISITES_FILE_ONLY)
+        admin_files = len(h.tg.messages(OWNER_ID))
+        await gleb.send_document("реквизиты.exe", b"MZ", mime="application/x-msdownload")  # админам - не любой файл
+        assert gleb.sees(texts.REQUISITES_FILE_TYPES) and len(h.tg.messages(OWNER_ID)) == admin_files
         file_id = await gleb.send_document("Реквизиты ООО.pdf")
         assert gleb.sees(texts.REQUISITES_RECEIVED)
         order = await h.scalar(select(Order))

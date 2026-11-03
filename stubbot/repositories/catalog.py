@@ -68,6 +68,24 @@ class CatalogRepository:
         )
         return await self.session.scalar(stmt)
 
+    async def public_sessions(self, today: date) -> list[CourseSession]:
+        """Вся афиша сразу, в порядке карусели (для веб-приложения: список, а не слайд за слайдом)."""
+        stmt = self._public_sessions(today).options(*_full_session_options()).order_by(
+            CourseSession.start_date.asc().nulls_last(), CourseSession.id
+        )
+        return list(await self.session.scalars(stmt))
+
+    async def taken_seats_by_session(self, session_ids: list[int]) -> dict[int, int]:
+        """taken_seats для нескольких проведений одним запросом; нет записей - проведения нет в ответе."""
+        if not session_ids:
+            return {}
+        stmt = (
+            select(Enrollment.session_id, func.sum(Enrollment.requested_seats))
+            .where(Enrollment.session_id.in_(session_ids), Enrollment.status.in_(SEAT_TAKING_STATUSES))
+            .group_by(Enrollment.session_id)
+        )
+        return {session_id: int(taken or 0) for session_id, taken in await self.session.execute(stmt)}
+
     async def published_program(self, program_id: int) -> Program | None:
         return await self.session.scalar(
             select(Program)

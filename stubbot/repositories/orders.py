@@ -93,7 +93,8 @@ class OrderRepository:
             .order_by(Order.due_at, Order.id)
         )
         if due_before is not None:
-            stmt = stmt.where(Order.due_at < due_before)
+            # Без суммы срока ещё нет: 72 часа пойдут, когда админ её укажет (ревью 03.11.2026).
+            stmt = stmt.where(Order.due_at < due_before, Order.total_amount.is_not(None))
         if invoice_sent is not None:
             stmt = stmt.where(Order.invoice_sent_at.is_not(None) if invoice_sent else Order.invoice_sent_at.is_(None))
         if not_past is not None:
@@ -131,7 +132,7 @@ class OrderRepository:
         stmt = (
             select(Order)
             .join(CourseSession, CourseSession.id == Order.session_id)
-            .where(Order.status == OrderStatus.AWAITING_PAYMENT,
+            .where(Order.status == OrderStatus.AWAITING_PAYMENT, Order.total_amount.is_not(None),
                    or_(CourseSession.start_date.is_(None), CourseSession.start_date > today), *conditions)
             .order_by(Order.id)
             .limit(limit)

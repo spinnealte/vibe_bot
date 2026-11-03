@@ -308,7 +308,9 @@ def test_cancelled_answers() -> None:
     assert "аванс" in render.cancelled(result(paid=2_000_000, choice=CancelChoice.ADVANCE), True)
     assert "напишите менеджеру" in render.cancelled(result(paid=2_000_000, choice=CancelChoice.REFUND), True)
     assert "свяжется" in render.cancelled(result(paid=2_000_000, choice=CancelChoice.REFUND), False)
-    assert "заказ №100001 закрыт" in render.cancelled(result(course_waitlist=True), True)
+    # Номер закрытого заказа в тексте не нужен (правка текстов 03.11.2026) - главное, что Вы в листе ожидания.
+    unpaid = render.cancelled(result(course_waitlist=True), True)
+    assert "Запись отменена." in unpaid and "100001" not in unpaid and "в листе ожидания курса" in unpaid
     assert texts.CANCELLED_WHO_PAIR in render.cancelled(result(course_waitlist=True, colleagues=(COLLEAGUE,)), True)
     assert render.cancelled(result(waitlist=True), True) == texts.CANCELLED_WAITLIST
     note = render.colleague_cancelled(_app(), "Иванов <И. И.>")

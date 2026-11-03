@@ -176,6 +176,18 @@ def test_order_without_amount_takes_any_payment_and_total_later() -> None:
     assert _run(_service(_order()).set_total(77, 1)) is None  # указанную сумму не меняем
 
 
+def test_order_without_amount_has_no_due_until_the_total_is_set() -> None:
+    """Ревью 03.11.2026: пока суммы нет, заплатить нельзя - заказ не просрочен, а 72 часа идут с указания суммы."""
+    order = _order(total_amount=None, due_at=NOW - timedelta(hours=100))
+    assert not _card(order).overdue(NOW) and _card(order).category(NOW) is OrderCategory.NEED_INVOICE
+    text, _ = views.order_card(_card(order), TZ, NOW)
+    assert texts.ADMIN_ORDER_DUE_NO_AMOUNT in text and texts.ADMIN_ORDER_DUE_LATE not in text
+    order.payment_reminded_at = order.overdue_notified_at = NOW - timedelta(hours=1)
+    assert _run(_service(order).set_total(77, 4_500_000, NOW)) is order
+    assert order.due_at == NOW + timedelta(hours=72)
+    assert (order.payment_reminded_at, order.overdue_notified_at) == (None, None)  # напоминания - заново
+
+
 def test_remove_booking_without_payment_puts_both_on_course_waitlist() -> None:
     order = _order()
     rows = [(_row(PAYER), PAYER), (_row(COLLEAGUE, enrolled_by=PAYER.id), COLLEAGUE)]

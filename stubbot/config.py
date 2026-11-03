@@ -1,9 +1,10 @@
+import re
 from enum import StrEnum
 from functools import lru_cache
 from pathlib import Path
 from typing import Annotated
 
-from pydantic import SecretStr, field_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 from sqlalchemy import URL
 
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
     db_user: str
     db_password: SecretStr
     db_name: str
+    # Своя схема в базе (search_path): так разработка веб-приложения живёт в той же базе, не трогая её таблицы
+    # в public. Пусто - схема по умолчанию (public), как на проде.
+    db_schema: str | None = None
 
     redis_url: str = "redis://127.0.0.1:6379/0"
 
@@ -67,9 +71,52 @@ class Settings(BaseSettings):
     yookassa_payment_mode: str = "full_prepayment"
     yookassa_payment_subject: str = "service"
 
+    # Веб-приложение (Telegram Mini App) - stubbot/web. Сервер API и страниц приложения поднимается рядом с ботом.
+    webapp_enabled: bool = False
+    webapp_host: str = "127.0.0.1"
+    webapp_port: int = 8080
+    # Публичный https-адрес приложения: по нему открывает Telegram (кнопка «Открыть приложение» в боте).
+    # Пусто - кнопки в боте нет; приложение доступно только локально (разработка в браузере).
+    webapp_url: str | None = None
+    # Всё - в приложении: бот после /start присылает одно приветствие с кнопкой приложения, нижнего меню и кнопочных
+    # разделов нет, кнопки уведомлений открывают нужный экран приложения. Код разделов бота остаётся: false - как было.
+    webapp_only: bool = False
+    # Вход без Telegram (заголовок «Authorization: dev <telegram_id>») - только для разработки в браузере
+    # и только с локальной базой (webapp_dev_allowed).
+    webapp_dev_auth: bool = False
+
     @property
     def online_payments_enabled(self) -> bool:
         return self.online_payments is not OnlinePayments.OFF
+
+    @property
+    def webapp_dev_allowed(self) -> bool:
+        return self.webapp_dev_auth and self.db_host in ("localhost", "127.0.0.1", "::1")
+
+    @field_validator("db_schema", "webapp_url", mode="before")
+    @classmethod
+    def _blank_is_none(cls, value: object) -> object:
+        return None if isinstance(value, str) and not value.strip() else value
+
+    @field_validator("db_schema")
+    @classmethod
+    def _check_schema(cls, value: str | None) -> str | None:
+        if value is not None and not re.fullmatch(r"[a-z_][a-z0-9_]{0,62}", value):
+            raise ValueError("DB_SCHEMA - латиница в нижнем регистре, цифры и _ (например webdev)")
+        return value
+
+    @field_validator("webapp_url")
+    @classmethod
+    def _check_webapp_url(cls, value: str | None) -> str | None:
+        if value is not None and not value.startswith("https://"):
+            raise ValueError("WEBAPP_URL - только https://… (Telegram открывает приложения лишь по https)")
+        return value.rstrip("/") if value else value
+
+    @model_validator(mode="after")
+    def _check_webapp_only(self) -> "Settings":
+        if self.webapp_only and not self.webapp_url:
+            raise ValueError("WEBAPP_ONLY=true - нужен WEBAPP_URL: без адреса приложения бот не сможет его открыть")
+        return self
 
     @field_validator("yookassa_shop_id", "yookassa_secret_key", "yookassa_vat_code", "yookassa_tax_system_code",
                      mode="before")

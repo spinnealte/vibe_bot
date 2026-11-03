@@ -30,6 +30,7 @@ E2E_ENV = {
     "FLOOD_LIMIT": "0",  # сценарий нажимает быстрее человека; защиту от флуда проверяет test_security
     "TIMEZONE": "Europe/Moscow",
     "YOOKASSA_RECEIPTS": "false",
+    "WEBAPP_ONLY": "false",  # кнопочный бот; режим «всё в приложении» - test_e2e_app_only.py
 }
 
 

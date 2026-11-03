@@ -12,6 +12,7 @@ from sqlalchemy.pool import NullPool
 
 from stubbot.config import get_settings
 from stubbot.db.models import Base
+from stubbot.db.session import connect_args
 
 config = context.config
 if config.config_file_name is not None:
@@ -63,7 +64,9 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_migrations_online() -> None:
-    engine = create_async_engine(get_settings().database_url, poolclass=NullPool)
+    settings = get_settings()
+    # DB_SCHEMA - миграции в своей схеме базы (search_path), как и сам бот.
+    engine = create_async_engine(settings.database_url, poolclass=NullPool, connect_args=connect_args(settings.db_schema))
     async with engine.connect() as connection:
         await connection.run_sync(do_run_migrations)
     await engine.dispose()

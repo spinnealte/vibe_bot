@@ -38,11 +38,13 @@ class ConsentService:
     async def has_any_consent(self, client_id: int, consent_type: ConsentType) -> bool:
         return await self.consents.active_consent(client_id, consent_type) is not None
 
-    async def grant(self, client_id: int, consent_type: ConsentType, document: LegalDocument) -> None:
+    async def grant(self, client_id: int, consent_type: ConsentType, document: LegalDocument,
+                    source: ConsentSource = ConsentSource.TELEGRAM_BOT) -> None:
+        """source - где поставили галочку: в боте или в веб-приложении (SITE - веб-форма)."""
         now = datetime.now(UTC)
         # Сначала отзываем прежнее (на старую версию), потом добавляем новое: одно активное на тип.
         await self.consents.revoke_active(client_id, consent_type, now)
-        self.consents.add(client_id, consent_type, document.id, ConsentSource.TELEGRAM_BOT)
+        self.consents.add(client_id, consent_type, document.id, source)
         self.analytics.add_event(
             client_id,
             ClientEventType.CONSENT_GIVEN,

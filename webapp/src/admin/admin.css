@@ -1,0 +1,780 @@
+/* Админка в приложении: те же цвета и детали, что у приложения слушателя (styles.css), плюс свои - строки
+   с правкой, плитки сводки, редактор текста, поля дней и тарифов. Акцент админки - «глубина» (--deep). */
+
+.admin-mode {
+  --accent-admin: var(--deep);
+}
+
+/* --- Заголовок и разделы ----------------------------------------------------------------------------------------- */
+
+.a-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 8px 2px 14px;
+}
+
+.a-header h1 {
+  margin: 0;
+  font-size: 26px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  word-break: break-word;
+}
+
+.a-header p {
+  margin: 6px 0 0;
+  color: var(--hint);
+}
+
+.a-over {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--deep);
+  margin-bottom: 4px;
+}
+
+.a-header-action {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: 19px;
+  background: var(--deep-water);
+  color: #fff;
+  font-weight: 650;
+  font-size: 14px;
+  cursor: pointer;
+  box-shadow: 0 4px 12px var(--deep-glow);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.a-header-action svg {
+  width: 18px;
+  height: 18px;
+}
+
+.a-section {
+  margin-top: 18px;
+}
+
+.a-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin: 0 2px 8px;
+}
+
+.a-section-head h2 {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--hint);
+}
+
+.a-gap {
+  height: 4px;
+}
+
+.stack.tight {
+  gap: 8px;
+}
+
+/* --- Строки ------------------------------------------------------------------------------------------------------ */
+
+.a-row .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.a-row > svg {
+  width: 17px;
+  height: 17px;
+  color: var(--hint);
+  flex: none;
+  opacity: 0.7;
+}
+
+.a-row-icon svg,
+.a-nav-icon svg {
+  width: 20px;
+  height: 20px;
+}
+
+.a-nav .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.a-nav-icon {
+  flex: none;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+  display: grid;
+  place-items: center;
+  background: color-mix(in srgb, var(--deep) 12%, transparent);
+  color: var(--deep);
+}
+
+.a-nav-icon.danger {
+  background: var(--danger-soft);
+  color: var(--danger);
+}
+
+.a-nav-icon.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.a-nav-icon.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.a-nav-title {
+  font-size: 15px;
+  font-weight: 560;
+  word-break: break-word;
+}
+
+.a-nav-text {
+  font-size: 13px;
+  color: var(--hint);
+  word-break: break-word;
+}
+
+.a-count {
+  flex: none;
+  min-width: 28px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--muted-soft);
+  font-size: 13.5px;
+  font-weight: 650;
+  text-align: center;
+}
+
+.a-count.danger {
+  background: var(--danger);
+  color: #fff;
+}
+
+.a-count.warn {
+  background: var(--warn-soft);
+  color: var(--warn);
+}
+
+.a-count.ok {
+  background: var(--ok-soft);
+  color: var(--ok);
+}
+
+.muted-list {
+  opacity: 0.75;
+}
+
+.a-icon-btn {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border: 0;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: var(--muted-soft);
+  color: var(--text);
+  cursor: pointer;
+}
+
+.a-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+
+/* --- Плитки сводки ----------------------------------------------------------------------------------------------- */
+
+.a-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+
+.a-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 12px 12px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  text-align: left;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.a-tile::after {
+  content: "";
+  position: absolute;
+  right: -18px;
+  bottom: -26px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+}
+
+.a-tile-value {
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--deep);
+}
+
+.a-tile-label {
+  font-size: 12.5px;
+  color: var(--hint);
+}
+
+/* --- Заказы и проведения в списках ------------------------------------------------------------------------------- */
+
+.a-order-row .grow,
+.a-session-row .grow {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+}
+
+.a-order-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.a-order-name {
+  font-size: 14px;
+  color: var(--hint);
+}
+
+.a-order-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.a-order-tags .muted svg {
+  width: 14px;
+  height: 14px;
+  vertical-align: -2px;
+}
+
+.a-thumb {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  overflow: hidden;
+  background: var(--water);
+  display: grid;
+  place-items: center;
+}
+
+.a-thumb img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.a-thumb svg {
+  width: 26px;
+  height: 26px;
+}
+
+.danger-text {
+  color: var(--danger);
+}
+
+.a-money {
+  margin-top: 0;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.a-money + .notice,
+.notice + .notice {
+  margin-top: 8px;
+}
+
+.a-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.a-actions.two {
+  flex-direction: row;
+  margin-bottom: 4px;
+}
+
+.a-actions.two .btn {
+  flex: 1;
+  min-width: 0;
+}
+
+/* --- Карточка курса или проведения ------------------------------------------------------------------------------- */
+
+.a-hero {
+  margin-bottom: 12px;
+}
+
+.a-hero-title {
+  margin: 0 0 4px;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.015em;
+}
+
+.cover-badges {
+  position: absolute;
+  left: 12px;
+  top: 12px;
+  display: flex;
+  gap: 6px;
+}
+
+.cover-badges .badge {
+  background: #fff;
+}
+
+.a-program {
+  max-height: 220px;
+  overflow: hidden;
+  position: relative;
+}
+
+.a-program::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 60px;
+  background: linear-gradient(to top, var(--surface), transparent);
+}
+
+.a-program.open {
+  max-height: none;
+}
+
+.a-program.open::after {
+  display: none;
+}
+
+.a-photo-thumb {
+  width: 96px;
+  height: 54px;
+  margin-top: 4px;
+  border-radius: 8px;
+  object-fit: cover;
+}
+
+.a-search {
+  position: relative;
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.a-search > svg {
+  position: absolute;
+  left: 14px;
+  width: 18px;
+  height: 18px;
+  color: var(--hint);
+  pointer-events: none;
+}
+
+.a-search .input {
+  padding-left: 42px;
+}
+
+.a-search .spinner {
+  position: absolute;
+  right: 14px;
+}
+
+/* --- Форма новой записи ------------------------------------------------------------------------------------------ */
+
+.a-picked {
+  margin-bottom: 14px;
+}
+
+.a-picked .grow {
+  display: flex;
+  flex-direction: column;
+}
+
+.a-form {
+  gap: 18px;
+}
+
+.a-course-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+}
+
+.a-course-pick {
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.a-course-pick .card-body {
+  padding: 10px 12px 12px;
+}
+
+.a-course-pick .a-nav-title {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.a-preview-card {
+  pointer-events: none;
+}
+
+.sheet .a-preview .section-title {
+  margin-top: 0;
+}
+
+/* --- Редактор текста --------------------------------------------------------------------------------------------- */
+
+.rich-editor {
+  border: 1.5px solid var(--separator);
+  border-radius: 12px;
+  background: var(--surface);
+  overflow: hidden;
+  transition: border-color 0.12s ease;
+}
+
+.rich-editor:focus-within {
+  border-color: var(--accent);
+}
+
+.rich-editor.invalid {
+  border-color: var(--danger);
+}
+
+.rich-tools {
+  display: flex;
+  gap: 2px;
+  padding: 4px;
+  border-bottom: 1px solid var(--separator);
+  background: color-mix(in srgb, var(--bg) 60%, var(--surface));
+}
+
+.rich-tools button {
+  min-width: 36px;
+  height: 34px;
+  border: 0;
+  border-radius: 8px;
+  background: none;
+  color: var(--text);
+  font-size: 15px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+}
+
+.rich-tools button:active {
+  background: var(--muted-soft);
+}
+
+.rich-tools svg {
+  width: 17px;
+  height: 17px;
+}
+
+.rich-link {
+  display: flex;
+  gap: 6px;
+  padding: 6px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.rich-link .input {
+  min-height: 38px;
+  padding: 6px 10px;
+  font-size: 14px;
+}
+
+.rich-area {
+  min-height: 140px;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding: 12px 14px;
+  outline: none;
+}
+
+.rich-editor.compact .rich-area {
+  min-height: 96px;
+}
+
+.rich-area:empty::before {
+  content: attr(data-placeholder);
+  color: var(--hint);
+}
+
+/* --- Картинка, дни, тарифы, файл --------------------------------------------------------------------------------- */
+
+.photo-input {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.photo-frame {
+  aspect-ratio: 16 / 9;
+  border-radius: 14px;
+  overflow: hidden;
+  background: var(--water);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+.photo-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.photo-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.photo-empty svg {
+  width: 30px;
+  height: 30px;
+}
+
+.days-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* День - карточкой: дата на всю ширину, ниже «начало - конец» и «убрать» (на узком экране время не обрезается). */
+.day-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px;
+  padding: 8px;
+  border-radius: 14px;
+  background: var(--surface);
+  border: 1.5px solid var(--separator);
+}
+
+.day-row input[type="date"] {
+  grid-column: 1 / -1;
+}
+
+.day-row .input {
+  min-height: 42px;
+  padding: 8px 10px;
+  font-size: 15px;
+}
+
+.prices-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.price-draft {
+  border: 1.5px solid var(--separator);
+  border-radius: 14px;
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.price-draft.on {
+  border-color: var(--accent);
+}
+
+.price-draft-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  text-align: left;
+  font-size: 15px;
+  cursor: pointer;
+}
+
+.price-draft.on .check-box {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.price-draft.on .check-box svg {
+  opacity: 1;
+}
+
+.price-draft-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 8px;
+  padding: 0 12px 12px;
+}
+
+.money-input {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.money-input .input {
+  padding-right: 32px;
+}
+
+.money-input span {
+  position: absolute;
+  right: 12px;
+  color: var(--hint);
+  pointer-events: none;
+}
+
+.chip svg {
+  width: 14px;
+  height: 14px;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.chip:disabled {
+  opacity: 0.6;
+}
+
+.segmented {
+  display: flex;
+  padding: 3px;
+  border-radius: 12px;
+  background: var(--muted-soft);
+}
+
+.segmented button {
+  flex: 1;
+  min-height: 36px;
+  border: 0;
+  border-radius: 9px;
+  background: none;
+  color: var(--hint);
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.segmented button.on {
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 1px 3px rgba(16, 24, 40, 0.12);
+}
+
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 8px 8px 12px;
+  border-radius: 12px;
+  background: var(--surface);
+  border: 1.5px solid var(--separator);
+  font-size: 14px;
+  word-break: break-all;
+}
+
+.file-chip > svg {
+  width: 20px;
+  height: 20px;
+  color: var(--deep);
+  flex: none;
+}
+
+/* Предпросмотр сообщения - как пузырь в чате Telegram. */
+.chat-preview {
+  align-self: flex-start;
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 16px 16px 16px 4px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.chat-file {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  font-size: 14px;
+}
+
+.chat-file svg {
+  width: 30px;
+  height: 30px;
+  padding: 6px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Листание страниц списка клиентов. */
+.a-pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin-top: 12px;
+  font-weight: 650;
+}
+
+.a-pager .a-icon-btn:disabled {
+  opacity: 0.35;
+}
+
+.a-loading {
+  opacity: 0.6;
+  transition: opacity 0.15s ease;
+}

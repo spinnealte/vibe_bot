@@ -1,14 +1,16 @@
 from collections.abc import Iterable
+from urllib.parse import quote
 
 from aiogram.types import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     KeyboardButton,
     ReplyKeyboardMarkup,
+    WebAppInfo,
 )
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from stubbot.config import get_settings
+from stubbot.config import Settings, get_settings
 from stubbot.db.enums import EnrollmentStatus, PayerType
 from stubbot.services.admin_dictionaries import DictKind
 from stubbot.services.enrollments import PAYABLE_ORDER_STATUSES, MyApplication
@@ -67,6 +69,38 @@ def main_menu(chat_id: int) -> ReplyKeyboardMarkup:
         else:
             keyboard.append([admin])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
+
+
+def app_page(url: str, path: str | None = None) -> str:
+    """Адрес приложения, открытого сразу на нужном экране: …/?go=/my%3Forder%3D5. Экран - параметром адреса, а не
+    после «#»: туда Telegram дописывает подпись пользователя. Приложение само переходит на него (webapp router.ts)."""
+    return f"{url}/?go={quote(path, safe='/')}" if path else url
+
+
+def app_button(url: str, text: str = texts.BTN_WEBAPP, path: str | None = None) -> InlineKeyboardButton:
+    """Кнопка приложения - только inline: так оно получает подпись Telegram (initData) с пользователем. Открытое
+    кнопкой нижнего меню приложение не знает, кто его открыл."""
+    return InlineKeyboardButton(text=text, web_app=WebAppInfo(url=app_page(url, path)))
+
+
+def open_webapp(url: str) -> InlineKeyboardMarkup:
+    """«📱 Открыть приложение» под сообщением."""
+    return InlineKeyboardMarkup(inline_keyboard=[[app_button(url)]])
+
+
+def app_link(settings: Settings, text: str, path: str) -> InlineKeyboardMarkup | None:
+    """Под уведомлением - кнопка на нужный экран приложения, когда всё в приложении (WEBAPP_ONLY); иначе кнопки нет."""
+    if not settings.webapp_only or not settings.webapp_url:
+        return None
+    return InlineKeyboardMarkup(inline_keyboard=[[app_button(settings.webapp_url, text, path)]])
+
+
+def app_hint(url: str, manager_url: str | None) -> InlineKeyboardMarkup:
+    """Ответ на сообщение боту, когда всё в приложении: открыть приложение и, если это вопрос, - чат менеджера."""
+    rows = [[app_button(url)]]
+    if manager_url:
+        rows.append([manager_button(manager_url)])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
 def registration_nav() -> ReplyKeyboardMarkup:
@@ -288,11 +322,15 @@ def payer_choice(order_id: int, back_index: int | None = None) -> InlineKeyboard
 
 
 def payment_reminder(order_id: int, choose_payer: bool, manager_url: str | None,
-                     online: bool = False) -> InlineKeyboardMarkup | None:
+                     online: bool = False, app_url: str | None = None) -> InlineKeyboardMarkup | None:
     """Под напоминанием об оплате: «Физлицо / Юрлицо», если ещё не выбрано, «Оплатить онлайн» (физлицу, когда
-    онлайн-оплата включена) и чат менеджера с черновиком."""
-    rows = payer_choice(order_id).inline_keyboard if choose_payer else []
-    if online:
+    онлайн-оплата включена) и чат менеджера с черновиком. Всё в приложении (app_url) - вместо первых двух одна
+    кнопка: запись в приложении, там и выбор плательщика, и оплата."""
+    if app_url:
+        rows = [[app_button(app_url, texts.BTN_APP_RECORD, f"/my?order={order_id}")]]
+    else:
+        rows = payer_choice(order_id).inline_keyboard if choose_payer else []
+    if online and not app_url:
         rows = [*rows, [pay_online_button(order_id)]]
     if manager_url:
         rows = [*rows, [manager_button(manager_url, texts.BTN_CANCEL_VIA_MANAGER)]]
